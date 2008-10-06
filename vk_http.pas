@@ -118,9 +118,6 @@ begin
   nlhr.headers[3].szValue := 'no-cache';
   nlhr.headers[4].szName  := 'Cookie';
   CookiesText := CookiesGlobal.DelimitedText;
-  // parsing works correctly only with Russian version, so replace
-  // Ukraine language to Russian
-  CookiesText := StringReplace(CookiesText, 'remixlang=1', 'remixlang=0');
   nlhr.headers[4].szValue := PChar(CookiesGlobal.DelimitedText);
 
   while (result = ' ') do
@@ -141,7 +138,14 @@ begin
       Begin
         // read cookie
         if nlhrReply.headers[i].szName = 'Set-Cookie' then
-          CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
+        Begin
+          if Pos('remixlang=', nlhrReply.headers[i].szValue) > 0 Then
+            // parsing works correctly only with Russian version, so replace
+            // all other languages to Russian
+            CookiesGlobal.Add('remixlang=0;')
+          Else
+            CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
+        End;
         // read page encoding
         if nlhrReply.headers[i].szName = 'Content-Type' then
           if Pos('utf-8', LowerCase(nlhrReply.headers[i].szValue)) > 0 Then
