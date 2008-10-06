@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 1 shl 16 + 5 shl 8 + 1;
+  piVersion = 0 shl 24 + 1 shl 16 + 5 shl 8 + 3;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -78,7 +78,7 @@ const
   vk_url_pda_friend = 'http://pda.vkontakte.ru/id%d';
   vk_url_pda_keeponline = 'http://vkontakte.ru/profile.php';
   vk_url_feed2 = 'http://vkontakte.ru/feed2.php?mask=mf';
-  vk_url_pda_msg = 'http://pda.vkontakte.ru/?act=letter&id=%d';
+  vk_url_pda_msg = 'http://pda.vkontakte.ru/letter%d?';
   vk_url_username = 'http://vkontakte.ru/feed2.php?mask=u';  // http://vkontakte.ru/feed2.php?mask=ufpvmge
   vk_url_authrequestsend = 'http://vkontakte.ru/friend.php?act=addFriend&fid=%d&h=%s&message=%s';  // http://vkontakte.ru/friend.php?act=add&id=123456&h=8e30f2fe
   vk_url_authrequestreceivedallow = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=1';
