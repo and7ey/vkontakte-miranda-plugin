@@ -36,6 +36,7 @@ interface
   procedure AvatarsInit();
   procedure AvatarsDestroy();
   procedure vk_AvatarGetAndSave(ID, AvatarURL: String);
+  procedure vk_AvatarsGet();
 
 implementation
 
@@ -53,12 +54,6 @@ uses
   Classes;
 
 type
-  TThreadAvatarsGet = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
   TThreadAvatarMySet = class(TThread)
   private
     { Private declarations }
@@ -74,24 +69,7 @@ var
 
   AvatarMyFileName: String; // variable to keep our avatar filename
 
-  timer_updateavatars: Integer;
-
-  ThrIDAvatarsGet: TThreadAvatarsGet;
   ThrIDAvatarMySet: TThreadAvatarMySet;
-
-
-// =============================================================================
-// function to regularly update avatars
-// -----------------------------------------------------------------------------
-procedure TimerUpdateAvatars(Wnd: HWnd; Msg, TimerID, SysTime: Longint); stdcall;
-begin
-  if DBGetContactSettingByte(0, piShortName, opt_UserAvatarsSupport, 1) = 1 then
-  begin
-    if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
-      if not Assigned(ThrIDAvatarsGet) then
-        ThrIDAvatarsGet := TThreadAvatarsGet.Create(False); // initiate new thread for this
-  end;
-end;
 
 // =============================================================================
 // procedure to verify whether update of avatar is required,
@@ -150,7 +128,7 @@ end;
 // =============================================================================
 // procedure to get avatars for all contacts
 // -----------------------------------------------------------------------------
-procedure vk_AvatarsGet;
+procedure vk_AvatarsGet();
 var HTML: String;
     ID, AvatarURL: String;
     intID: Integer;
@@ -352,7 +330,7 @@ end;
 function AvatarMySet(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
  AvatarMyFileName := PChar(lParam);
- if not Assigned(ThrIDAvatarsGet) then
+ if not Assigned(ThrIDAvatarMySet) then
    ThrIDAvatarMySet := TThreadAvatarMySet.Create(False); // vk_AvatarMySetup(PChar(lParam));
  Result := 0;
 end;
@@ -367,9 +345,6 @@ begin
   vk_hAvatarCapsGet := CreateProtoServiceFunction(piShortName, PS_GETAVATARCAPS, @AvatarCapsGet);
   vk_hAvatarMyGet := CreateProtoServiceFunction(piShortName, PS_GETMYAVATAR, @AvatarMyGet);
   vk_hAvatarMySet := CreateProtoServiceFunction(piShortName, PS_SETMYAVATAR, @AvatarMySet);
-
-  //set timer for regular avatars update
-  timer_updateavatars := SetTimer(0, 0, DBGetContactSettingDWord(0, piShortName, opt_UserAvatarsUpdateFreq, 60)*1000, @TimerUpdateAvatars);
 end;
 
 // =============================================================================
@@ -377,13 +352,6 @@ end;
 // -----------------------------------------------------------------------------
 procedure AvatarsDestroy();
 begin
-  // kill timer
-  KillTimer(0, timer_updateavatars);
-
-  // wait for threads completion
-  If Assigned(ThrIDAvatarsGet) Then
-    WaitForSingleObject(ThrIDAvatarsGet.Handle, 3000);
-
   pluginLink^.DestroyServiceFunction(vk_hAvatarInfoGet);
   pluginLink^.DestroyServiceFunction(vk_hAvatarCapsGet);
   pluginLink^.DestroyServiceFunction(vk_hAvatarMyGet);
@@ -392,29 +360,8 @@ end;
 
 
 // =============================================================================
-// avatar threads
+// setup avatar thread
 // -----------------------------------------------------------------------------
-procedure TThreadAvatarsGet.Execute;
-var ThreadNameInfo: TThreadNameInfo;
-begin
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadAvatarsGet) Thread started...'));
-
-  ThreadNameInfo.FType := $1000;
-  ThreadNameInfo.FName := 'TThreadAvatarsGet';
-  ThreadNameInfo.FThreadID := $FFFFFFFF;
-  ThreadNameInfo.FFlags := 0;
-  try
-    RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
-  except
-  end;
-
-  vk_AvatarsGet;
-  ThrIDAvatarsGet := nil;
-
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadAvatarsGet) ... thread finished'));
-end;
-
-
 procedure TThreadAvatarMySet.Execute;
 var ThreadNameInfo: TThreadNameInfo;
 begin

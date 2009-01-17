@@ -44,17 +44,17 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 1 shl 16 + 5 shl 8 + 3;
+  piVersion = 0 shl 24 + 1 shl 16 + 6 shl 8 + 0;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
-  piCopyright = '(c) 2008 Andrey Lukyanov';
+  piCopyright = '(c) 2008-2009 Andrey Lukyanov';
   piHomepage = 'http://forum.miranda.im/showthread.php?p=28497';
 
 const
   // URLs
   vk_url = 'http://vkontakte.ru';
-  vk_url_pda = 'http://pda.vkontakte.ru';
+  // vk_url_pda = 'http://pda.vkontakte.ru';
   vk_url_pda_login = 'http://vkontakte.ru/login.php?pda=index&email=%s&pass=%s&expire=0';
   vk_url_pda_friendsonline = 'http://pda.vkontakte.ru/friendsonline%d';
   vk_url_pda_friends = 'http://pda.vkontakte.ru/friends%d';
@@ -65,7 +65,7 @@ const
   vk_url_forgot = 'http://vkontakte.ru/login.php?op=forgot';
   vk_url_pda_sendmsg_secureid = 'http://pda.vkontakte.ru/?act=write&to=%d';
   vk_url_pda_sendmsg = 'http://pda.vkontakte.ru/mailsent?pda=1&to_reply=0&to_id=%d&chas=%s&message=%s';
-  vk_url_friend = 'http://vkontakte.ru/id%d';
+  vk_url_friend = 'http://vkontakte.ru/id%d';    // leads to online-on-site, used in get info
   vk_url_photos = 'http://vkontakte.ru/photos.php?id=%d';
   vk_url_friends = 'http://vkontakte.ru/friend.php?id=%d';
   vk_url_wall = 'http://vkontakte.ru/wall.php?id=%d';
@@ -76,7 +76,7 @@ const
   vk_url_frienddelete = 'http://vkontakte.ru/friend.php?act=do_delete&id=%d';
   vk_url_searchbyname = 'http://vkontakte.ru/search.php?act=adv&subm=1&first_name=%s&last_name=%s&o=0&st=%d';
   vk_url_pda_friend = 'http://pda.vkontakte.ru/id%d';
-  vk_url_pda_keeponline = 'http://vkontakte.ru/profile.php';
+  vk_url_pda_keeponline = 'http://vkontakte.ru/profile.php';   // leads to online-on-site
   vk_url_feed2 = 'http://vkontakte.ru/feed2.php?mask=mf';
   vk_url_pda_msg = 'http://pda.vkontakte.ru/letter%d?';
   vk_url_username = 'http://vkontakte.ru/feed2.php?mask=u';  // http://vkontakte.ru/feed2.php?mask=ufpvmge
@@ -129,10 +129,14 @@ const
   opt_NewsFilterPersonalData: PChar = 'NewsFilterPersonalData';
   opt_NewsLinks: PChar = 'NewsDisplayLinks';
   opt_NewsSeparateContact: PChar = 'NewsSeparateContact';
-  opt_NewsLastUpdateDateTime: PChar = 'NewsLastUpdateDateTime';
+  opt_NewsLastUpdateDateTime: PChar = 'LastUpdateDateTimeNews';
   opt_NewsLastNewsDateTime: PChar = 'NewsLastNewsDateTime';
   opt_NewsSeparateContactID: PChar = 'NewsSeparateContactID';
   opt_NewsSeparateContactName: PChar = 'NewsSeparateContactName';
+  opt_LastUpdateDateTimeMsgs: PChar = 'LastUpdateDateTimeMsgs';
+  opt_LastUpdateDateTimeFriendsStatus: PChar = 'LastUpdateDateTimeFriendsStatus';
+  opt_LastUpdateDateTimeKeepOnline: PChar = 'LastUpdateDateTimeKeepOnline';
+  opt_LastUpdateDateTimeAvatars: PChar = 'LastUpdateDateTimeAvatars';
 
 type
   TAdditionalStatusIcon = record

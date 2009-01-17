@@ -383,7 +383,7 @@ begin
   FillChar(smi, sizeof(smi), 0);
   smi.cbSize := sizeof(smi);
   smi.popupPosition := 990000;
-  smi.szPopupName.a := 'Status';
+  smi.szPopupName.a := Translate('Status');
   // standard statuses
   for i:=Low(xStatuses) to High(xStatuses) do
   begin

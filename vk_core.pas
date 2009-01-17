@@ -44,10 +44,10 @@ uses
   vk_common, // module with common functions
   vk_http, // module to connect with the site
   vk_avatars, // module to support avatars
-
+  vk_msgs, // module to send/receive messages
   vk_xstatus, // module to support additional status
-
   vk_opts, // my unit to work with options
+
   MSHTML_TLB, // module to parse html
   htmlparse, // module to simplify html parsing
 
@@ -61,13 +61,15 @@ uses
   ShellAPI,
   StrUtils;
 
+  function vk_SetStatus(NewStatus: Integer): Integer;
   function vk_AddFriend(frID: Integer; frNick: String; frStatus: Integer; frFriend: Byte): Integer;
   function SearchByName(wParam: wParam; lParam: lParam): Integer; cdecl;
   function AddToList(wParam: wParam; lParam: lParam): Integer; cdecl;
   procedure SetStatusOffline();
   function ContactDeleted(wParam: wParam; lParam: lParam): Integer; cdecl;
-  procedure TimerKeepOnline(Wnd: HWnd; Msg, TimerID, SysTime: Longint); stdcall;
-  procedure TimerUpdateFriendsStatus(Wnd: HWnd; Msg, TimerID, SysTime: Longint); stdcall;
+  procedure UpdateDataInit();
+  procedure UpdateDataDestroy();
+  procedure vk_Logout();
 
 {$include res\dlgopt\i_const.inc} // contains list of ids used in dialogs
 
@@ -78,19 +80,13 @@ type
   protected
     procedure Execute; override;
   end;
-  TThreadGetFriends = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
   TThreadSearchContacts = class(TThread)
   private
     { Private declarations }
   protected
     procedure Execute; override;
   end;
-  TThreadKeepOnline = class(TThread)
+  TThreadDataUpdate = class(TThread)
   private
     { Private declarations }
   protected
@@ -99,9 +95,8 @@ type
 
 var
   ThrIDConnect: TThreadConnect;
-  ThrIDGetFriends: TThreadGetFriends;
   ThrIDSearchContacts: TThreadSearchContacts;
-  ThrIDKeepOnline: TThreadKeepOnline;
+  ThrIDDataUpdate: TThreadDataUpdate;
 
 
 implementation
@@ -200,6 +195,37 @@ begin
    MessageBox(0, Translate(PChar(lpText)), Translate(piShortName), MB_OK + uType);
 end;
 
+// =============================================================================
+// function to change the status
+// -----------------------------------------------------------------------------
+function vk_SetStatus(NewStatus: Integer): Integer;
+begin
+  if NewStatus = vk_Status then // if new status is equal to current status
+  begin
+     result := 0;
+     exit;
+  end;
+  vk_StatusPrevious := vk_Status;
+  vk_Status := NewStatus;
+  // plugin doesn't support all statuses, but Miranda may try to
+  // setup unsupported status (for ex., when user presses Ctrl+0..9)
+  // so, we should have the following line
+  if (vk_Status = ID_STATUS_AWAY) or
+     (vk_Status = ID_STATUS_DND) or
+     (vk_Status = ID_STATUS_NA) or
+     (vk_Status = ID_STATUS_OCCUPIED) or
+     (vk_Status = ID_STATUS_FREECHAT) or
+     (vk_Status = ID_STATUS_ONTHEPHONE) or
+     (vk_Status = ID_STATUS_OUTTOLUNCH) then
+   begin
+     vk_Status := ID_STATUS_ONLINE;
+   end;
+
+  if not Assigned(ThrIDConnect) then
+    ThrIDConnect := TThreadConnect.Create(False); // initiate new thread for connection & status update
+
+  Result := 0;
+end;
 
 // =============================================================================
 // function to login to website
@@ -246,6 +272,10 @@ begin
 
   // no info received
   If trim(HTML) = '' Then
+    ErrorCode := 6; // LOGINERR_TIMEOUT       = 6;
+
+  // no internet connection or other netlib error
+  If trim(HTML) = 'NetLib error occurred!' Then
     ErrorCode := 2; // LOGINERR_NONETWORK     = 2;
 
   // pass or login is incorrect
@@ -314,7 +344,7 @@ begin
   Result := hContactNew;
 end;
 
-// function to get minimum information about friends
+// function to get list of friends, their statuses and additional statuses
 function vk_GetFriends(): integer;
 type
   TFriends = record  // new type of record
@@ -346,109 +376,114 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends from the server...'));
   i:=1;
   HTML := HTTP_NL_Get(Format(vk_url_pda_friendsonline,[i]));
-  PadsList := TextBetween(HTML, '<div class="pad">','</div>');
-  While Pos('a href="/friendsonline', PadsList)<>0 Do
+  If Trim(HTML) <> '' Then
   Begin
-    Delete(PadsList, 1, Pos('</a>', PadsList)+3);
-    i:=i+1;
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... page '+IntToStr(i)+' with online friends found, getting it'));
-    HTML := HTML + HTTP_NL_Get(Format(vk_url_pda_friendsonline,[i]));
-  End;
+    PadsList := TextBetween(HTML, '<div class="pad">','</div>');
+    While Pos('a href="/friendsonline', PadsList)<>0 Do
+    Begin
+      Delete(PadsList, 1, Pos('</a>', PadsList)+3);
+      i:=i+1;
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... page '+IntToStr(i)+' with online friends found, getting it'));
+      HTML := HTML + HTTP_NL_Get(Format(vk_url_pda_friendsonline,[i]));
+    End;
 
-  CoInitialize(nil);  // since this function is called in a separate thread,
+    CoInitialize(nil);  // since this function is called in a separate thread,
                       // this code is mandatory for CreateComObject function
 
-  // the code below converts String value received with Get function to
-  // iHTMLDocument2, which is required for parsing
-  try
-    iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
-    v := VarArrayCreate([0,0], VarVariant);
-    v[0] := HTML;
-    iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
-  except
-    iHTTP:=nil;
-  end;
+    // the code below converts String value received with Get function to
+    // iHTMLDocument2, which is required for parsing
+    try
+     iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
+      v := VarArrayCreate([0,0], VarVariant);
+      v[0] := HTML;
+      iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
+    except
+      iHTTP:=nil;
+    end;
 
-  TempList := TStringList.Create();
-  TempList.Sorted := True; // list should be sorted and
-  TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
+    TempList := TStringList.Create();
+    TempList.Sorted := True; // list should be sorted and
+    TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
 
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
-  // parsing list of friends
-  If Assigned(iHTTP) Then
-  Begin
-    TempList := getElementsByAttrPart(iHTTP, 'a','href','/id');
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... '+IntToStr(TempList.Count-1)+' friend(s) online found'));
-    for i:=0 to TempList.Count-1 do
-      Begin
-        str1 := Trim(TextBetween(TempList.Strings[i], '/id', '">'));
-        str2 := Trim(TextBetween(TempList.Strings[i], '>', '</A>'));
-        if (str1 <> '0') and (str1 <> '') and (str2 <> '') Then
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
+    // parsing list of friends
+    If Assigned(iHTTP) Then
+    Begin
+      TempList := getElementsByAttrPart(iHTTP, 'a','href','/id');
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... '+IntToStr(TempList.Count-1)+' friend(s) online found'));
+      for i:=0 to TempList.Count-1 do
         Begin
-          SetLength(FriendsOnline, Length(FriendsOnline)+1);
-          FriendsOnline[High(FriendsOnline)] := StrToInt(str1);
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found online friend with id: '+str1));
-        End;
-      End;
-  End;
+          str1 := Trim(TextBetween(TempList.Strings[i], '/id', '">'));
+          str2 := Trim(TextBetween(TempList.Strings[i], '>', '</A>'));
+          if (str1 <> '0') and (str1 <> '') and (str2 <> '') Then
+          Begin
+            SetLength(FriendsOnline, Length(FriendsOnline)+1);
+            FriendsOnline[High(FriendsOnline)] := StrToInt(str1);
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found online friend with id: '+str1));
+          End;
+       End;
+    End;
 
-  TempList.Clear;
-  iHTTP := nil;
+    TempList.Clear;
+    iHTTP := nil;
+  End;
 
   // *** get full list of friends
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
   i:=1;
   HTML := HTTP_NL_Get(Format(vk_url_pda_friends,[i]));
-  PadsList := TextBetween(HTML, '<div class="pad">','</div>');
-  While Pos('a href="/friends', PadsList)<>0 Do
+  If Trim(HTML) <> '' Then
   Begin
-    Delete(PadsList, 1, Pos('</a>', PadsList)+3);
-    i:=i+1;
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... page '+IntToStr(i)+' with friends found, getting it'));
-    HTML := HTML + HTTP_NL_Get(Format(vk_url_pda_friends,[i]));
-  End;
-
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
-  try
-    iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
-    v := VarArrayCreate([0,0], VarVariant);
-    v[0] := HTML;
-    iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
-  except
-    iHTTP:=nil;
-  end;
-
-  If Assigned(iHTTP) Then
-    TempList := getElementsByAttrPart(iHTTP, 'a','href','/id');
-
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... '+IntToStr(TempList.Count-1)+' friend(s) found'));
-
-  For i:=0 to TempList.Count-1 Do
-  Begin
-    str1 := Trim(TextBetween(TempList.Strings[i], '/id', '">'));
-    str2 := Trim(TextBetween(TempList.Strings[i], '>', '</A>'));
-    if (str1 <> '0') and (str1 <> '') and (str2 <> '') Then
+    PadsList := TextBetween(HTML, '<div class="pad">','</div>');
+    While Pos('a href="/friends', PadsList)<>0 Do
     Begin
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found friend with id: '+str1));
-      // if friend is found, add him/her into our Friends array
-      SetLength(Friends, Length(Friends)+1);
-      Friends[High(Friends)].ID := StrToInt(str1); // High(Friends) = Length(Friends) - 1
-      Friends[High(Friends)].Name := HTMLDecode(str2);
-      Friends[High(Friends)].InList := False;
-      Friends[High(Friends)].Online := False;
-      for i1:=Low(FriendsOnline) to High(FriendsOnline) do // mark online Friends
-        if StrToInt(str1) = FriendsOnline[i1] Then
-          begin
-            Friends[High(Friends)].Online := True;
-            break;
-          end;
+      Delete(PadsList, 1, Pos('</a>', PadsList)+3);
+      i:=i+1;
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... page '+IntToStr(i)+' with friends found, getting it'));
+      HTML := HTML + HTTP_NL_Get(Format(vk_url_pda_friends,[i]));
     End;
+
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
+    try
+      iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
+      v := VarArrayCreate([0,0], VarVariant);
+      v[0] := HTML;
+      iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
+    except
+      iHTTP:=nil;
+    end;
+
+    If Assigned(iHTTP) Then
+      TempList := getElementsByAttrPart(iHTTP, 'a','href','/id');
+
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... '+IntToStr(TempList.Count-1)+' friend(s) found'));
+
+    For i:=0 to TempList.Count-1 Do
+      Begin
+      str1 := Trim(TextBetween(TempList.Strings[i], '/id', '">'));
+      str2 := Trim(TextBetween(TempList.Strings[i], '>', '</A>'));
+      if (str1 <> '0') and (str1 <> '') and (str2 <> '') Then
+      Begin
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found friend with id: '+str1));
+        // if friend is found, add him/her into our Friends array
+        SetLength(Friends, Length(Friends)+1);
+        Friends[High(Friends)].ID := StrToInt(str1); // High(Friends) = Length(Friends) - 1
+        Friends[High(Friends)].Name := HTMLDecode(str2);
+        Friends[High(Friends)].InList := False;
+        Friends[High(Friends)].Online := False;
+        for i1:=Low(FriendsOnline) to High(FriendsOnline) do // mark online Friends
+          if StrToInt(str1) = FriendsOnline[i1] Then
+            begin
+              Friends[High(Friends)].Online := True;
+              break;
+            end;
+      End;
+    End;
+
+    TempList.Free;
+    SetLength(FriendsOnline, 0);
+    iHTTP := nil;
   End;
-
-  TempList.Free;
-  SetLength(FriendsOnline, 0);
-  iHTTP := nil;
-
   // at this moment array Friends contains our list of friends at the server
 
   // checking each contact in our Miranda's list
@@ -704,32 +739,26 @@ begin
 end;
 
 // =============================================================================
-// function to regular update user's status on the server (to keep online)
+// procedure to start thread for regular data update
 // -----------------------------------------------------------------------------
-procedure TimerKeepOnline(Wnd: HWnd; Msg, TimerID, SysTime: Longint); stdcall;
+procedure UpdateDataInit();
 begin
-  Case vk_Status Of
-    ID_STATUS_ONLINE:
-      begin
-        if not Assigned(ThrIDKeepOnline) then
-          ThrIDKeepOnline := TThreadKeepOnline.Create(False);
-      end;
-    ID_STATUS_INVISIBLE:
-      // SetStatus(ID_STATUS_INVISIBLE, 0);
-  End;
+  if not Assigned(ThrIDDataUpdate) then
+    ThrIDDataUpdate := TThreadDataUpdate.Create(False);
 end;
 
 // =============================================================================
-// function to regular update friends status
+// procedure to finish thread for regular data update
 // -----------------------------------------------------------------------------
-procedure TimerUpdateFriendsStatus(Wnd: HWnd; Msg, TimerID, SysTime: Longint); stdcall;
+procedure UpdateDataDestroy();
 begin
-  if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
-  begin
-    If Assigned(ThrIDGetFriends) Then
-      WaitForSingleObject(ThrIDGetFriends.Handle, 3000);
-    ThrIDGetFriends := TThreadGetFriends.Create(False); // initiate new thread for this
-  end;
+ if Assigned(ThrIDDataUpdate) then
+ begin
+   ThrIDDataUpdate.Terminate;
+   ThrIDDataUpdate.WaitFor;
+ end;  
+ if Assigned(ThrIDDataUpdate) then
+   FreeAndNil(ThrIDDataUpdate);
 end;
 
 
@@ -771,8 +800,9 @@ begin
           vk_Status := ID_STATUS_OFFLINE; // need to change status to offline
           ProtoBroadcastAck(piShortName, 0, ACKTYPE_LOGIN, ACKRESULT_FAILED, 0, ErrorCode);
           case ErrorCode of
-            LOGINERR_WRONGPASSWORD: MessageUser('Connection failed. Your e-mail or password was rejected.', MB_ICONSTOP);
-            LOGINERR_NONETWORK: MessageUser('Connection failed. Unknown error during sign on.', MB_ICONSTOP);
+            LOGINERR_WRONGPASSWORD: MessageUser('Error: Your e-mail or password was rejected', MB_ICONSTOP);
+            LOGINERR_TIMEOUT: MessageUser('Error: Unknown error during sign on', MB_ICONSTOP);
+            LOGINERR_NONETWORK: MessageUser('Error: Cannot connect to the server', MB_ICONSTOP);
           end;
 
       end
@@ -792,49 +822,21 @@ begin
   // that status is changed - otherwise other plugins are informed incorrectly
   if vk_Status = ID_STATUS_OFFLINE Then
   begin
+    UpdateDataDestroy(); // stop the thread for regular data update
     SetStatusOffline(); // make all contacts offline
-    vk_Logout(); // call procedure from vk_parse to logout from the site
+    vk_Logout(); // logout from the site
   end;
   if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
   begin
-    vk_GetFriends(); // read list of friends from the server
     vk_GetUserNameID(); // update OUR name and id
+    UpdateDataInit(); // start separate thread for online data update
+    // vk_GetFriends(); // read list of friends from the server
   end;
 
   ThrIDConnect := nil;
 
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadConnect) ... thread finished'));
 end;
-
-
-
-
-// =============================================================================
-// get friends thread
-// -----------------------------------------------------------------------------
-procedure TThreadGetFriends.Execute;
-var
-  ThreadNameInfo: TThreadNameInfo;
-begin
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadGetFriends) Thread started...'));
-
-  ThreadNameInfo.FType := $1000;
-  ThreadNameInfo.FName := 'TThreadGetFriends';
-  ThreadNameInfo.FThreadID := $FFFFFFFF;
-  ThreadNameInfo.FFlags := 0;
-  try
-    RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
-  except
-  end;
-
- // call procedure from vk_parse to receive new messages
-  vk_GetFriends();
-
-  ThrIDGetFriends := nil;
-
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadGetFriends) ... thread finished'));
-end;
-
 
 // =============================================================================
 // search contacts thread
@@ -870,17 +872,17 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadSearchContacts) ... thread finished'));
 end;
 
-
 // =============================================================================
-// thread to keep us online
+// update data thread
 // -----------------------------------------------------------------------------
-procedure TThreadKeepOnline.Execute;
-var ThreadNameInfo: TThreadNameInfo;
+procedure TThreadDataUpdate.Execute;
+var
+  ThreadNameInfo: TThreadNameInfo;
 begin
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadKeepOnline) Thread started...'));
+  Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Thread started...'));
 
   ThreadNameInfo.FType := $1000;
-  ThreadNameInfo.FName := 'TThreadKeepOnline';
+  ThreadNameInfo.FName := 'TThreadDataUpdate';
   ThreadNameInfo.FThreadID := $FFFFFFFF;
   ThreadNameInfo.FFlags := 0;
   try
@@ -888,10 +890,88 @@ begin
   except
   end;
 
-  vk_KeepOnline(); // call procedure from vk_parse to make us online on the server
-  ThrIDKeepOnline := nil;
+  while true do // never ending cycle
+  begin
+    try
+      if Terminated = True or // if thread termination is requested OR
+        Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then // miranda is being closed
+          break;
+      if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) then // additional check that current status is online or invisible
+      begin                                                                       // however this thread should be run only when status is online or invisible
+        // updating contacts' statuses
+        if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeFriendsStatus, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserUpdateFriendsStatus, 60)) / SecsPerDay then
+        begin
+            // write new value of last date & time of contacts' status update
+            DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeFriendsStatus, DateTimeToFileDate(Now));
+            vk_GetFriends();
+        end;
+        if Terminated = True or // check again if thread termination is requested OR
+          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then // miranda is being closed
+            break;
 
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadKeepOnline) ... thread finished'));
+        // checking for new messages received and for auth requests;   default value of last update is 539033600 = 1/1/1996 12:00 am
+        if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgs, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserCheckNewMessages, 60)) / SecsPerDay then // code is equal to IncSecond function with negative value
+        begin
+            // write new value of last date & time of new message received
+            DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeMsgs, DateTimeToFileDate(Now));
+            vk_GetMsgsFriendsEtc();
+        end;
+        if Terminated = True or // one more time...
+          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+            break;
+
+        // updating avatars, if required
+        if DBGetContactSettingByte(0, piShortName, opt_UserAvatarsSupport, 1) = 1 then
+        begin
+          if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeAvatars, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserAvatarsUpdateFreq, 60)) / SecsPerDay then
+          begin
+              // write new value of last date & time of new message received
+              DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeAvatars, DateTimeToFileDate(Now));
+              vk_AvatarsGet();
+          end;
+        end;
+        if Terminated = True or // one more time...
+          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+            break;
+
+        // getting news, if required
+        if DBGetContactSettingByte(0, piShortName, opt_NewsSupport, 1) = 1 then
+        begin
+          if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_NewsSecs, 300)) / SecsPerDay then
+          begin
+              // write new value of last date & time of new message received
+              DBWriteContactSettingDWord (0, piShortName, opt_NewsLastUpdateDateTime, DateTimeToFileDate(Now));
+              {// if status is online, then make our separate news contact as online
+              if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
+              begin
+              if DBGetContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_ONLINE then
+              DBWriteContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_ONLINE);
+              end;}
+              vk_GetNews();
+          end;
+        end;
+        if Terminated = True or // one more time...
+          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+            break;
+      end;
+
+      // keep status online, if required
+      if (vk_Status = ID_STATUS_ONLINE) then
+      begin
+        if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeKeepOnline, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserKeepOnline, 360)) / SecsPerDay then
+        begin
+            // write new value of last date & time of contacts' status update
+            DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeKeepOnline, DateTimeToFileDate(Now));
+            vk_KeepOnline();
+        end;
+      end;
+
+    Sleep(1000);
+    except
+    end;
+  end;
+
+  Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... thread finished'));
 end;
 
 begin

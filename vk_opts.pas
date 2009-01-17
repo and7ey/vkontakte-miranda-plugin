@@ -61,6 +61,27 @@ function OnOptInitialise(wParam, lParam: DWord): Integer; cdecl;
 
 implementation
 
+// function to get text of dialog item
+function GetDlgString(hDlg: HWnd; idCtrl: Integer): String;
+var
+  dlg_text: array[0..1023] of Char;
+begin
+  ZeroMemory(@dlg_text,SizeOf(dlg_text));
+  GetDlgItemText(hDlg,idCtrl,@dlg_text,1023);
+  Result := dlg_text;
+end;
+
+// function to get numeric value of dialog item
+function GetDlgInt(hDlg: HWnd; idCtrl: Integer): Integer;
+var
+  dlg_text: array[0..1023] of Char;
+begin
+  ZeroMemory(@dlg_text,SizeOf(dlg_text));
+  GetDlgItemText(hDlg,idCtrl,@dlg_text,1023);
+  Result := StrToInt(dlg_text);
+end;
+
+
 function OnOptInitialise(wParam{addinfo}, lParam{0}: DWord): Integer; cdecl;
 var
   odp:TOPTIONSDIALOGPAGE;
@@ -166,8 +187,6 @@ end;
 
 function DlgProcOptionsAdv(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 var
-  str: String;  // temp variable for types conversion
-  pc: PChar;    // temp variable for types conversion
   val: Integer;
 begin
   Result:=False;
@@ -222,22 +241,13 @@ begin
         // if user pressed Apply
         if PNMHdr(lParam)^.code = PSN_APPLY then
           begin
-            SetLength(Str, 256);
-            pc := PChar(Str);
-            GetDlgItemText(dialog, VK_OPT_KEEPONLINE_SEC, pc, SizeOf(pc));
-            val := StrToInt(Str);
+            val := GetDlgInt(dialog, VK_OPT_KEEPONLINE_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_UserKeepOnline, val);
 
-            SetLength(Str, 256);
-            pc := PChar(Str);
-            GetDlgItemText(dialog, VK_OPT_CHECKNEWMSG_SEC, pc, SizeOf(pc));
-            val := StrToInt(Str);
+            val := GetDlgInt(dialog, VK_OPT_CHECKNEWMSG_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_UserCheckNewMessages, val);
 
-            SetLength(Str, 256);
-            pc := PChar(Str);
-            GetDlgItemText(dialog, VK_OPT_CHECKFRSTATUS_SEC, pc, SizeOf(pc));
-            val := StrToInt(Str);
+            val := GetDlgInt(dialog, VK_OPT_CHECKFRSTATUS_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_UserUpdateFriendsStatus, val);
 
             DBWriteContactSettingByte (0, piShortName, opt_UserGetMinInfo, Byte(IsDlgButtonChecked(dialog, VK_OPT_GETMININFO)));
@@ -248,10 +258,7 @@ begin
 
             DBWriteContactSettingByte (0, piShortName, opt_UserAvatarsSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_AVATARSSUPPORT)));
 
-            SetLength(Str, 256);
-            pc := PChar(Str);
-            GetDlgItemText(dialog, VK_OPT_AVATARSUPD_SEC, pc, SizeOf(pc));
-            val := StrToInt(Str);
+            val := GetDlgInt(dialog, VK_OPT_AVATARSUPD_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_UserAvatarsUpdateFreq, val);
 
             DBWriteContactSettingByte (0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, Byte(IsDlgButtonChecked(dialog, VK_OPT_AVATARSUPDWHENGETINFO)));
@@ -262,11 +269,8 @@ begin
   end;
 end;
 
-
 function DlgProcOptionsNews(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 var
-  str: String;  // temp variable for types conversion
-  pc: PChar;    // temp variable for types conversion
   val: Integer;
 begin
   Result:=False;
@@ -336,17 +340,10 @@ begin
         // if user pressed Apply
         if PNMHdr(lParam)^.code = PSN_APPLY then
           begin
-            // temp
-            // DBWriteContactSettingDWord (0, piShortName, opt_NewsLastUpdateDateTime, DateTimeToFileDate(Now));
-
-
             // save settings
             DBWriteContactSettingByte (0, piShortName, opt_NewsSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWSSUPPORT)));
 
-            SetLength(Str, 256);
-            pc := PChar(Str);
-            GetDlgItemText(dialog, VK_OPT_NEWS_SEC, pc, SizeOf(pc));
-            val := StrToInt(Str);
+            val := GetDlgInt(dialog, VK_OPT_NEWS_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_NewsSecs, val);
 
             DBWriteContactSettingByte (0, piShortName, opt_NewsMin, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_MINIMAL)));

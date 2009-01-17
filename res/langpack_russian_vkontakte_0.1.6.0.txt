@@ -1,0 +1,152 @@
+Miranda Language Pack Version 1
+Language: Russian
+Locale: 0419
+Authors: LA
+Author-email: and7ey at gmail dot com
+; ** VKontakte Protocol 0.1.6.0
+; ** Russian translation
+
+[VKontakte Protocol]
+Протокол ВКонтакте
+[VKontakte]
+ВКонтакте
+[Protocol Icon]
+Значок протокола
+[New note]
+Новая заметка
+[&Open my VKontakte web page]
+&Моя страница ВКонтакте
+[&Open contact web page]
+&Страница друга ВКонтакте
+[Create a new VKontakte account using the VKontakte website]
+Регистрация на сайте ВКонтакте
+[Retrieve a lost password or VKontakte number]
+Восстановить забытый пароль
+[Connection settings]
+Настройки подключения
+[Other settings]
+Дополнительные настройки
+[Send 'Keep-online' message each]
+Поддерживать статус онлайн на сайте каждые
+[Check for new messages each]
+Проверять наличие новых сообщений каждые
+[Update friends' status each]
+Обновлять статус друзей каждые
+[second(s)]
+секунд
+[Please enter your VKontakte account details to continue:]
+Пожалуйста, введите данные ниже для продолжения
+[VKontakte Protocol for Miranda IM]
+Протокол ВКонтакте для Miranda IM
+[VKontakte HTTP connections]
+Подключения модуля ВКонтакте
+[&Main page VKontakte...]
+&Страница ВКонтакте...
+[&Photos VKontakte...]
+&Фотографии ВКонтакте...
+[&Friends VKontakte...]
+&Друзья ВКонтакте...    
+[The &wall VKontakte...]
+&Стена ВКонтакте...
+[&Groups VKontakte...]
+&Группы ВКонтакте...
+[&Audio VKontakte...]
+&Аудиозаписи ВКонтакте...
+[&Notes VKontakte...]
+&Заметки ВКонтакте...
+[&Questions VKontakte...]
+&Вопросы ВКонтакте...
+[Remove subject of incoming message, if empty]
+Убирать тему входящего сообщения, если она пуста
+[Get only minimal contact details (name, date of birth, phones)]
+Получать минимум информации о контакте (имя, дату рождения, телефоны)
+[At home]
+Дома
+[At university]
+В университете
+[At work]
+На работе
+[At grass]
+На отдыхе
+[At party]
+На вечеринке
+[Having dinner]
+За трапезой
+[My &main page VKontakte...]
+Моя &страница ВКонтакте...
+[My &photos VKontakte...]
+Мои &фотографии ВКонтакте...
+[My &friends VKontakte...]
+Мои &друзья ВКонтакте...
+[My &wall VKontakte...]
+Моя &стена ВКонтакте...
+[My &groups VKontakte...]
+Мои &группы ВКонтакте...
+[My &audio VKontakte...]
+Мои &аудиозаписи ВКонтакте...
+[My &notes VKontakte...]
+Мои &заметки ВКонтакте...
+[My &questions VKontakte...]
+Мои &вопросы ВКонтакте...
+[Read additional status]
+Прочитать дополнительный статус
+[Avatars]
+Аватары
+[Enable contacts additional status support]
+Включить поддержку дополнительных статусов контактов
+[Enable avatars support]
+Включить поддержку аватаров
+[Update contacts avatars each]
+Обновлять аватары контактов каждые
+[Update avatars, when getting contacts details]
+Обновлять аватары при получении деталей контактов
+[Avatars Cache]
+Кэш аватаров
+[You cannot send messages more often than once in 1 second. Please try again later.]
+Вы не можете отправлять более одного сообщения в секунду. Попытайтесь отправить сообщение позднее.
+[News]
+Новости
+[News support settings]
+Настройки новостей
+[Receive news]
+Получать новости
+[Check for news each]
+Проверять наличие новостей каждые
+[Receive minimal news (for today only, not all types)]
+Получать краткие новости (только за сегодня, новости не всех типов)
+[Filters]
+Фильтры
+[Display news of the following types only (not applicable for minimal news)]
+Отображать новости только следующих типов (фильтр не применим для кратких новостей)
+[Photos]
+Фотографии
+[Videos]
+Видео
+[Notes]
+Заметки
+[Questions]
+Вопросы
+[Themes]
+Темы
+[Friends]
+Друзья
+[Statuses]
+Статус
+[Groups]
+Группы
+[Meetings]
+Встречи
+[Audio]
+Аудио
+[Personal data]
+Личные данные
+[Display news in the separate contact]
+Отображать новости в отдельном контакте
+[Display links in the news]
+Отображать ссылки в новостях
+[Error: Cannot connect to the server]
+Ошибка: Невозможно подключиться к серверу
+[Error: Your e-mail or password was rejected]
+Ошибка: Ваш e-mail или пароль не приняты сервером
+[Error: Unknown error during sign on]
+Ошибка: Неизвестная ошибка при входе
