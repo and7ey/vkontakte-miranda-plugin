@@ -1,4 +1,4 @@
-// MessageBox(0, 'Just groovy, baby!', 'Plugin-o-rama', MB_OK);
+// MessageBox(0, 'Just groovy, baby!', 'VKontakte', MB_OK);
 library vkontakte;
 
 uses
@@ -16,7 +16,7 @@ uses
   vk_msgs, // module to send/receive messages
   vk_core, // module with core functions
 
-  vk_opts,
+  vk_opts, // unit to work with options
 
   Windows,
   SysUtils,
@@ -58,10 +58,6 @@ const
 
 
 var
-
-  timer_keeponline,
-  timer_friendsstatus,
-
   vk_hGetCaps,
   vk_hGetName,
   vk_hGetStatus,
@@ -73,7 +69,8 @@ var
 
   vk_hkContactDeleted,
   vk_hkModulesLoad,
-  vk_hkOptInitialise: THandle;
+  vk_hkOptInitialise,
+  vk_hkHookShutdown: THandle;
 
 
   // ccs: PCCSDATA;
@@ -100,8 +97,9 @@ begin
   result := @PluginInterfaces;
 end;
 
-// declaration of the function, which will be defined later
+// declaration of the functions, which will be defined later
 function OnModulesLoad(wParam,lParam:DWord): Integer; cdecl; forward;
+function PreShutdown(wParam: wParam; lParam: lParam): Integer; cdecl; forward;
 
 // =============================================================================
 // function to identify list of functions supported by the plugin
@@ -155,31 +153,7 @@ end;
 // -----------------------------------------------------------------------------
 function SetStatus(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
-  if wParam = vk_Status then
-  begin
-     result := 0;
-     exit;
-  end;
-  vk_StatusPrevious := vk_Status;
-  vk_Status := wParam;
-  // we don't support all statuses, but Miranda may try to
-  // setup unsupported status (for ex., when user presses Ctrl+0..9
-  // so, we should have the following line
-  if (vk_Status = ID_STATUS_AWAY) or
-     (vk_Status = ID_STATUS_DND) or
-     (vk_Status = ID_STATUS_NA) or
-     (vk_Status = ID_STATUS_OCCUPIED) or
-     (vk_Status = ID_STATUS_FREECHAT) or
-     (vk_Status = ID_STATUS_ONTHEPHONE) or
-     (vk_Status = ID_STATUS_OUTTOLUNCH) then
-   begin
-     vk_Status := ID_STATUS_ONLINE;
-   end;
-
-  if not Assigned(ThrIDConnect) then
-    ThrIDConnect := TThreadConnect.Create(False); // initiate new thread for connection
-
-  Result := 0;
+  result := vk_SetStatus(wParam);
 end;
 
 // =============================================================================
@@ -283,9 +257,12 @@ begin
   // hook event when contact is deleted & delete contact from Friends list on the server
   vk_hkContactDeleted := pluginLink^.HookEvent(ME_DB_CONTACT_DELETED, @ContactDeleted);
 
-  //identifies the function OnModulesLoad(), which will be run once all
-  //modules are loaded
+  // identifies the function OnModulesLoad(), which will be run once all
+  // modules are loaded
   vk_hkModulesLoad := pluginLink^.HookEvent(ME_SYSTEM_MODULESLOADED, @OnModulesLoad);
+
+  // hook event when Miranda is being closed
+  vk_hkHookShutdown := pluginLink^.HookEvent(ME_SYSTEM_OKTOEXIT, @PreShutdown);  // ME_SYSTEM_PRESHUTDOWN
 
   Result := 0;
 end;
@@ -305,10 +282,6 @@ begin
     PluginLink^.CallService(MS_UPDATE_REGISTERFL, 3730, Windows.lParam(@PluginInfo));
   end;
 
-  //set timers for regular online checking...
-  timer_keeponline := SetTimer(0, 0, DBGetContactSettingDWord(0, piShortName, opt_UserKeepOnline, 360)*1000, @TimerKeepOnline);
-  timer_friendsstatus := SetTimer(0, 0, DBGetContactSettingDWord(0, piShortName, opt_UserUpdateFriendsStatus, 60)*1000, @TimerUpdateFriendsStatus);
-
   MenuInit();
 
   // initiate Additional Status support
@@ -322,28 +295,27 @@ begin
 
   AvatarsInit();
 
-  // start regular news checking
-  NewsInit();
-
   Result:=0;
 end;
 
 // =============================================================================
-// function is run, when plugin is stopped
+// function is run, when miranda is asking whether each plugin is ok to exit
+// -----------------------------------------------------------------------------
+function PreShutdown(wParam: wParam; lParam: lParam): Integer; cdecl;
+begin
+  if (vk_Status = ID_STATUS_ONLINE) Then
+    vk_Logout(); // logout from the site
+  Result := 0;
+end;
+
+// =============================================================================
+// function is run, when plugin is being unloaded
 // -----------------------------------------------------------------------------
 function Unload: int; cdecl;
 begin
-  // kill timers
-  KillTimer(0, timer_keeponline);
-  KillTimer(0, timer_friendsstatus);
-
-  // wait for threads completion
-  If Assigned(ThrIDConnect) Then
-    WaitForSingleObject(ThrIDConnect.Handle, 5000);
-  If Assigned(ThrIDGetFriends) Then
-    WaitForSingleObject(ThrIDGetFriends.Handle, 3000);
-  If Assigned(ThrIDKeepOnline) Then
-    WaitForSingleObject(ThrIDKeepOnline.Handle, 3000);
+  // wait for thread completion
+  if Assigned(ThrIDConnect) then
+    WaitForSingleObject(ThrIDConnect.Handle, 5000);  // ThrIDConnect.WaitFor;
 
   // destroy services
   pluginLink^.DestroyServiceFunction(vk_hGetCaps);

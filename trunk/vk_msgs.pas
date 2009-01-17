@@ -35,7 +35,8 @@ interface
 
   procedure MsgsInit();
   procedure MsgsDestroy();
-  procedure NewsInit();
+  procedure vk_GetMsgsFriendsEtc();
+  procedure vk_GetNews();
 
 implementation
 
@@ -69,18 +70,7 @@ type
   protected
     procedure Execute; override;
   end;
-  TThreadGetMsgsFriendsEtc = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
-  TThreadGetNews = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
+
 
 type // type to keep news
   TNewsRecord = record
@@ -111,11 +101,7 @@ var
   MsgText_sendmessage: String;   // with message data
   trx_id: Integer;
 
-  timer_checkmsgs: Integer;
-
   ThrIDSendMsg: TThreadSendMsg;
-  ThrIDGetMsgFriendsEtc: TThreadGetMsgsFriendsEtc;
-  ThrIDGetNews: TThreadGetNews;
 
 
 // =============================================================================
@@ -155,7 +141,9 @@ begin
     If Assigned(iHTTP) Then
     Begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... page with secure id downloaded successfully'));
-      SecureId := TextBetween(getElementsByAttr(iHTTP, 'input', 'name', 'chas')[0], 'value=', ' '); // <input type="hidden" name="secure" value="272c812340fd0d5aaa4e"/>
+      // SecureId := TextBetween(getElementsByAttr(iHTTP, 'input', 'name', 'chas')[0], 'value=', ' '); // <input type="hidden" name="secure" value="272c812340fd0d5aaa4e"/>
+      SecureId := TextBetween(HTML, 'name="chas"', '/>');
+      SecureId := TextBetween(SecureId, 'value="', '"');
       Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... secure id received: '+SecureId));
       // now the message can be sent
       Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... sending message'));
@@ -239,7 +227,7 @@ var HTML: String; // html content of the pages received
     MsgUrl: String;
     MsgText: String;
     MsgSenderName: String;
-    i: Integer;
+    i, ii, temppos: Integer;
     MsgDate: TDateTime;
     MsgSender: Integer;
   	ccs_chain: TCCSDATA;
@@ -293,7 +281,7 @@ begin
      Begin
        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... getting message(s) details'));
        FeedMsgsItems := FeedMsgs.Field['items'] as TlkJSONobject;
-       For i:=0 to MsgsCount-1 Do // now processing all msgs one-by-one
+       for i:=(MsgsCount-1) downto 0 do // now processing all msgs one-by-one
        Begin
           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + ', getting id'));
           MsgID := FeedMsgsItems.NameOf[i];
@@ -319,17 +307,17 @@ begin
           begin
             // remove empty subject, if user would like to
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', removing empty subject'));
-            MsgText := StringReplace(MsgText, 'Re(10):  ...', '', []);
-            MsgText := StringReplace(MsgText, 'Re(9):  ...', '', []);
-            MsgText := StringReplace(MsgText, 'Re(8):  ...', '', []);
-            MsgText := StringReplace(MsgText, 'Re(7):  ...', '', []);
-            MsgText := StringReplace(MsgText, 'Re(6):  ...', '', []);
-            MsgText := StringReplace(MsgText, 'Re(5):  ...', '', []);
-            MsgText := StringReplace(MsgText, 'Re(4):  ...', '', []);
-            MsgText := StringReplace(MsgText, 'Re(3):  ...', '', []);
-            MsgText := StringReplace(MsgText, 'Re(2):  ...', '', []);
             MsgText := StringReplace(MsgText, 'Re:  ...', '', []);
             MsgText := StringReplace(MsgText, ' ... ', '', []);
+            if (MsgText[1] = 'R') and (MsgText[2] = 'e') and (MsgText[3] = '(') then
+            begin
+              ii := 4;
+              while (MsgText[ii] in ['0'..'9']) and (ii <= length(MsgText)-1) do
+            	  Inc(ii);
+              temppos := PosEx('):  ...', MsgText);
+              if (temppos = ii) then
+            	  Delete(MsgText, 1, temppos + 6);
+            end;
           end;
           MsgText := StringReplace(MsgText, '<br/><br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
           MsgText := StringReplace(MsgText, '<br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
@@ -440,17 +428,6 @@ begin
 end;
 
 // =============================================================================
-// function to check the server for new (incoming) messages
-// -----------------------------------------------------------------------------
-procedure TimerCheckNewMessages(Wnd: HWnd; Msg, TimerID, SysTime: Longint); stdcall;
-begin
-  if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
-    if not Assigned(ThrIDGetMsgFriendsEtc) then
-      ThrIDGetMsgFriendsEtc := TThreadGetMsgsFriendsEtc.Create(False); // initiate new thread for this
-end;
-
-
-// =============================================================================
 // function to send message
 // called when text contains English characters only
 // -----------------------------------------------------------------------------
@@ -523,9 +500,6 @@ begin
   vk_hProtoMessageReceive := CreateProtoServiceFunction(piShortName, PSR_MESSAGE, ProtoMessageReceive);
   // no need to support PSR_MESSAGEW - it is not used by new versions of Miranda
   // vk_hProtoMessageReceive := CreateProtoServiceFunction(piShortName, PSR_MESSAGEW, ProtoMessageReceive);
-
-  // start timer for regular checking for new messages
-  timer_checkmsgs := SetTimer(0, 0, DBGetContactSettingDWord(0, piShortName, opt_UserCheckNewMessages, 60)*1000, @TimerCheckNewMessages);
 end;
 
 // =============================================================================
@@ -533,12 +507,6 @@ end;
 // -----------------------------------------------------------------------------
 procedure MsgsDestroy();
 begin
-  // kill timer checking for new messages
-  KillTimer(0, timer_checkmsgs);
-
-  If Assigned(ThrIDGetMsgFriendsEtc) Then
-    WaitForSingleObject(ThrIDGetMsgFriendsEtc.Handle, 3000);
-
   pluginLink^.DestroyServiceFunction(vk_hProtoMessageSend);
   pluginLink^.DestroyServiceFunction(vk_hProtoMessageSendW);
   pluginLink^.DestroyServiceFunction(vk_hProtoMessageReceive);
@@ -589,30 +557,6 @@ begin
    end;
 
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadSendMsg) ... thread finished'));
-end;
-
-// =============================================================================
-// thread to receive message(s)
-// -----------------------------------------------------------------------------
-procedure TThreadGetMsgsFriendsEtc.Execute;
-var ThreadNameInfo: TThreadNameInfo;
-begin
- Netlib_Log(vk_hNetlibUser, PChar('(TThreadGetMsgsFriendsEtc) Thread started...'));
-
- ThreadNameInfo.FType := $1000;
- ThreadNameInfo.FName := 'TThreadGetMsgsFriendsEtc';
- ThreadNameInfo.FThreadID := $FFFFFFFF;
- ThreadNameInfo.FFlags := 0;
- try
-   RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
- except
- end;
-
-  // call procedure to receive new messages
-  vk_GetMsgsFriendsEtc();
-  ThrIDGetMsgFriendsEtc := nil;
-
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadGetMsgsFriendsEtc) ... thread finished'));
 end;
 
 
@@ -850,78 +794,6 @@ begin
     // with next update)
     DBWriteContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, DateTimeToFileDate(NewsAll[0].NTime));
   end;
-end;
-
-// =============================================================================
-// function to initiate news support
-// -----------------------------------------------------------------------------
-procedure NewsInit();
-begin
-  // start thread for regular news checking
-  if not Assigned(ThrIDGetNews) then
-  begin
-    ThrIDGetNews := TThreadGetNews.Create(False); // initiate new thread
-    ThrIDGetNews.FreeOnTerminate := True;
-    ThrIDGetNews.Resume;
-  end;
-end;
-
-// =============================================================================
-// thread to get news
-// -----------------------------------------------------------------------------
-procedure TThreadGetNews.Execute;
-var ThreadNameInfo: TThreadNameInfo;
-    // ContactID: THandle;
-begin
- Netlib_Log(vk_hNetlibUser, PChar('(TThreadGetNews) Thread started...'));
-
- ThreadNameInfo.FType := $1000;
- ThreadNameInfo.FName := 'TThreadGetNews';
- ThreadNameInfo.FThreadID := $FFFFFFFF;
- ThreadNameInfo.FFlags := 0;
- try
-   RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
- except
- end;
-
-  // ContactID := GetContactById(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234));
-
-  while true do
-  begin
-    try
-      if ((vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE)) and // update news only when user is not offline and
-         (DBGetContactSettingByte(0, piShortName, opt_NewsSupport, 1) = 1)  Then // update of news is enabled in user settings
-      begin
-        {// if status is online, then make our separate news contact as online
-        if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
-        begin
-          if DBGetContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_ONLINE then
-            DBWriteContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_ONLINE);
-        end;}
-        // default value of last update is 539033600 = 1/1/1996 12:00 am
-        if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_NewsSecs, 300)) / SecsPerDay then // code is equal to IncSecond function with negative value
-        begin
-            // write new value of last date & time of news update
-            DBWriteContactSettingDWord (0, piShortName, opt_NewsLastUpdateDateTime, DateTimeToFileDate(Now));
-            vk_GetNews();
-            // if news support is enabled, then make separate contact online?
-        end;
-      end
-      else
-      begin
-        {// if status is offline, then make our separate contact as offline
-        if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
-        begin
-          if DBGetContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_OFFLINE then
-            DBWriteContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_OFFLINE);
-        end;}
-      end;
-    except
-    end;
-    Sleep(1000);
-  end;
-
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadGetNews) ... thread finished'));
 end;
 
 

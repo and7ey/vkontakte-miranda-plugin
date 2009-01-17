@@ -50,6 +50,10 @@ uses
 
 implementation
 
+uses
+
+  vk_core; // module with core functions
+
 // =============================================================================
 // function initiliaze connection with internet
 // global var used: vk_hNetlibUser = contains handle to netlibuser created
@@ -120,12 +124,15 @@ begin
   CookiesText := CookiesGlobal.DelimitedText;
   nlhr.headers[4].szValue := PChar(CookiesGlobal.DelimitedText);
 
-  while (result = ' ') do
+  while (Result = ' ') do
   begin
 
     // fast exit when Miranda terminating
     if Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+    begin
+       Result := '';
        Exit;
+    end;
 
     Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Get) Dowloading page: '+ szUrl));
 
@@ -157,7 +164,7 @@ begin
       begin
         // save the retrieved data
         if UTF8Result Then
-          Result := Utf8ToAnsi(nlhrReply.pData)
+          Result := Utf8ToAnsi(PChar(String(nlhrReply.pData)))
           // Result := Utf8ToAnsi(ZDecompressStr(nlhrReply.pData))
         Else
           Result := nlhrReply.pData;
@@ -185,7 +192,10 @@ begin
 
             nlhr.szUrl := PChar(szRedirUrl);
 
-            Result := HTTP_NL_Get(szRedirUrl);
+            if Pos('http://pda.vkontakte.ru/index', szRedirUrl) = 0 then // block this page to support invisible mode
+              Result := HTTP_NL_Get(szRedirUrl)                          // not the best solution
+            else
+              Result := 'div class="menu2"';
             CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
             Exit;
           end
@@ -194,17 +204,17 @@ begin
       // return error code if the recieved code is neither 200 OK nor 302 Moved
       else
       begin
-        // gap: additional handling should be added, status of miranda should be changed
-        //      to offline, user should be informed about error
+        // change status of the protocol to offline
+        vk_SetStatus(ID_STATUS_OFFLINE);
         // store the error code
         Result:='Error occured! HTTP Error!';
       end
     end
-    // if the data does not downloaded successfully (ie. disconnected), then return 1000 as error code
+    // if the data does not downloaded successfully (ie. disconnected), then return error
     else
     begin
-      // gap: additional handling should be added, status of miranda should be changed
-      //      to offline, user should be informed about error
+      // change status of the protocol to offline
+      vk_SetStatus(ID_STATUS_OFFLINE);
       // store the error code
       Result:='NetLib error occurred!';
     end;
