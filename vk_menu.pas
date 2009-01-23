@@ -116,8 +116,15 @@ end;
 // TEST FUNCTION
 // -----------------------------------------------------------------------------
 function MenuContactTest(wParam: WPARAM; lParam: LPARAM): Integer; cdecl;
-// var ppd: TPOPUPDATAEX;
+var iec: TIconExtraColumn;
 begin
+  iec.cbSize := sizeof(iec);
+  if DBGetContactSettingWord(wParam, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_ONLINE then // apply icon to online contacts only
+    iec.hImage := xStatuses[1].IconExtraIndex
+  else
+    iec.hImage := THandle(-1);
+  iec.ColumnType := EXTRA_ICON_ADV2;
+  pluginLink^.CallService(MS_CLIST_EXTRA_SET_ICON, wParam, Windows.lParam(@iec));
   Result := 0;
 end;
 

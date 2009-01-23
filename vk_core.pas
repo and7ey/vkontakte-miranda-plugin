@@ -98,7 +98,6 @@ var
   ThrIDSearchContacts: TThreadSearchContacts;
   ThrIDDataUpdate: TThreadDataUpdate;
 
-
 implementation
 
 type // enchanced type required for search results
@@ -329,6 +328,7 @@ begin
     // DBWriteContactSettingWord(hContactNew, piShortName, 'Status', frStatus); // we can not update it here, it causes crash in newstatusnotify plugin
                                                                                 // so, the code is moved below
     DBWriteContactSettingByte(hContactNew, piShortName, 'Friend', frFriend);
+    DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url_friend,[frID])));
 
     // assign group for contact, if given in settings
     DefaultGroup := DBReadString(0, piShortName, opt_UserDefaultGroup, nil);
@@ -772,6 +772,8 @@ var
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadConnect) Thread started...'));
 
+  PluginLink^.CallService(MS_SYSTEM_THREAD_PUSH, 0, 0);
+
   ThreadNameInfo.FType := $1000;
   ThreadNameInfo.FName := 'TThreadConnect';
   ThreadNameInfo.FThreadID := $FFFFFFFF;
@@ -826,12 +828,18 @@ begin
     SetStatusOffline(); // make all contacts offline
     vk_Logout(); // logout from the site
   end;
+  if (vk_Status = ID_STATUS_INVISIBLE) Then
+    vk_Logout(); // logout from the site
   if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
   begin
     vk_GetUserNameID(); // update OUR name and id
+    // write default value of last date & time of contacts' status update
+    // so they will be updated again immediately in DataUpdate thread
+    DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeFriendsStatus, 539033600);
     UpdateDataInit(); // start separate thread for online data update
-    // vk_GetFriends(); // read list of friends from the server
   end;
+
+  PluginLink^.CallService(MS_SYSTEM_THREAD_POP, 0, 0);
 
   ThrIDConnect := nil;
 

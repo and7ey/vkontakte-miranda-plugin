@@ -151,7 +151,8 @@ begin
           (Pos('новую тему',StrTemp)=0) and
           (Pos('вышла замуж за',StrTemp)=0) and
           (Pos('женился на',StrTemp)=0) and // does it exist?
-          (Pos('примет участие во встрече',StrTemp)=0) then
+          (Pos('примет участие во встрече',StrTemp)=0) and
+          (Pos('не будет участвовать во встрече ',StrTemp)=0) then
           begin
             MsgID := TextBetween(StrTemp, '<a href=''id', '''>');
             MsgText := Trim(TextBetween(StrTemp, '</a> ', ' <span class="stTime">'));
@@ -162,15 +163,15 @@ begin
               StrTemp := TextBetween(StrTemp, '<span class="stTime">', '</span>');
               if (TempFriend <> 0) and (TryStrToTime(StrTemp, MsgDate)) then // read status for known contacts only
               begin
-                if StrToTime(DBReadString(TempFriend, piShortName, 'XStatusTime', '00:00')) < MsgDate then
+                // update status for online contacts only
+                if DBGetContactSettingWord(TempFriend, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_OFFLINE then
                   begin
-                    // update status for online contacts only
-                    if DBGetContactSettingWord(TempFriend, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_OFFLINE then
+                    DBWriteContactSettingByte(TempFriend, piShortName, 'XStatusUpdated', 1); // temp setting to identify that status just has been updated
+                    if StrToTime(DBReadString(TempFriend, piShortName, 'XStatusTime', '00:00')) < MsgDate then
                     begin
                       DBWriteContactSettingString(TempFriend, piShortName, 'XStatusTime', PChar(StrTemp));
                       DBWriteContactSettingString(TempFriend, piShortName, 'XStatusMsg', PChar(MsgText));
                       DBWriteContactSettingString(TempFriend, piShortName, 'XStatusName', PChar(MsgText)); // required for clist_modern to display status
-                      DBWriteContactSettingByte(TempFriend, piShortName, 'XStatusUpdated', 1); // temp setting to identify that status just has been updated
 
                       pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.WPARAM(TempFriend), 0); // inform other plugins that we've updated xstatus for a contact
 
@@ -184,7 +185,7 @@ begin
                           DBWriteContactSettingByte(TempFriend, piShortName, 'XStatusId', i);
                           StatusAddlSetIcon(TempFriend, xStatuses[i].IconExtraIndex);
                           break;
-                      end;
+                        end;
                       end;
                     end;
                   end;

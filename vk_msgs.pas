@@ -253,14 +253,14 @@ begin
  for i:=1 to length(HTML)-2 do // don't check first and last symbols
  begin
   if HTML[i]='{' then
-    if HTML[i+1]<>'"' then
+    if (HTML[i+1]<>'"') and (HTML[i-2]=':') then
       Insert('"', HTML, i+1);
 
   if (HTML[i]=',') and (HTML[i+1]=' ') then
     if HTML[i+2]<>'"' then
       Insert('"', HTML, i+2);
 
-  if HTML[i]=':' then
+  if (HTML[i]=':') and (HTML[i+1]=' ')  then
     if HTML[i-1]<>'"' then
       Insert('"', HTML, i);
  end;

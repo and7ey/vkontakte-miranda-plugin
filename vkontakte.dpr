@@ -63,6 +63,7 @@ var
   vk_hGetStatus,
   vk_hSetStatus,
   vk_hLoadIcon,
+  // vk_hOnCreateAccMgrUI,
   vk_hBasicSearch,
   vk_hAddToList,
 
@@ -70,7 +71,8 @@ var
   vk_hkContactDeleted,
   vk_hkModulesLoad,
   vk_hkOptInitialise,
-  vk_hkHookShutdown: THandle;
+  vk_hkHookShutdown,
+  vk_hkHookOkToExit: THandle;
 
 
   // ccs: PCCSDATA;
@@ -100,6 +102,7 @@ end;
 // declaration of the functions, which will be defined later
 function OnModulesLoad(wParam,lParam:DWord): Integer; cdecl; forward;
 function PreShutdown(wParam: wParam; lParam: lParam): Integer; cdecl; forward;
+function OkToExit(wParam: wParam; lParam: lParam): Integer; cdecl; forward;
 
 // =============================================================================
 // function to identify list of functions supported by the plugin
@@ -172,7 +175,7 @@ end;
 // PLI_PROTOCOL | PLI_ONLINE | PLI_OFFLINE
 // returns an HICON in which the icon has been loaded
 // -----------------------------------------------------------------------------
-function LoadIcon (wParam: wParam; lParam: lParam): Integer; cdecl;
+function LoadIcon(wParam: wParam; lParam: lParam): Integer; cdecl;
 var
   id: string; // to store id of icon to be loaded
   cx: int;
@@ -220,6 +223,15 @@ end;
 // =============================================================================
 // function identifies what should be done when plugin is being loaded
 // -----------------------------------------------------------------------------
+function OnCreateAccMgrUI(wParam: wParam; lParam: lParam): Integer; cdecl;
+begin
+  // Result := CreateDialogParam(hInstance, MAKEINTRESOURCE('ACCMGR'), lParam, @DlgLogin, 0);
+  Result := 0;
+end;
+
+// =============================================================================
+// function identifies what should be done when plugin is being loaded
+// -----------------------------------------------------------------------------
 function Load(link: PPLUGINLINK): integer; cdecl;
 var
   pd: TPROTOCOLDESCRIPTOR;
@@ -241,6 +253,7 @@ begin
   vk_hSetStatus := CreateProtoServiceFunction(piShortName, PS_SETSTATUS, SetStatus);
   vk_hGetStatus := CreateProtoServiceFunction(piShortName, PS_GETSTATUS, GetStatus);
   vk_hLoadIcon := CreateProtoServiceFunction(piShortName, PS_LOADICON, LoadIcon);
+  // vk_hOnCreateAccMgrUI := CreateProtoServiceFunction(piShortName, PS_CREATEACCMGRUI, OnCreateAccMgrUI); // for Miranda 0.8+ Account Manager support
 
   // register functions required to send and receive messages
   MsgsInit();
@@ -261,8 +274,9 @@ begin
   // modules are loaded
   vk_hkModulesLoad := pluginLink^.HookEvent(ME_SYSTEM_MODULESLOADED, @OnModulesLoad);
 
-  // hook event when Miranda is being closed
-  vk_hkHookShutdown := pluginLink^.HookEvent(ME_SYSTEM_OKTOEXIT, @PreShutdown);  // ME_SYSTEM_PRESHUTDOWN
+  // hook events when Miranda is being closed
+  vk_hkHookOkToExit := pluginLink^.HookEvent(ME_SYSTEM_OKTOEXIT, @OkToExit);
+  vk_hkHookShutdown := pluginLink^.HookEvent(ME_SYSTEM_PRESHUTDOWN, @PreShutdown);
 
   Result := 0;
 end;
@@ -301,10 +315,16 @@ end;
 // =============================================================================
 // function is run, when miranda is asking whether each plugin is ok to exit
 // -----------------------------------------------------------------------------
+function OkToExit(wParam: wParam; lParam: lParam): Integer; cdecl;
+begin
+  Result := 0;
+end;
+
+// =============================================================================
+// function is run, when miranda is shutting down
+// -----------------------------------------------------------------------------
 function PreShutdown(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
-  if (vk_Status = ID_STATUS_ONLINE) Then
-    vk_Logout(); // logout from the site
   Result := 0;
 end;
 
@@ -326,6 +346,9 @@ begin
   pluginLink^.DestroyServiceFunction(vk_hBasicSearch);
   pluginLink^.DestroyServiceFunction(vk_hAddToList);
   pluginLink^.DestroyServiceFunction(vk_hNetlibUser);
+  pluginLink^.DestroyServiceFunction(vk_hkHookShutdown);
+  pluginLink^.DestroyServiceFunction(vk_hkHookOkToExit);
+
 
   MsgsDestroy();
 
