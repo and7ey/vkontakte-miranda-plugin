@@ -3,7 +3,7 @@ Language: Russian
 Locale: 0419
 Authors: LA
 Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.1.5.0
+; ** VKontakte Protocol 0.1.6.2
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -104,10 +104,6 @@ Author-email: and7ey at gmail dot com
 Кэш аватаров
 [You cannot send messages more often than once in 1 second. Please try again later.]
 Вы не можете отправлять более одного сообщения в секунду. Попытайтесь отправить сообщение позднее.
-[Connection failed. Your e-mail or password was rejected.]
-Неудачное подключение. Ваш e-mail или пароль не приняты сервером.
-[Connection failed. Unknown error during sign on.]
-Неудачное подключение. Неизвестная ошибка при входе.
 [News]
 Новости
 [News support settings]
@@ -148,4 +144,21 @@ Author-email: and7ey at gmail dot com
 Отображать новости в отдельном контакте
 [Display links in the news]
 Отображать ссылки в новостях
-
+[Error: Cannot connect to the server]
+Ошибка: Невозможно подключиться к серверу
+[Error: Your e-mail or password was rejected]
+Ошибка: Ваш e-mail или пароль не приняты сервером
+[Error: Unknown error during sign on]
+Ошибка: Неизвестная ошибка при входе
+[Updating of user details requires status change to Online. Would you like to change status and update details now?]
+Для обновления данных контакта необходимо перейти в режим В сети. Перейти в режим в Сети и обновить данные сейчас?
+[Use VKontakte's page URL instead of contact's homepage]
+Использовать ссылку на страницу ВКонтакте вместо страницы, указанной контактом
+[Display Additional status for offline contacts]
+Отображать Дополнительный статус для контактов Не в сети
+[Use the following group by default for new contacts]
+Помещать новые контакты в следующую группу
+[Advanced (continued)]
+Дополнительно (продолжение)
+[Create new VKontakte account]
+Регистрация на сайте ВКонтакте

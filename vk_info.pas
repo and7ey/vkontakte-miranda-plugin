@@ -178,17 +178,24 @@ begin
   StrTemp := TextBetween(BasicInfo,'<td class="label">День рождения:</td>', '</td>');
   StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
   StrTemp := HTMLRemoveTags(StrTemp);
-  if Trim(StrTemp) <> '' then
-  begin
-    if Not TryStrToInt(RightStr(StrTemp, 4), BirthYear) then
-      StrTemp := StrTemp + ' 1900';
-    DOB := RusDateToDateTime(StrTemp, true);
-    DBWriteContactSettingByte(hContact, piShortName, 'BirthDay', StrToInt(FormatDateTime('dd', DOB)));
-    DBWriteContactSettingByte(hContact, piShortName, 'BirthMonth', StrToInt(FormatDateTime('mm', DOB)));
-    if StrToInt(FormatDateTime('yyyy', DOB)) <> 1900 then
-      DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
+  try
+    if Trim(StrTemp) <> '' then
+    begin
+      if Not TryStrToInt(RightStr(StrTemp, 4), BirthYear) then
+        StrTemp := StrTemp + ' 1900';
+      if Length(StrTemp) = 4 then // only year is given
+        DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(StrTemp))
+      else
+      begin
+        DOB := RusDateToDateTime(StrTemp, true);
+        DBWriteContactSettingByte(hContact, piShortName, 'BirthDay', StrToInt(FormatDateTime('dd', DOB)));
+        DBWriteContactSettingByte(hContact, piShortName, 'BirthMonth', StrToInt(FormatDateTime('mm', DOB)));
+        if StrToInt(FormatDateTime('yyyy', DOB)) <> 1900 then
+          DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
+      end;
+    end;
+  except
   end;
-
   // origin city
   StrTemp := TextBetween(BasicInfo,'<td class="label">Родной город:</td>', '</td>');
   StrTemp := TextBetween(StrTemp,'''>', '</a>');
@@ -226,10 +233,15 @@ begin
     DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone1', PChar(StrTemp));
 
   // webpage
-  // we don't need it more - since ver. 0.1.6.1 we place here vkontakte's page url
-  {StrTemp := TextBetween(ContactInfo,'<td class="label">Веб-сайт:</td>', '</td>');
-  StrTemp := TextBetween(StrTemp,'''>', '</a>'); }
-  StrTemp := Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]);
+  // depending on the setting we put here either contact's page (read from
+  // contact's page or just vkontakte's page url
+  if DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0) = 0 then
+  begin
+    StrTemp := TextBetween(ContactInfo,'<td class="label">Веб-сайт:</td>', '</td>');
+    StrTemp := TextBetween(StrTemp,'''>', '</a>');
+  end
+  else
+    StrTemp := Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]);
   if Trim(StrTemp) <> '' Then
     DBWriteContactSettingString(hContact, piShortName, 'Homepage', PChar(StrTemp));
 

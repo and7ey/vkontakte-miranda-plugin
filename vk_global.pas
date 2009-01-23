@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 1 shl 16 + 6 shl 8 + 0;
+  piVersion = 0 shl 24 + 1 shl 16 + 6 shl 8 + 2;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -111,11 +111,13 @@ const
   opt_UserUpdateFriendsStatus: PChar = 'user/friendsstatussecs';
   opt_UserGetMinInfo: PChar = 'user/getmininfo';
   opt_UserRemoveEmptySubj: PChar = 'user/removeemptysubject';
-  opt_UserDefaultGroup: PChar = 'user/defaultgroup';
+  opt_UserDefaultGroup: PChar = 'User/DefaultGroup';
   opt_UserUpdateAddlStatus: PChar = 'user/updateadditionalstatus';
   opt_UserAvatarsSupport: PChar = 'user/avssupport';
   opt_UserAvatarsUpdateFreq: PChar = 'user/avsupdatefreq';
   opt_UserAvatarsUpdateWhenGetInfo: PChar = 'user/avsupdatewhengetinfo';
+  opt_UserVKontakteURL: PChar = 'User/VKontakteURL';
+  opt_UserAddlStatusForOffline: PChar = 'User/AddlStatusForOffline';
   opt_NewsSupport: PChar = 'NewsEnabled';
   opt_NewsSecs: PChar = 'NewsUpdateFrequencySecs';
   opt_NewsMin: PChar = 'NewsMinimalOnly';
