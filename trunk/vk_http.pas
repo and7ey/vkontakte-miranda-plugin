@@ -128,11 +128,11 @@ begin
   begin
 
     // fast exit when Miranda terminating
-    if Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+    {if Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
     begin
        Result := '';
        Exit;
-    end;
+    end;}
 
     Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Get) Dowloading page: '+ szUrl));
 
@@ -164,7 +164,7 @@ begin
       begin
         // save the retrieved data
         if UTF8Result Then
-          Result := Utf8ToAnsi(PChar(String(nlhrReply.pData)))
+          Result := Utf8ToAnsi(nlhrReply.pData)
           // Result := Utf8ToAnsi(ZDecompressStr(nlhrReply.pData))
         Else
           Result := nlhrReply.pData;

@@ -99,6 +99,9 @@ const
   err_sendmgs_offline = 'You cannot send messages when you are offline.';
   err_sendmgs_freq = 'You cannot send messages more often than once in 1 second. Please try again later.';
 
+  // questions
+  qst_read_info = 'Updating of user details requires status change to Online. Would you like to change status and update details now?';
+
 const
   // List of settings in DB
   opt_UserName: PChar = 'user/email';

@@ -256,6 +256,18 @@ const
 
   PS_LOADICON = '/LoadIcon';
 
+
+  { 
+    Create account manager UI form
+    wParam=0
+    lParam=(LPARAM)(HWND)hwndAccMgr
+    Returns handle on newly created form.
+    Size for best fit is 186x134 DLUs, please avoid groupboxes
+    paddind and advanced options. This should provide minimal setup
+    for initial connect.
+  }
+  PS_CREATEACCMGRUI ='/CreateAccMgrUI'; 
+
   {
     wParam : status_mode
     lParam : Pointer to a null terminated string containing message

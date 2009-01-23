@@ -47,7 +47,7 @@ uses
   vk_http, // module to connect with the site
   vk_avatars, // module to support avatars
   htmlparse, // module to simplify html parsing
-
+  vk_core, // module with core functions
 
   StrUtils,
   Windows,
@@ -150,7 +150,7 @@ begin
     4,    // <-- count of replies to be received
     0);   // <-- current reply, starts from 0
 
-  BasicInfo := TextBetween(HTML,'<div class="basicInfo">', 'div id="wall"');
+  BasicInfo := TextBetween(HTML,'<div id="rightColumn">', 'div id="wall"');
 
   // name
   StrTemp := TextBetween(BasicInfo,'<div class="profileName">', '</div>');
@@ -226,8 +226,10 @@ begin
     DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone1', PChar(StrTemp));
 
   // webpage
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Веб-сайт:</td>', '</td>');
-  StrTemp := TextBetween(StrTemp,'''>', '</a>');
+  // we don't need it more - since ver. 0.1.6.1 we place here vkontakte's page url
+  {StrTemp := TextBetween(ContactInfo,'<td class="label">Веб-сайт:</td>', '</td>');
+  StrTemp := TextBetween(StrTemp,'''>', '</a>'); }
+  StrTemp := Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]);
   if Trim(StrTemp) <> '' Then
     DBWriteContactSettingString(hContact, piShortName, 'Homepage', PChar(StrTemp));
 
@@ -337,7 +339,7 @@ begin
     4,
     2);
 
-  EduInfo := TextBetween(HTML,'<h2>Образование</h2>', 'div id="wall"');
+  EduInfo := TextBetween(HTML, '<h2>Образование</h2>', 'div id="wall"');
 
   // higher education
   StrTemp := TextBetween(EduInfo,'<td class="label">Вуз:</td>', '</td>');
@@ -352,7 +354,8 @@ begin
   StrTemp := TextBetween(EduInfo,'<td class="label">Факультет:</td>', '</td>');
   StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
   StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
+  StrTemp := Trim(StrTemp);
+  if StrTemp <> '' Then
   Begin
     DBWriteContactSettingString(hContact, piShortName, 'Affiliation1', PChar('Факультет'));
     DBWriteContactSettingString(hContact, piShortName, 'Affiliation1Text', PChar(StrTemp));
@@ -416,6 +419,7 @@ begin
       vk_AvatarGetAndSave(IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)), StrTemp); // update avatar for a contact
   end;
 
+
   // inform miranda that 4/4 (all!) data is received
   ProtoBroadcastAck(piShortName,
     hContact,
@@ -472,7 +476,12 @@ begin
   except
   end;
 
-  if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
+
+  if (vk_Status = ID_STATUS_INVISIBLE) Then
+    if MessageBox(0, PChar(qst_read_info), Translate(piShortName), MB_YESNO + MB_ICONQUESTION) = IDYES then
+      vk_SetStatus(ID_STATUS_ONLINE);
+
+  if (vk_Status = ID_STATUS_ONLINE) Then
   begin
     if DBGetContactSettingByte(0, piShortName, opt_UserGetMinInfo, 1) = 1 then
       vk_GetInfoMinimal(hContact_getinfo)
