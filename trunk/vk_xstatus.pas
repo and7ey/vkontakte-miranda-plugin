@@ -131,6 +131,7 @@ var HTML: String; // html content of the pages received
     MsgDate: TDateTime;
     MsgSender: Integer;
     i: Integer;
+    XStatusUpdateTemp: Boolean;
 begin
  if DBGetContactSettingByte(0, piShortName, opt_UserUpdateAddlStatus, 1) = 1 then
  begin
@@ -141,6 +142,13 @@ begin
    HTML := HTTP_NL_Get(vk_url_pda_news);
    If Trim(HTML) <> '' Then
    Begin
+    XStatusUpdateTemp := True;
+
+    // update status for online contacts only?
+    if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
+      if DBGetContactSettingWord(TempFriend, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_OFFLINE then
+        XStatusUpdateTemp := False;
+
      While Pos('a href=''id', HTML)<>0 Do
      Begin
        StrTemp := TextBetweenInc(HTML, '<a href=''id', '<br/>');
@@ -152,6 +160,8 @@ begin
           (Pos('вышла замуж за',StrTemp)=0) and
           (Pos('женился на',StrTemp)=0) and // does it exist?
           (Pos('примет участие во встрече',StrTemp)=0) and
+          (Pos('начал встречаться с ',StrTemp)=0) and
+          (Pos('примет участие во встречах ',StrTemp)=0) and
           (Pos('не будет участвовать во встрече ',StrTemp)=0) then
           begin
             MsgID := TextBetween(StrTemp, '<a href=''id', '''>');
@@ -163,15 +173,14 @@ begin
               StrTemp := TextBetween(StrTemp, '<span class="stTime">', '</span>');
               if (TempFriend <> 0) and (TryStrToTime(StrTemp, MsgDate)) then // read status for known contacts only
               begin
-                // update status for online contacts only
-                if DBGetContactSettingWord(TempFriend, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_OFFLINE then
+                if XStatusUpdateTemp then // this boolean variable is defined early
                   begin
                     DBWriteContactSettingByte(TempFriend, piShortName, 'XStatusUpdated', 1); // temp setting to identify that status just has been updated
                     if StrToTime(DBReadString(TempFriend, piShortName, 'XStatusTime', '00:00')) < MsgDate then
                     begin
                       DBWriteContactSettingString(TempFriend, piShortName, 'XStatusTime', PChar(StrTemp));
                       DBWriteContactSettingString(TempFriend, piShortName, 'XStatusMsg', PChar(MsgText));
-                      DBWriteContactSettingString(TempFriend, piShortName, 'XStatusName', PChar(MsgText)); // required for clist_modern to display status
+                      DBWriteContactSettingString(TempFriend, piShortName, 'XStatusName', Translate('Online')); // required for clist_modern to display status
 
                       pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.WPARAM(TempFriend), 0); // inform other plugins that we've updated xstatus for a contact
 

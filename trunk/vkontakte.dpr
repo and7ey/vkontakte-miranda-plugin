@@ -1,5 +1,5 @@
 // MessageBox(0, 'Just groovy, baby!', 'VKontakte', MB_OK);
-library vkontakte;
+library VKontakte;
 
 uses
   m_globaldefs in 'api\m_globaldefs.pas',
@@ -63,7 +63,7 @@ var
   vk_hGetStatus,
   vk_hSetStatus,
   vk_hLoadIcon,
-  // vk_hOnCreateAccMgrUI,
+  vk_hOnCreateAccMgrUI,
   vk_hBasicSearch,
   vk_hAddToList,
 
@@ -223,15 +223,6 @@ end;
 // =============================================================================
 // function identifies what should be done when plugin is being loaded
 // -----------------------------------------------------------------------------
-function OnCreateAccMgrUI(wParam: wParam; lParam: lParam): Integer; cdecl;
-begin
-  // Result := CreateDialogParam(hInstance, MAKEINTRESOURCE('ACCMGR'), lParam, @DlgLogin, 0);
-  Result := 0;
-end;
-
-// =============================================================================
-// function identifies what should be done when plugin is being loaded
-// -----------------------------------------------------------------------------
 function Load(link: PPLUGINLINK): integer; cdecl;
 var
   pd: TPROTOCOLDESCRIPTOR;
@@ -253,7 +244,7 @@ begin
   vk_hSetStatus := CreateProtoServiceFunction(piShortName, PS_SETSTATUS, SetStatus);
   vk_hGetStatus := CreateProtoServiceFunction(piShortName, PS_GETSTATUS, GetStatus);
   vk_hLoadIcon := CreateProtoServiceFunction(piShortName, PS_LOADICON, LoadIcon);
-  // vk_hOnCreateAccMgrUI := CreateProtoServiceFunction(piShortName, PS_CREATEACCMGRUI, OnCreateAccMgrUI); // for Miranda 0.8+ Account Manager support
+  vk_hOnCreateAccMgrUI := CreateProtoServiceFunction(piShortName, PS_CREATEACCMGRUI, OnCreateAccMgrUI); // for Miranda 0.8+ Account Manager support
 
   // register functions required to send and receive messages
   MsgsInit();
@@ -348,6 +339,7 @@ begin
   pluginLink^.DestroyServiceFunction(vk_hNetlibUser);
   pluginLink^.DestroyServiceFunction(vk_hkHookShutdown);
   pluginLink^.DestroyServiceFunction(vk_hkHookOkToExit);
+  pluginLink^.DestroyServiceFunction(vk_hOnCreateAccMgrUI);
 
 
   MsgsDestroy();

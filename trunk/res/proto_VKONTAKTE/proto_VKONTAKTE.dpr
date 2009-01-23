@@ -1,4 +1,4 @@
-library proto_VKONTAKTE;
+library proto_VKontakte;
 {$R icons.res}
 begin
 end.

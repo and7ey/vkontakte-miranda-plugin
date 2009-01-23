@@ -56,6 +56,7 @@ uses Windows,
 
 function DlgProcOptionsAcc(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsAdv(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+function DlgProcOptionsAdv2(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsNews(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function OnOptInitialise(wParam, lParam: DWord): Integer; cdecl;
 
@@ -101,6 +102,11 @@ begin
   odp.szTab.a := 'Advanced';
   odp.pszTemplate := 'SETTINGS_ADVANCED'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsAdv;
+  PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
+
+  odp.szTab.a := 'Advanced (continued)';
+  odp.pszTemplate := 'SETTINGS_ADVANCED2';
+  odp.pfnDlgProc := @DlgProcOptionsAdv2;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
 
   odp.szTab.a := 'News';
@@ -262,6 +268,60 @@ begin
             DBWriteContactSettingDWord (0, piShortName, opt_UserAvatarsUpdateFreq, val);
 
             DBWriteContactSettingByte (0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, Byte(IsDlgButtonChecked(dialog, VK_OPT_AVATARSUPDWHENGETINFO)));
+
+            Result:=True;
+          end;
+      end;
+  end;
+end;
+
+function DlgProcOptionsAdv2(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+var
+  val: Integer;
+  str: String;  // temp variable for types conversion
+  pc: PChar;    // temp variable for types conversion
+begin
+  Result:=False;
+
+  case message of
+    // code is executed, when options are initialized
+    WM_INITDIALOG:
+      begin
+        // translate all dialog texts
+        TranslateDialogDefault(Dialog);
+
+        SetDlgItemText(dialog, VK_OPT_DEFAULT_GROUP, PChar(DBReadString(0, piShortName, opt_UserDefaultGroup, nil))); // default group
+
+        val := DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0);
+        CheckDlgButton(dialog, VK_OPT_VKONTAKTE_URL, val);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0);
+        CheckDlgButton(dialog, VK_OPT_ADDLSTATUS_FOR_OFFLINE, val);
+
+        // send Changed message - make sure we can save the dialog
+        SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
+
+        Result:=True;
+      end;
+    // code is executed, when user clicks on link in the Options
+    WM_COMMAND:
+     begin
+       SendMessage(GetParent(dialog), PSM_CHANGED, dialog, 0);
+     end;
+    // code is executed, when user pressed OK or Apply
+    WM_NOTIFY:
+      begin
+        // if user pressed Apply
+        if PNMHdr(lParam)^.code = PSN_APPLY then
+          begin
+            SetLength(Str, 256);
+            pc := PChar(Str);
+            GetDlgItemText(dialog, VK_OPT_DEFAULT_GROUP, pc, 256);
+            DBWriteContactSettingString (0, piShortName, opt_UserDefaultGroup, pc);
+
+            DBWriteContactSettingByte (0, piShortName, opt_UserVKontakteURL, Byte(IsDlgButtonChecked(dialog, VK_OPT_VKONTAKTE_URL)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_UserAddlStatusForOffline, Byte(IsDlgButtonChecked(dialog, VK_OPT_ADDLSTATUS_FOR_OFFLINE)));
 
             Result:=True;
           end;

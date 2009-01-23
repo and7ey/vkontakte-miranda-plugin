@@ -59,7 +59,8 @@ uses
   ActiveX,
   Variants,
   ShellAPI,
-  StrUtils;
+  StrUtils,
+  Commctrl;
 
   function vk_SetStatus(NewStatus: Integer): Integer;
   function vk_AddFriend(frID: Integer; frNick: String; frStatus: Integer; frFriend: Byte): Integer;
@@ -70,6 +71,7 @@ uses
   procedure UpdateDataInit();
   procedure UpdateDataDestroy();
   procedure vk_Logout();
+  function OnCreateAccMgrUI(wParam: wParam; lParam: lParam): Integer; cdecl;
 
 {$include res\dlgopt\i_const.inc} // contains list of ids used in dialogs
 
@@ -114,6 +116,76 @@ var
   sbn: TPROTOSEARCHBYNAME; // variable to keep search query data
   FirstName_temp: String;
   LastName_temp: String;
+
+// =============================================================================
+// Account Manager Login function
+// -----------------------------------------------------------------------------
+function DlgAccMgr(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+var
+  str: String;  // temp variable for types conversion
+  pc: PChar;
+begin
+  Result:=False;
+  case Msg of
+     WM_INITDIALOG:
+       begin
+         // translate all dialog texts
+         TranslateDialogDefault(Dialog);
+         // read login from settings, if exists
+         vk_o_login := DBReadString(0, piShortName, opt_UserName, nil);
+         SetDlgItemText(Dialog, VK_ACCMGR_EMAIL, PChar(vk_o_login)); // e-mail
+         if vk_o_login <> '' then
+           SetFocus(GetDlgItem(Dialog, VK_ACCMGR_PASS));
+         Result := True;
+       end;
+     WM_CLOSE:
+       begin
+         EndDialog(Dialog, 0);
+         Result := False;
+       end;
+     WM_NOTIFY:
+       begin
+         // if user pressed Apply
+         if PNMHdr(lParam)^.code = PSN_APPLY then
+           begin
+             SetLength(Str, 256);
+             pc := PChar(Str);
+             GetDlgItemText(Dialog, VK_ACCMGR_EMAIL, pc, 256);
+             DBWriteContactSettingString (0, piShortName, opt_UserName, pc);
+             vk_o_login := pc;
+
+             SetLength(Str, 256);
+             pc := PChar(Str);
+             GetDlgItemText(Dialog, VK_ACCMGR_PASS, pc, 256);
+             // encode password
+             pluginLink^.CallService(MS_DB_CRYPT_ENCODESTRING, SizeOf(pc), Windows.lparam(pc));
+             DBWriteContactSettingString(0, piShortName, opt_UserPass, pc);
+             vk_o_pass := pc;
+
+             Result := True;
+           end;
+       end;
+     WM_COMMAND:
+       begin
+         case wParam of
+           VK_ACCMGR_NEWID:
+             begin
+               ShellAPI.ShellExecute(0, 'open', vk_url_register, nil, nil, 0);
+               Result := True;
+             end;
+         end;
+       end;
+  end;
+end;
+
+// =============================================================================
+// function to display dialog on Account Manager screen
+// -----------------------------------------------------------------------------
+function OnCreateAccMgrUI(wParam: wParam; lParam: lParam): Integer; cdecl;
+begin
+  Result := CreateDialogParam(hInstance, MAKEINTRESOURCE('ACCMGR'), lParam, @DlgAccMgr, 0);
+end;
+
 
 // =============================================================================
 // Login Dialog function
@@ -328,7 +400,8 @@ begin
     // DBWriteContactSettingWord(hContactNew, piShortName, 'Status', frStatus); // we can not update it here, it causes crash in newstatusnotify plugin
                                                                                 // so, the code is moved below
     DBWriteContactSettingByte(hContactNew, piShortName, 'Friend', frFriend);
-    DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url_friend,[frID])));
+    if DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0) = 1 then
+      DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url_friend,[frID])));
 
     // assign group for contact, if given in settings
     DefaultGroup := DBReadString(0, piShortName, opt_UserDefaultGroup, nil);
@@ -604,12 +677,13 @@ begin
       FoundTemp := getElementsByAttr(iHTTP, 'div', 'classname', 'result clearFix');
       for i:=0 to FoundTemp.Count-1 do
       Begin
-        FriendDetails_temp := TextBetweenInc(FoundTemp.Strings[i],'<DIV class=info>','</LI>');
+        FriendDetails_temp := TextBetweenInc(FoundTemp.Strings[i],'<DIV class=info','</LI>');
 
         FriendID := TextBetween(FriendDetails_temp, 'friend.php?id=', '">');
         FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<DT>Имя:', '<DT>')));
         if FriendFullName='' Then
           FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<DT>Имя:', '</DD>')));
+        FriendFullName := HTMLDecode(FriendFullName);
         FriendSecID := TextBetween(FoundTemp.Strings[i], '&amp;h=', '">Добавить в друзья');
         FriendStatus := TextBetween(FriendDetails_temp, '<span class=''bbb''>', '</span>');
 
