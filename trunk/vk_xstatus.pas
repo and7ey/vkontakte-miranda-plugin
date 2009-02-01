@@ -162,6 +162,7 @@ begin
           (Pos('примет участие во встрече',StrTemp)=0) and
           (Pos('начал встречаться с ',StrTemp)=0) and
           (Pos('примет участие во встречах ',StrTemp)=0) and
+          (Pos('появилась подруга',StrTemp)=0) and
           (Pos('не будет участвовать во встрече ',StrTemp)=0) then
           begin
             MsgID := TextBetween(StrTemp, '<a href=''id', '''>');
@@ -180,7 +181,7 @@ begin
                     begin
                       DBWriteContactSettingString(TempFriend, piShortName, 'XStatusTime', PChar(StrTemp));
                       DBWriteContactSettingString(TempFriend, piShortName, 'XStatusMsg', PChar(MsgText));
-                      DBWriteContactSettingString(TempFriend, piShortName, 'XStatusName', Translate('Online')); // required for clist_modern to display status
+                      DBWriteContactSettingString(TempFriend, piShortName, 'XStatusName', Translate('Current')); // required for clist_modern to display status
 
                       pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.WPARAM(TempFriend), 0); // inform other plugins that we've updated xstatus for a contact
 
@@ -348,7 +349,7 @@ begin
        if Trim(DBReadString(0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), nil))<>'' Then
        begin
          smi.popupPosition := 990000;
-         smi.szPopupName.a := 'Status';
+         smi.szPopupName.a := Translate('Status');
          smi.Position := 200001+i;
          srvFce := PChar(Format('%s/MenuStatusAddlStatus%d', [piShortName, smi.Position]));
          vk_hMenuStatusAddlSF[8+i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuStatusAdditionalStatus, smi.Position);

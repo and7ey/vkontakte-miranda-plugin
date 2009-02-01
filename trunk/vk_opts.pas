@@ -7,7 +7,7 @@
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
-
+    
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -48,7 +48,8 @@ uses Windows,
      m_globaldefs,
      m_api,
 
-     vk_global; // module with global variables and constant used
+     vk_global, // module with global variables and constant used
+     vk_common; // module with common functions
 
 {$include res\dlgopt\i_const.inc} // contains list of ids used in dialogs
 
@@ -61,27 +62,6 @@ function DlgProcOptionsNews(Dialog: HWnd; Message, wParam, lParam: DWord): Boole
 function OnOptInitialise(wParam, lParam: DWord): Integer; cdecl;
 
 implementation
-
-// function to get text of dialog item
-function GetDlgString(hDlg: HWnd; idCtrl: Integer): String;
-var
-  dlg_text: array[0..1023] of Char;
-begin
-  ZeroMemory(@dlg_text,SizeOf(dlg_text));
-  GetDlgItemText(hDlg,idCtrl,@dlg_text,1023);
-  Result := dlg_text;
-end;
-
-// function to get numeric value of dialog item
-function GetDlgInt(hDlg: HWnd; idCtrl: Integer): Integer;
-var
-  dlg_text: array[0..1023] of Char;
-begin
-  ZeroMemory(@dlg_text,SizeOf(dlg_text));
-  GetDlgItemText(hDlg,idCtrl,@dlg_text,1023);
-  Result := StrToInt(dlg_text);
-end;
-
 
 function OnOptInitialise(wParam{addinfo}, lParam{0}: DWord): Integer; cdecl;
 var
@@ -377,6 +357,8 @@ begin
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_AUDIO, val);
         val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterPersonalData, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_PERSONAL, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterTags, 1);
+        CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_TAGS, val);
 
         val := DBGetContactSettingByte(0, piShortName, opt_NewsLinks, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_SUPPORTLINKS, val);
@@ -419,6 +401,7 @@ begin
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterMeetings, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_MEETING)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterAudio, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_AUDIO)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterPersonalData, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_PERSONAL)));
+            DBWriteContactSettingByte (0, piShortName, opt_NewsFilterTags, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_TAGS)));
 
             DBWriteContactSettingByte (0, piShortName, opt_NewsLinks, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_SUPPORTLINKS)));
 

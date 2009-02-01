@@ -75,14 +75,16 @@ end;
 procedure vk_AuthRequestReceivedAllow(ID: String);
 var HTML: String;
     RequestID: String;
+    RequestIDint: Integer;
 begin
   // first we have to get request's id
   HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
   Delete(HTML, 1, Pos('friendShownName'+ID, HTML));
   RequestID := TextBetween(HTML, 'processRequest(', ',');
 
-  // we don't care about result as of now
-  HTTP_NL_Get(Format(vk_url_authrequestreceivedallow, [StrToInt(RequestID)]), REQUEST_HEAD);
+  if TryStrToInt(RequestID, RequestIDint) then
+    // GAP (?): we don't care about result as of now
+    HTTP_NL_Get(Format(vk_url_authrequestreceivedallow, [StrToInt(RequestID)]), REQUEST_HEAD);
 end;
 
 // =============================================================================
@@ -91,14 +93,16 @@ end;
 procedure vk_AuthRequestReceivedDeny(ID: String);
 var HTML: String;
     RequestID: String;
+    RequestIDint: Integer;
 begin
   // first we have to get request's id
   HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
   Delete(HTML, 1, Pos('friendShownName'+ID, HTML));
   RequestID := TextBetween(HTML, 'processRequest(', ',');
 
-  // we don't care about result as of now
-  HTTP_NL_Get(Format(vk_url_authrequestreceiveddeny, [StrToInt(RequestID)]), REQUEST_HEAD);
+  if TryStrToInt(RequestID, RequestIDint) then
+    // GAP (?): we don't care about result as of now
+    HTTP_NL_Get(Format(vk_url_authrequestreceiveddeny, [RequestIDint]), REQUEST_HEAD);
 end;
 
 // =============================================================================
@@ -109,7 +113,7 @@ var ccs_ar: PCCSDATA;
 begin
   ccs_ar := PCCSDATA(lParam);
   // call function to send authorization request
-  vk_AuthRequestSend(psre_id, psre_secureid, PChar(ccs_ar.lParam));
+  vk_AuthRequestSend(psreID, psreSecureID, PChar(ccs_ar.lParam));
   Result := 0;
 end;
 

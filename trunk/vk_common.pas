@@ -33,6 +33,14 @@ unit vk_common;
 
 interface
 
+uses
+     vk_global, // module with global variables and constant used
+
+     Windows,
+     Messages,
+     SysUtils,
+     Classes;
+
 type
   TFriendName = record
     Nick     : String;
@@ -40,9 +48,14 @@ type
     LastName : String;
   end;
 
-  function GetContactByID(uid: Integer): THandle;
+  function GetContactByID(uid: Integer): LongWord;
   function FullNameToNameSurnameNick(S: String): TFriendName;
   function RusDateToDateTime(RDate: String; LMonthes: Boolean): TDateTime;
+
+  function GetDlgString(hDlg: HWnd; idCtrl: Integer): String;
+  function GetDlgInt(hDlg: HWnd; idCtrl: Integer): Integer;
+  function GetDlgComboBoxItem(hDlg: HWnd; idCtrl: Integer): Integer;
+  procedure InitComboBox(hwndCombo: HWnd; const Names: Array of TComboBoxItem);
 
 implementation
 
@@ -50,18 +63,13 @@ uses
   m_globaldefs,
   m_api,
 
-  vk_global, // module with global variables and constant used
+  htmlparse; // module to simplify html parsing
 
-  htmlparse, // module to simplify html parsing
-
-  Windows,
-  SysUtils,
-  Classes;
 
 // =============================================================================
 // function to get contact handle by id
 // -----------------------------------------------------------------------------
-function GetContactByID(uid: Integer): THandle;
+function GetContactByID(uid: Integer): LongWord;
 var hContact: THandle;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(GetContactByID) Searching contact by id: '+IntToStr(uid)+'...'));
@@ -127,6 +135,56 @@ begin
    Result := StrToDateTime(RDate, FormatSettings);
 end;
 
+// =============================================================================
+// function to get text of dialog item
+// -----------------------------------------------------------------------------
+function GetDlgString(hDlg: HWnd; idCtrl: Integer): String;
+var
+  dlg_text: array[0..1023] of Char;
+begin
+  ZeroMemory(@dlg_text,SizeOf(dlg_text));
+  GetDlgItemText(hDlg,idCtrl,@dlg_text,1023);
+  Result := dlg_text;
+end;
+
+// =============================================================================
+// function to get numeric value of dialog item
+// -----------------------------------------------------------------------------
+function GetDlgInt(hDlg: HWnd; idCtrl: Integer): Integer;
+var
+  dlg_text: array[0..1023] of Char;
+begin
+  ZeroMemory(@dlg_text,SizeOf(dlg_text));
+  GetDlgItemText(hDlg,idCtrl,@dlg_text,1023);
+  if Not TryStrToInt(dlg_text, Result) then
+    Result := -1;
+end;
+
+// =============================================================================
+// function to get numeric value of dialog combobox item
+// -----------------------------------------------------------------------------
+function GetDlgComboBoxItem(hDlg: HWnd; idCtrl: Integer): Integer;
+begin
+  Result := SendDlgItemMessage(hDlg, idCtrl, CB_GETITEMDATA, SendDlgItemMessage(hDlg, idCtrl, CB_GETCURSEL, 0, 0), 0);
+end;
+
+// =============================================================================
+// function to insert values from array into combobox
+// -----------------------------------------------------------------------------
+procedure InitComboBox(hwndCombo: HWnd; const Names: Array of TComboBoxItem);
+var
+	iItem, i: Integer;
+begin
+ 	iItem := SendMessage(hwndCombo, CB_ADDSTRING, 0, LongInt(PChar(''))); // add empty element
+	SendMessage(hwndCombo, CB_SETITEMDATA, iItem, 0);
+	SendMessage(hwndCombo, CB_SETCURSEL, iItem, 0); // define empty element as default
+
+	for i := 0 to High(Names) do
+	begin
+  	iItem := SendMessage(hwndCombo, CB_ADDSTRING, 0, LongInt(Translate(PChar(Names[i].Name))));
+  	SendMessage(hwndCombo, CB_SETITEMDATA, iItem, Names[i].Index);
+	end;
+end;
 
 begin
 end.
