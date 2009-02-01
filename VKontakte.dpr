@@ -15,6 +15,7 @@ uses
   vk_folders, // module to support custom folders
   vk_msgs, // module to send/receive messages
   vk_core, // module with core functions
+  vk_search, // module to support search functionality
 
   vk_opts, // unit to work with options
 
@@ -64,9 +65,6 @@ var
   vk_hSetStatus,
   vk_hLoadIcon,
   vk_hOnCreateAccMgrUI,
-  vk_hBasicSearch,
-  vk_hAddToList,
-
 
   vk_hkContactDeleted,
   vk_hkModulesLoad,
@@ -111,11 +109,16 @@ function GetCaps(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
   Case wParam Of
     PFLAGNUM_1:
-      Result := PF1_SEARCHBYNAME or // protocol supports searching by nick/first/last names
-      PF1_IM or // supports IM sending & receiving
-      PFLAGNUM_1 or // will get authorisation requests for some or all contacts
-      // PF1_NUMERICUSERID; // the unique user IDs for this protocol are numeric
-      PF1_SERVERCLIST; // contact lists are stored on the server, not locally
+      Result :=
+        PF1_BASICSEARCH or // supports a basic user searching facility
+        PF1_SEARCHBYNAME or // protocol supports searching by nick/first/last names
+        PF1_EXTSEARCH or // supports one or more protocol-specific extended search schemes
+        PF1_EXTSEARCHUI or // has a dialog box to allow searching all the possible fields
+        PF1_ADDSEARCHRES or // can add search results to the contact list
+        PF1_IM or // supports IM sending & receiving
+        PFLAGNUM_1 or // will get authorisation requests for some or all contacts
+        // PF1_NUMERICUSERID or // the unique user IDs for this protocol are numeric
+        PF1_SERVERCLIST; // contact lists are stored on the server, not locally
 
     PFLAGNUM_2:
       Result := PF2_ONLINE or PF2_INVISIBLE; // list of statuses supported, just online & offline is required
@@ -124,7 +127,7 @@ begin
     // Result := PF2_ONLINE or PF2_LONGAWAY;
 
    PFLAGNUM_4:
-      Result := $00000100 or // PF4_IMSENDOFFLINE; protocol is able to send offline messages
+      Result := // $00000100 or // PF4_IMSENDOFFLINE; protocol is able to send offline messages - this cause problems in miranda 0.8 b27 and higher
                 PF4_AVATARS; // avatars supported
 
    PFLAG_UNIQUEIDTEXT:
@@ -136,6 +139,7 @@ begin
 
     PFLAG_UNIQUEIDSETTING:
       Result := Integer(PChar('ID')); // returns the DB setting name that has the ID which makes this user unique on that system
+
   Else
     Result := 0;
   End;
@@ -146,7 +150,8 @@ end;
 // -----------------------------------------------------------------------------
 function GetName(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
-  StrLCopy(PChar(lParam), piShortName, wParam);
+  if lParam <> 0 then
+    StrLCopy(PChar(lParam), Translate(piShortName), wParam);
   Result := 0;
 end;
 
@@ -239,18 +244,20 @@ begin
   pluginLink^.CallService(MS_PROTO_REGISTERMODULE, 0, lParam(@pd));
 
   // register additional services required for protocol
-  vk_hGetCaps := CreateProtoServiceFunction(piShortName, PS_GETCAPS, GetCaps);
-  vk_hGetName := CreateProtoServiceFunction(piShortName, PS_GETNAME, GetName);
-  vk_hSetStatus := CreateProtoServiceFunction(piShortName, PS_SETSTATUS, SetStatus);
-  vk_hGetStatus := CreateProtoServiceFunction(piShortName, PS_GETSTATUS, GetStatus);
-  vk_hLoadIcon := CreateProtoServiceFunction(piShortName, PS_LOADICON, LoadIcon);
+  vk_hGetCaps := CreateProtoServiceFunction(piShortName, PS_GETCAPS, @GetCaps);
+  vk_hGetName := CreateProtoServiceFunction(piShortName, PS_GETNAME, @GetName);
+  vk_hSetStatus := CreateProtoServiceFunction(piShortName, PS_SETSTATUS, @SetStatus);
+  vk_hGetStatus := CreateProtoServiceFunction(piShortName, PS_GETSTATUS, @GetStatus);
+  vk_hLoadIcon := CreateProtoServiceFunction(piShortName, PS_LOADICON, @LoadIcon);
   vk_hOnCreateAccMgrUI := CreateProtoServiceFunction(piShortName, PS_CREATEACCMGRUI, OnCreateAccMgrUI); // for Miranda 0.8+ Account Manager support
+
+  ConnectionErrorsCount := 0;
 
   // register functions required to send and receive messages
   MsgsInit();
 
-  vk_hBasicSearch := CreateProtoServiceFunction(piShortName, PS_SEARCHBYNAME, SearchByName);
-  vk_hAddToList := CreateProtoServiceFunction(piShortName, PS_ADDTOLIST, AddToList);
+  // register functions to support search
+  SearchInit();
 
   AuthInit();
 
@@ -333,9 +340,9 @@ begin
   pluginLink^.DestroyServiceFunction(vk_hGetName);
   pluginLink^.DestroyServiceFunction(vk_hGetStatus);
   pluginLink^.DestroyServiceFunction(vk_hSetStatus);
-  pluginLink^.DestroyServiceFunction(vk_hLoadIcon);
-  pluginLink^.DestroyServiceFunction(vk_hBasicSearch);
-  pluginLink^.DestroyServiceFunction(vk_hAddToList);
+
+  SearchDestroy();
+
   pluginLink^.DestroyServiceFunction(vk_hNetlibUser);
   pluginLink^.DestroyServiceFunction(vk_hkHookShutdown);
   pluginLink^.DestroyServiceFunction(vk_hkHookOkToExit);

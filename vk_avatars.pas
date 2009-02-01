@@ -76,7 +76,8 @@ var
 // and, if required, to get updated avatar
 // -----------------------------------------------------------------------------
 procedure vk_AvatarGetAndSave(ID, AvatarURL: String);
-var AvatarFileName: String;
+var AvatarURLOrig: String;
+    AvatarFileName: String;
     hContact: THandle;
     pai: TPROTO_AVATAR_INFORMATION;
 
@@ -88,6 +89,7 @@ begin
 
   // GAP: if only small avatar is used by contact, then plugin will not find it -
   //      picture with prefix b_ will not exist
+  AvatarURLOrig := AvatarURL;
   AvatarURL := StringReplace(AvatarURL, '/c_', '/b_', [rfIgnoreCase]);
   AvatarURL := StringReplace(AvatarURL, '/a_', '/b_', [rfIgnoreCase]);
 
@@ -102,7 +104,8 @@ begin
     AvatarFileName := FolderAvatars + '\' + ID + '.jpg';
     Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... downloading avatar'));
 
-    if HTTP_NL_GetPicture(AvatarURL, AvatarFileName) then // downloaded successfully
+    {$B-}
+    if HTTP_NL_GetPicture(AvatarURL, AvatarFileName) or HTTP_NL_GetPicture(AvatarURLOrig, AvatarFileName) then // downloaded successfully
     begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... avatar downloaded successfully and saved to '+ AvatarFileName));
       // write Avatar File Name to DB

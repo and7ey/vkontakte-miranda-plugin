@@ -220,7 +220,7 @@ end;
 // (it is called from separate thread, so minimum number of WRITE global variables is used)
 // -----------------------------------------------------------------------------
 procedure vk_GetMsgsFriendsEtc();
-var HTML: String; // html content of the pages received
+var HTML: AnsiString; // html content of the pages received
     MsgsCount: Integer; // temp variable to keep number of new msgs received
     FriendsCount: Integer; // temp variable to keep number of new authorization requests received
     MsgID: String;
@@ -283,66 +283,69 @@ begin
        FeedMsgsItems := FeedMsgs.Field['items'] as TlkJSONobject;
        for i:=(MsgsCount-1) downto 0 do // now processing all msgs one-by-one
        Begin
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + ', getting id'));
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', getting id'));
           MsgID := FeedMsgsItems.NameOf[i];
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', id: '+MsgID));
-          MsgUrl := Format(vk_url_pda_msg, [StrToInt(MsgID)]);
-          // get msg details
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', getting details'));
-          HTML := HTTP_NL_Get(MsgUrl);
-          // date of message
-          MsgDate := RusDateToDateTime(TextBetween(HTML, '<span class="label">Дата:</span> ', '<br/>'), false);
-          // from
-          If Not TryStrToInt(TextBetween(HTML, 'name="to_id" value="', '"/>'), MsgSender) Then
-            Exit;
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from id: '+IntToStr(MsgSender)));
-          // from - Name (needed for not-friends)
-          MsgSenderName := TextBetween(HTML, 'От кого:', '/a>');
-          MsgSenderName := HTMLDecode(TextBetween(MsgSenderName, '">', '<'));
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from person: '+MsgSenderName));
-
-          // subject and message
-          MsgText := TextBetween(HTML, '<span class="label">Тема:</span> ', '<span class="label">Ответить:');
-          if DBGetContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, 1) = 1 then
-          begin
-            // remove empty subject, if user would like to
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', removing empty subject'));
-            MsgText := StringReplace(MsgText, 'Re:  ...', '', []);
-            MsgText := StringReplace(MsgText, ' ... ', '', []);
-            if (MsgText[1] = 'R') and (MsgText[2] = 'e') and (MsgText[3] = '(') then
-            begin
-              ii := 4;
-              while (MsgText[ii] in ['0'..'9']) and (ii <= length(MsgText)-1) do
-            	  Inc(ii);
-              temppos := PosEx('):  ...', MsgText);
-              if (temppos = ii) then
-            	  Delete(MsgText, 1, temppos + 6);
-            end;
-          end;
-          MsgText := StringReplace(MsgText, '<br/><br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
-          MsgText := StringReplace(MsgText, '<br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
-          MsgText := StringReplace(MsgText, Chr(9), '', [rfReplaceAll, rfIgnoreCase]);
-          MsgText := HTMLDecode(MsgText);
-          MsgText := Trim(MsgText);
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', text: '+MsgText));
-
-          // if message from unknown contact then
-          // we add contact to our list temporary
-          TempFriend := GetContactByID(MsgSender);
-          If TempFriend = 0 Then
+          If MsgID <> '' Then
           Begin
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ' received from unknown contact, adding him/her to the contact list temporarily'));
-            // add sender to our contact list
-            // now we don't read user's status, so it is added as offline
-            TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
-            // and make it as temporary contact
-            DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
-         		DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
-          End;
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', id: '+MsgID));
+            MsgUrl := Format(vk_url_pda_msg, [StrToInt(MsgID)]);
+            // get msg details
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', getting details'));
+            HTML := HTTP_NL_Get(MsgUrl);
+            // date of message
+            MsgDate := RusDateToDateTime(TextBetween(HTML, '<span class="label">Дата:</span> ', '<br/>'), false);
+            // from
+            If Not TryStrToInt(TextBetween(HTML, 'name="to_id" value="', '"/>'), MsgSender) Then
+             Exit;
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from id: '+IntToStr(MsgSender)));
+            // from - Name (needed for not-friends)
+            MsgSenderName := TextBetween(HTML, 'От кого:', '/a>');
+            MsgSenderName := HTMLDecode(TextBetween(MsgSenderName, '">', '<'));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from person: '+MsgSenderName));
 
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', adding to miranda database'));
-          // everything seems to be OK, may add this message to Miranda DB
-          vk_ReceiveMessage(TempFriend, MsgText, MsgDate);
+            // subject and message
+            MsgText := TextBetween(HTML, '<span class="label">Тема:</span> ', '<span class="label">Ответить:');
+            if DBGetContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, 1) = 1 then
+            begin
+              // remove empty subject, if user would like to
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', removing empty subject'));
+              MsgText := StringReplace(MsgText, 'Re:  ...', '', []);
+              MsgText := StringReplace(MsgText, ' ... ', '', []);
+              if (MsgText[1] = 'R') and (MsgText[2] = 'e') and (MsgText[3] = '(') then
+              begin
+                ii := 4;
+                while (MsgText[ii] in ['0'..'9']) and (ii <= length(MsgText)-1) do
+              	  Inc(ii);
+                temppos := PosEx('):  ...', MsgText);
+                if (temppos = ii) then
+            	    Delete(MsgText, 1, temppos + 6);
+              end;
+            end;
+            MsgText := StringReplace(MsgText, '<br/><br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
+            MsgText := StringReplace(MsgText, '<br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
+            MsgText := StringReplace(MsgText, Chr(9), '', [rfReplaceAll, rfIgnoreCase]);
+            MsgText := HTMLDecode(MsgText);
+            MsgText := Trim(MsgText);
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', text: '+MsgText));
+
+            // if message from unknown contact then
+            // we add contact to our list temporary
+            TempFriend := GetContactByID(MsgSender);
+            If TempFriend = 0 Then
+            Begin
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ' received from unknown contact, adding him/her to the contact list temporarily'));
+              // add sender to our contact list
+              // now we don't read user's status, so it is added as offline
+              TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
+              // and make it as temporary contact
+              DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
+         		  DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
+            End;
+
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', adding to miranda database'));
+            // everything seems to be OK, may add this message to Miranda DB
+            vk_ReceiveMessage(TempFriend, MsgText, MsgDate);
+          End;
        End;
      End; // receiving of new messages completed
      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking for new incoming messages finished'));
@@ -661,7 +664,7 @@ begin
       While feedTablePosStart > 0 Do
       Begin
         HTMLNews := TextBetweenTagsAttrInc(HTMLDay, 'table', 'class', 'feedTable');
-        nNType := TextBetween(HTMLNews, 'img class="feedIcon" src = "http://vkontakte.ru/images/icons/', '_icon.gif"');
+        nNType := TextBetween(HTMLNews, 'images/icons/', '_icon.gif"');
         nIDstr := TextBetween(HTMLNews, 'a href=''id', '''');
         nText := TextBetweenInc(HTMLNews, '<td class="feedStory', '</td>');
         // remove images
@@ -758,7 +761,9 @@ begin
             ValidNews := False;
           if (NewsAll[CurrNews].NType = 'audio') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterAudio, 1) = 0) Then
             ValidNews := False;
-            if (NewsAll[CurrNews].NType = 'record') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPersonalData, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'record') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPersonalData, 1) = 0) Then
+            ValidNews := False;
+          if (NewsAll[CurrNews].NType = 'add_tag') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterTags, 1) = 0) Then
             ValidNews := False;
         end;
         if ValidNews then

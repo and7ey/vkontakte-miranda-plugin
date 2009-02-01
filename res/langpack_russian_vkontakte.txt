@@ -1,9 +1,9 @@
-Miranda Language Pack Version 1
-Language: Russian
-Locale: 0419
-Authors: LA
-Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.1.6.2
+; Miranda Language Pack Version 1
+; Language: Russian
+; Locale: 0419
+; Authors: LA
+; Author-email: and7ey at gmail dot com
+; ** VKontakte Protocol 0.1.7.0
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -162,3 +162,151 @@ Author-email: and7ey at gmail dot com
 Дополнительно (продолжение)
 [Create new VKontakte account]
 Регистрация на сайте ВКонтакте
+[Custom...]
+Произвольный...
+[Status message]
+Статусное сообщение
+[Please input new custom status message]
+Введите новое статусное сообщение
+[Current]
+Текущий
+[Female]
+Женский
+[Male]
+Мужской
+[Single]
+В одиночестве
+[In a relationship]
+Есть друг/подруга
+[Engaged]
+В помолвке
+[Married]
+В браке
+[It's complicated]
+Все сложно
+[Actively searching]
+В активном поиске
+[January]
+января
+[February]
+февраля
+[March]
+марта
+[April]
+апреля
+[May]
+мая
+[June]
+июня
+[July]
+июля
+[August]
+августа
+[September]
+сентября
+[October]
+октября
+[November]
+ноября
+[December]
+декабря
+[Main]
+Основное
+[First name:]
+Имя:
+[Last name:]
+Фамилия:
+[Gender:]
+Пол:
+[Marital status:]
+Сем.положение:
+[Political views:]
+Пол.взгляды:
+[Date of birth:]
+Дата рождения:
+[Day:]
+День:
+[Month:]
+Месяц:
+[Year:]
+Год:
+[Education]
+Образование
+[Country:]
+Страна:
+[City:]
+Город:
+[College:]
+ВУЗ:
+[Faculty:]
+Факультет:
+[Department:]
+Кафедра:
+[Graduation year:]
+Год окончания:
+[Educational status:]
+Форма обучения:
+[Apathetic]
+Индифферентные
+[Communist]
+Коммунистические
+[Socialist]
+Социалистичеcкие
+[Moderate]
+Умеренные
+[Liberal]
+Либеральные
+[Conservative]
+Консервативные
+[Monarchist]
+Монархические
+[Ultraconservative]
+Ультраконсервативные
+[Russia]
+Россия
+[Ukraine]
+Украина
+[Belarus]
+Беларусь
+[Kazakhstan]
+Казахстан
+[Azerbaijan]
+Азербайджан
+[Armenia]
+Армения
+[Georgia]
+Грузия
+[Israel]
+Израиль
+[USA]
+США
+[Canada]
+Канада
+[Kyrgyzstan]
+Кыргызстан
+[Latvia]
+Латвия
+[Lithuania]
+Литва
+[Estonia]
+Эстония
+[Moldova]
+Молдова
+[Tajikistan]
+Таджикистан
+[Turkmenistan]
+Туркмения
+[Uzbekistan]
+Узбекистан
+[Full-time]
+Дневная
+[Part-time]
+Вечерняя
+[Correspondence]
+Заочная
+[Graduated]
+Выпуск
+[Faculty]
+Факультет
+[Tags]
+Отметки

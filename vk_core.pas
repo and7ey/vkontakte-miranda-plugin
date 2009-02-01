@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (С) 2008 Andrey Lukyanov
+    Copyright (С) 2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -64,8 +64,6 @@ uses
 
   function vk_SetStatus(NewStatus: Integer): Integer;
   function vk_AddFriend(frID: Integer; frNick: String; frStatus: Integer; frFriend: Byte): Integer;
-  function SearchByName(wParam: wParam; lParam: lParam): Integer; cdecl;
-  function AddToList(wParam: wParam; lParam: lParam): Integer; cdecl;
   procedure SetStatusOffline();
   function ContactDeleted(wParam: wParam; lParam: lParam): Integer; cdecl;
   procedure UpdateDataInit();
@@ -82,12 +80,6 @@ type
   protected
     procedure Execute; override;
   end;
-  TThreadSearchContacts = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
   TThreadDataUpdate = class(TThread)
   private
     { Private declarations }
@@ -97,25 +89,12 @@ type
 
 var
   ThrIDConnect: TThreadConnect;
-  ThrIDSearchContacts: TThreadSearchContacts;
   ThrIDDataUpdate: TThreadDataUpdate;
 
 implementation
 
-type // enchanced type required for search results
-  PPROTOSEARCHRESULT_VK = ^TPROTOSEARCHRESULT_VK;
-  TPROTOSEARCHRESULT_VK = record
-    psr: TPROTOSEARCHRESULT; // standard Miranda's search result structure (includes name, surname, nick and mail)
-    id: String; // contains unique contact's id
-    SecureID: String; // id, which is required to add contact on the server
-    Status: Integer; // status of contact found
-end;
+// var
 
-var
-  searchId: Integer; // variable to keep info about search request number
-  sbn: TPROTOSEARCHBYNAME; // variable to keep search query data
-  FirstName_temp: String;
-  LastName_temp: String;
 
 // =============================================================================
 // Account Manager Login function
@@ -136,6 +115,14 @@ begin
          SetDlgItemText(Dialog, VK_ACCMGR_EMAIL, PChar(vk_o_login)); // e-mail
          if vk_o_login <> '' then
            SetFocus(GetDlgItem(Dialog, VK_ACCMGR_PASS));
+         // read pass
+         vk_o_pass := DBReadString(0, piShortName, opt_UserPass, nil);
+         if trim(vk_o_pass) <> '' Then // decrypt password
+         begin
+           pluginLink^.CallService(MS_DB_CRYPT_DECODESTRING, SizeOf(vk_o_pass), Windows.lparam(vk_o_pass));
+           SetDlgItemText(dialog, VK_ACCMGR_PASS, PChar(vk_o_pass)); // password
+         end;  
+
          Result := True;
        end;
      WM_CLOSE:
@@ -388,6 +375,9 @@ begin
   Begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_AddFriend) ... friend already exists, id: '+IntToStr(DBGetContactSettingDword(hContact, piShortName, 'ID', 0))+', nick: '+DBReadString(hContact, piShortName, 'Nick', '')));
     Result := hContact;
+    // remove temporary settings
+    DBDeleteContactSetting(hContact, 'CList', 'NotOnList');
+    DBDeleteContactSetting(hContact, 'CList', 'Hidden');
     Exit;
   End;
 
@@ -411,7 +401,12 @@ begin
   CallService(MS_PROTO_ADDTOCONTACT, hContactNew, lParam(PChar(piShortName)));
 
   If hContactNew <> 0 Then
+  begin
     DBWriteContactSettingWord(hContactNew, piShortName, 'Status', frStatus);
+    // remove temporary settings
+    DBDeleteContactSetting(hContactNew, 'CList', 'NotOnList');
+    DBDeleteContactSetting(hContactNew, 'CList', 'Hidden');
+  end;
 
   Netlib_Log(vk_hNetlibUser, PChar('(vk_AddFriend) ... friend added'));
   Result := hContactNew;
@@ -623,102 +618,6 @@ begin
 end;
 
 // =============================================================================
-// procedure to find contacts
-// find first 20 contacts
-// -----------------------------------------------------------------------------
-procedure vk_SearchFriends(cName, cSurname: String; searchID: Integer);
-var
-    HTML: String;
-    iHTTP: IHTMLDocument2; // these 2 variables required for
-    v: Variant;            // String -> IHTMLDocument2 conversions
-    FoundTemp: TStringList;
-    i: Byte;
-    TempInteger: Integer;
-    FriendDetails_temp: String;
-    FoundCount: Integer;
-
-    psre: TPROTOSEARCHRESULT_VK; // to keep search results
-
-    FriendStatus,
-    FriendID,
-    FriendFullName,
-    FriendNick,
-    FriendFirstName,
-    FriendLastName,
-    FriendSecID: String;
-
-    FriendFN: TFriendName;
-
-begin
-  HTML := HTTP_NL_Get(Format(vk_url_searchbyname,[cName, cSurname, 0]));
-
-  if Not TryStrToInt(TextBetween(HTML, 'Найдено ', ' человек'), FoundCount) Then
-    FoundCount := 10;
-
-  if FoundCount > 10 Then // get next 10 found contacts
-    HTML := HTML + HTTP_NL_Get(Format(vk_url_searchbyname,[cName, cSurname, 10]));
-
-
-  CoInitialize(nil);  // since this function is called in a separate function,
-                      // this code is mandatory for CreateComObject function
-  If Trim(HTML) <> '' Then
-  Begin
-    try
-      iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
-      v := VarArrayCreate([0,0], VarVariant);
-      v[0] := HTML;
-      iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
-    except
-      iHTTP:=nil;
-    end;
-
-    if Assigned(iHTTP) Then
-    Begin
-      FoundTemp := getElementsByAttr(iHTTP, 'div', 'classname', 'result clearFix');
-      for i:=0 to FoundTemp.Count-1 do
-      Begin
-        FriendDetails_temp := TextBetweenInc(FoundTemp.Strings[i],'<DIV class=info','</LI>');
-
-        FriendID := TextBetween(FriendDetails_temp, 'friend.php?id=', '">');
-        FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<DT>Имя:', '<DT>')));
-        if FriendFullName='' Then
-          FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<DT>Имя:', '</DD>')));
-        FriendFullName := HTMLDecode(FriendFullName);
-        FriendSecID := TextBetween(FoundTemp.Strings[i], '&amp;h=', '">Добавить в друзья');
-        FriendStatus := TextBetween(FriendDetails_temp, '<span class=''bbb''>', '</span>');
-
-        if TryStrToInt(FriendID, TempInteger) and (FriendID<>'') and (FriendFullName<>'') and (FriendSecID<>'') Then
-        Begin
-          FriendFN := FullNameToNameSurnameNick(FriendFullName);
-          FriendNick := FriendFullName; // FriendFN.Nick;
-          FriendFirstName := FriendFN.FirstName;
-          FriendLastName := FriendFN.LastName;
-
-          FillChar(psre, sizeof(psre), 0);
-          psre.psr.cbSize := sizeOf(psre);
-          psre.psr.nick := PChar(FriendNick);
-          psre.psr.firstName := PChar(FriendFirstName);
-          psre.psr.lastName := PChar(FriendLastName);
-          psre.psr.email := PChar('');
-          psre.id := FriendID;
-          psre.SecureID := FriendSecID;
-          if FriendStatus = 'Online' then
-            psre.Status := ID_STATUS_ONLINE
-          Else
-            psre.Status := ID_STATUS_OFFLINE;
-
-          // add contacts to search results
-          ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_DATA, THandle(searchID), lParam(@psre));
-        End;
-      End;
-    End;
-
-  End;
-  CoUninitialize();
-
-end;
-
-// =============================================================================
 // procedure to make our user online on the server
 // -----------------------------------------------------------------------------
 procedure vk_KeepOnline();
@@ -757,7 +656,7 @@ begin
   begin
     if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PAnsiChar(piShortName))) <> 0 Then
       if DBGetContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_ONLINE then
-        DBWriteContactSettingDWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE);
+        DBWriteContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE);
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
 	end;
 end;
@@ -774,43 +673,6 @@ begin
   Result := 0;
 end;
 
-// =============================================================================
-// function to add found contact to the list
-// -----------------------------------------------------------------------------
-function AddToList(wParam: wParam; lParam: lParam): Integer; cdecl;
-var psre: PPROTOSEARCHRESULT_VK;
-begin
-  psre := PPROTOSEARCHRESULT_VK(lParam); // it contains data of contact, user trying to add
-
-  // values below will be required for authorization request
-  psre_id := StrToInt(String(PChar(psre.id)));
-  psre_secureid := String(PChar(psre.SecureID));
-
-  Result := vk_AddFriend(StrToInt(psre.id), psre.psr.nick, psre.Status, 0);
-
-  // add the contact temporarily and invisibly, just to get user info or something
-  If wParam = PALF_TEMPORARY Then
-  Begin
-    DBWriteContactSettingByte(Result, 'CList', 'NotOnList', 1);
-		DBWriteContactSettingByte(Result, 'CList', 'Hidden', 1);
-  End;
-end;
-
-// =============================================================================
-// function allows to search contacts by name, surname and id
-// -----------------------------------------------------------------------------
-function SearchByName(wParam: wParam; lParam: lParam): Integer; cdecl;
-begin
-  searchId := 1;
-  sbn := PPROTOSEARCHBYNAME(lParam)^; // put lParam into separate global variable
-  FirstName_temp := sbn.pszFirstName;
-  LastName_temp := sbn.pszLastName;
-
-  // call separate thread to send the msg
-  ThrIDSearchContacts := TThreadSearchContacts.Create(False);
-
-  Result := searchId;
-end;
 
 // =============================================================================
 // procedure to start thread for regular data update
@@ -921,45 +783,12 @@ begin
 end;
 
 // =============================================================================
-// search contacts thread
-// -----------------------------------------------------------------------------
-procedure TThreadSearchContacts.Execute;
-var ThreadNameInfo: TThreadNameInfo;
-begin
- Netlib_Log(vk_hNetlibUser, PChar('(TThreadSearchContacts) Thread started...'));
-
- ThreadNameInfo.FType := $1000;
- ThreadNameInfo.FName := 'TThreadSearchContacts';
- ThreadNameInfo.FThreadID := $FFFFFFFF;
- ThreadNameInfo.FFlags := 0;
- try
-   RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
- except
- end;
-
-//  MessageBox(0, PChar(FirstName_temp), PChar(LastName_temp), MB_OK);
-
-  // search when online is possible only
-  if (vk_Status <> ID_STATUS_ONLINE) and (vk_Status <> ID_STATUS_INVISIBLE) Then
-    MessageBox(0, PChar(StringReplace(Translate(err_search_noconnection), '%s', piShortName, [rfReplaceAll])), Translate(err_search_title), MB_OK or MB_ICONERROR)
-  Else
-    // call function from vk_parse
-    vk_SearchFriends(FirstName_temp, LastName_temp, searchID);
-
-  // search is finished
-  ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SUCCESS, THandle(searchId), 0);
-
-  searchID := -1;
-
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadSearchContacts) ... thread finished'));
-end;
-
-// =============================================================================
 // update data thread
 // -----------------------------------------------------------------------------
 procedure TThreadDataUpdate.Execute;
 var
   ThreadNameInfo: TThreadNameInfo;
+  NewsContactID: Integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Thread started...'));
 
@@ -1019,6 +848,14 @@ begin
         // getting news, if required
         if DBGetContactSettingByte(0, piShortName, opt_NewsSupport, 1) = 1 then
         begin
+          // if we use separate contact for News, then make the contact online
+          if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
+          begin
+            NewsContactID := DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234);
+            NewsContactID := GetContactByID(NewsContactID);
+            if DBGetContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_ONLINE then
+              DBWriteContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_ONLINE);
+          end;
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_NewsSecs, 300)) / SecsPerDay then
           begin
               // write new value of last date & time of new message received
@@ -1030,6 +867,17 @@ begin
               DBWriteContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_ONLINE);
               end;}
               vk_GetNews();
+          end;
+        end
+        else  // if news are not supported
+        begin
+          // if we use separate contact for News, then make the contact offline
+          if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
+          begin
+            NewsContactID := DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234);
+            NewsContactID := GetContactByID(NewsContactID);
+            if DBGetContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_OFFLINE then
+              DBWriteContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_OFFLINE);
           end;
         end;
         if Terminated = True or // one more time...

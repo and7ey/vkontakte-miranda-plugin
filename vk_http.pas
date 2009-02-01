@@ -52,7 +52,7 @@ implementation
 
 uses
 
-  vk_core; // module with core functions
+  vk_core, StrUtils; // module with core functions
 
 // =============================================================================
 // function initiliaze connection with internet
@@ -162,6 +162,7 @@ begin
       // if the recieved code is 200 OK
       if (nlhrReply.resultCode = 200) then
       begin
+        ConnectionErrorsCount := 0;
         // save the retrieved data
         if UTF8Result Then
           Result := Utf8ToAnsi(nlhrReply.pData)
@@ -176,6 +177,7 @@ begin
       // workaround for url forwarding
       else if (nlhrReply.resultCode = 302) then // page moved
       begin
+        ConnectionErrorsCount := 0;
         // get the url for the new location and save it to szInfo
         // look for the reply header "Location"
         For i:=0 To nlhrReply.headersCount-1 Do
@@ -186,7 +188,11 @@ begin
             // if location url doesn't contain host name, we should add it
             szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
             if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
+            begin
+              if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                szHost := szHost + '/';
               szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
+            end
             Else
               szRedirUrl := nlhrReply.headers[i].szValue;
 
@@ -205,7 +211,12 @@ begin
       else
       begin
         // change status of the protocol to offline
-        vk_SetStatus(ID_STATUS_OFFLINE);
+        Inc(ConnectionErrorsCount);
+        if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
+        begin
+          ConnectionErrorsCount := 0;
+          vk_SetStatus(ID_STATUS_OFFLINE);
+        end;
         // store the error code
         Result:='Error occured! HTTP Error!';
       end
@@ -214,7 +225,12 @@ begin
     else
     begin
       // change status of the protocol to offline
-      vk_SetStatus(ID_STATUS_OFFLINE);
+      Inc(ConnectionErrorsCount);
+      if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
+      begin
+        ConnectionErrorsCount := 0;
+        vk_SetStatus(ID_STATUS_OFFLINE);
+      end;
       // store the error code
       Result:='NetLib error occurred!';
     end;

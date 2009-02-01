@@ -72,373 +72,537 @@ var
 // -----------------------------------------------------------------------------
 procedure vk_GetInfoMinimal(hContact: THandle);
 var HTML: String;
-    ContactFullName, ContactFirstName, ContactLastName: String;
-    ContactFN: TFriendName;
-    DOB: TDateTime;
-    PhoneMobile, PhoneHome, Education: String;
-    AvatarURL: String;
+   ContactFullName, ContactFirstName, ContactLastName: String;
+   ContactFN: TFriendName;
+   DOB: TDateTime;
+   PhoneMobile, PhoneHome, Education: String;
+   AvatarURL: String;
 
 begin
-  HTML := HTTP_NL_Get(Format(vk_url_pda_friend,[IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0))]));
+ HTML := HTTP_NL_Get(Format(vk_url_pda_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]));
 
-  ContactFullName := TextBetween(HTML,'<h3>', '</h3>');
-  ContactFullName := HTMLDecode(ContactFullName);
-  ContactFN := FullNameToNameSurnameNick(ContactFullName);
-  ContactFirstName := ContactFN.FirstName;
-  ContactLastName := ContactFN.LastName;
+ if Trim(HTML) <> '' then
+ begin
+   if Pos('Пользователь предпочел скрыть эту страницу в настройках приватности', HTML) > 0 then // page closed
+   begin
+     // nothing can be done
+   end
+   else
+   begin
+     ContactFullName := TextBetween(HTML,'<h3>', '</h3>');
+     ContactFullName := Trim(HTMLDecode(ContactFullName));
+     ContactFN := FullNameToNameSurnameNick(ContactFullName);
+     ContactFirstName := ContactFN.FirstName;
+     ContactLastName := ContactFN.LastName;
+     DBWriteContactSettingString(hContact, piShortName, 'FirstName', PChar(ContactFirstName));
+     DBWriteContactSettingString(hContact, piShortName, 'LastName', PChar(ContactLastName));
 
-  DOB := RusDateToDateTime(TextBetween(HTML,'День рождения: ', '<br/>'), true);
+     try
+       DOB := RusDateToDateTime(TextBetween(HTML, 'День рождения: ', '<br/>'), true);
+       DBWriteContactSettingByte(hContact, piShortName, 'BirthDay', StrToInt(FormatDateTime('dd', DOB)));
+       DBWriteContactSettingByte(hContact, piShortName, 'BirthMonth', StrToInt(FormatDateTime('mm', DOB)));
+       DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
+     except
+     end;
 
-  PhoneMobile := TextBetween(TextBetween(HTML,'Моб. тел.: ', '<br/>'),'>','<');
+     PhoneMobile := Trim(TextBetween(TextBetween(HTML, 'Моб. тел.: ', '<br/>'),'>','<'));
+     if PhoneMobile <> '' Then
+       DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone0', PChar(PhoneMobile));
 
-  PhoneHome := TextBetween(TextBetween(HTML,'Дом. тел.: ', '<br/>'),'>','<');
+     PhoneHome := Trim(TextBetween(TextBetween(HTML, 'Дом. тел.: ', '<br/>'),'>','<'));
+     if PhoneHome <> '' Then
+       DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone1', PChar(PhoneHome));
 
-  Education := TextBetween(HTML,'ВУЗ: ', '<br/>');
+     Education := Trim(TextBetween(HTML, 'ВУЗ: ', '<br/>'));
+     if Education <> '' Then
+     Begin
+       DBWriteContactSettingString(hContact, piShortName, 'Affiliation0', PChar('Вуз'));
+       DBWriteContactSettingString(hContact, piShortName, 'Affiliation0Text', PChar(Education));
+     End;
 
-  // if update of avatar is required
-  if DBGetContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, 0) = 1 then
-  begin
-    // <img class="pphoto" align="left" alt="фото" src="http://cs1425.vkontakte.ru/u1234567/c_44e12345.jpg"/>
-    AvatarURL := TextBetweenInc(HTML,'pphoto', '/>');
-    AvatarURL := TextBetween(AvatarURL,'src="', '"');
-    if Trim(AvatarURL)<>'' then
-      vk_AvatarGetAndSave(IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)), AvatarURL); // update avatar for a contact
-  end;
+     // if update of avatar is required
+     if DBGetContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, 0) = 1 then
+     begin
+       // <img class="pphoto" align="left" alt="фото" src="http://cs1425.vkontakte.ru/u1234567/c_44e12345.jpg"/>
+       AvatarURL := TextBetweenInc(HTML,'pphoto', '/>');
+       AvatarURL := TextBetween(AvatarURL,'src="', '"');
+       AvatarURL := Trim(AvatarURL);
+       if AvatarURL <> '' then
+         vk_AvatarGetAndSave(IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)), AvatarURL); // update avatar for a contact
+     end;
+   end;
+ end;
 
-  // write results into DB
-  DBWriteContactSettingString(hContact, piShortName, 'FirstName', PChar(ContactFirstName));
-  DBWriteContactSettingString(hContact, piShortName, 'LastName', PChar(ContactLastName));
-  if Trim(PhoneMobile) <> '' Then
-    DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone0', PChar(PhoneMobile));
-  if Trim(PhoneHome) <> '' Then
-    DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone1', PChar(PhoneHome));
-  DBWriteContactSettingByte(hContact, piShortName, 'BirthDay', StrToInt(FormatDateTime('dd', DOB)));
-  DBWriteContactSettingByte(hContact, piShortName, 'BirthMonth', StrToInt(FormatDateTime('mm', DOB)));
-  DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
-  if Trim(Education) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation0', PChar('Вуз'));
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation0Text', PChar(Education));
-  End;
-
-  // inform miranda that all data is received
-  ProtoBroadcastAck(piShortName,
-    hContact,
-    ACKTYPE_GETINFO,
-    ACKRESULT_SUCCESS,
-    1,
-    0);
+ // inform miranda that all data is received
+ ProtoBroadcastAck(piShortName,
+   hContact,
+   ACKTYPE_GETINFO,
+   ACKRESULT_SUCCESS,
+   1,
+   0);
 end;
-
 // =============================================================================
 // procedure to get full information about contact
 // -----------------------------------------------------------------------------
 procedure vk_GetInfoFull(hContact: THandle);
 var HTML: String;
-    StrTemp, BasicInfo, ContactInfo, EduInfo, CareerInfo, PlaceInfo: String;
-    ContactFN: TFriendName;
-    DOB: TDateTime;
-    BirthYear: Integer;
+   StrTemp, BasicInfo, ContactInfo, EduInfo, CareerInfo, PlaceInfo: String;
+   ContactFN: TFriendName;
+   DOB: TDateTime;
+   BirthYear: Integer;
 begin
-  HTML := HTTP_NL_Get(Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]));
+ HTML := HTTP_NL_Get(Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]));
 
-  // inform miranda that 1/4 data is received
-  ProtoBroadcastAck(piShortName,
-    hContact,
-    ACKTYPE_GETINFO,
-    ACKRESULT_SUCCESS,
-    4,    // <-- count of replies to be received
-    0);   // <-- current reply, starts from 0
+ if Trim(HTML) = '' then
+ begin
+   // inform miranda that data retrieving is finished
+   ProtoBroadcastAck(piShortName,
+       hContact,
+       ACKTYPE_GETINFO,
+       ACKRESULT_SUCCESS, // check this result
+       1,
+       0);
+   Exit;
+ end;
 
-  BasicInfo := TextBetween(HTML,'<div id="rightColumn">', 'div id="wall"');
+ if Pos('<title>В Контакте | Поиск людей</title>', HTML) > 0 then // page is closed
+ begin
+   BasicInfo := TextBetweenInc(HTML,'<div class="info"','</li>');
+   if Trim(BasicInfo) <> '' then
+   begin
+     // name
+     StrTemp := HTMLRemoveTags(Trim(TextBetween(BasicInfo, '<dt>Имя:', '<dt>')));
+     if StrTemp = '' Then
+        StrTemp := HTMLRemoveTags(Trim(TextBetween(BasicInfo, '<dt>Имя:', '</dd>')));
+     StrTemp := HTMLDecode(Trim(StrTemp));
+     ContactFN := FullNameToNameSurnameNick(StrTemp);
+     if Trim(ContactFN.FirstName) <> '' Then
+       DBWriteContactSettingString(hContact, piShortName, 'FirstName', PChar(ContactFN.FirstName));
+     if Trim(ContactFN.LastName) <> '' Then
+       DBWriteContactSettingString(hContact, piShortName, 'LastName', PChar(ContactFN.LastName));
 
-  // name
-  StrTemp := TextBetween(BasicInfo,'<div class="profileName">', '</div>');
-  StrTemp := TextBetween(StrTemp,'<h2>', '</h2>');
-  StrTemp := HTMLDecode(StrTemp);
-  ContactFN := FullNameToNameSurnameNick(StrTemp);
-  if Trim(ContactFN.FirstName) <> '' Then
-    DBWriteContactSettingString(hContact, piShortName, 'FirstName', PChar(ContactFN.FirstName));
-  if Trim(ContactFN.LastName) <> '' Then
-    DBWriteContactSettingString(hContact, piShortName, 'LastName', PChar(ContactFN.LastName));
+     // higher education
+     StrTemp := TextBetween(BasicInfo, '<dt>Выпуск:', '<dt>');
+     StrTemp := Trim(HTMLRemoveTags(HTMLDecode(StrTemp)));
+     if StrTemp <> '' Then
+     Begin
+       DBWriteContactSettingString(hContact, piShortName, 'Affiliation0', PChar('Вуз'));
+       DBWriteContactSettingString(hContact, piShortName, 'Affiliation0Text', PChar(StrTemp));
+     End;
 
-  // gender
-  StrTemp := TextBetween(BasicInfo,'<td class="label">Пол:</td>', '</td>');
-  StrTemp := TextBetween(StrTemp,'''>', '</a>');
-  if StrTemp = 'мужской' then
-    DBWriteContactSettingByte(hContact, piShortName, 'Gender', 77);
-  if StrTemp = 'женский' then
-    DBWriteContactSettingByte(hContact, piShortName, 'Gender', 70);
+     if Pos('&nbsp', BasicInfo) > 0 then
+        StrTemp := TextBetween(BasicInfo, '<dt>Факультет:', '&nbsp')
+     else
+        StrTemp := TextBetween(BasicInfo, '<dt>Факультет:', '</dd>');
+     StrTemp := Trim(HTMLRemoveTags(HTMLDecode(StrTemp)));
+     if StrTemp <> '' Then
+     Begin
+       DBWriteContactSettingString(hContact, piShortName, 'Affiliation1', PChar('Факультет'));
+       DBWriteContactSettingString(hContact, piShortName, 'Affiliation1Text', PChar(StrTemp));
+     End;
+   end;
+   // inform miranda that data retrieving is finished
+   ProtoBroadcastAck(piShortName,
+       hContact,
+       ACKTYPE_GETINFO,
+       ACKRESULT_SUCCESS, // check this result
+       1,
+       0);
+ end
+ else // page is opened
+ begin
+   // inform miranda that 1/4 data is received
+   ProtoBroadcastAck(piShortName,
+     hContact,
+     ACKTYPE_GETINFO,
+     ACKRESULT_SUCCESS,
+     4,    // <-- count of replies to be received
+     0);   // <-- current reply, starts from 0
 
-  // marital status
-  {StrTemp := TextBetween(BasicInfo,'<td class="label">Семейное положение:</td>', '</td>');
-  StrTemp := TextBetween(StrTemp,'''>', '</a>');}
+   BasicInfo := TextBetween(HTML,'<div id="rightColumn">', 'div id="wall"');
 
-  // birthday
-  StrTemp := TextBetween(BasicInfo,'<td class="label">День рождения:</td>', '</td>');
-  StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
-  StrTemp := HTMLRemoveTags(StrTemp);
-  try
-    if Trim(StrTemp) <> '' then
-    begin
-      if Not TryStrToInt(RightStr(StrTemp, 4), BirthYear) then
-        StrTemp := StrTemp + ' 1900';
-      if Length(StrTemp) = 4 then // only year is given
-        DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(StrTemp))
-      else
-      begin
-        DOB := RusDateToDateTime(StrTemp, true);
-        DBWriteContactSettingByte(hContact, piShortName, 'BirthDay', StrToInt(FormatDateTime('dd', DOB)));
-        DBWriteContactSettingByte(hContact, piShortName, 'BirthMonth', StrToInt(FormatDateTime('mm', DOB)));
-        if StrToInt(FormatDateTime('yyyy', DOB)) <> 1900 then
-          DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
-      end;
-    end;
-  except
-  end;
-  // origin city
-  StrTemp := TextBetween(BasicInfo,'<td class="label">Родной город:</td>', '</td>');
-  StrTemp := TextBetween(StrTemp,'''>', '</a>');
-  if Trim(StrTemp) <> '' Then
-    DBWriteContactSettingString(hContact, piShortName, 'OriginCity', PChar(StrTemp));
+   if Trim(BasicInfo) <> '' then
+   begin
 
-  // political
-  {StrTemp := TextBetween(BasicInfo,'<td class="label">Полит. взгляды:</td>', '</td>');
-  StrTemp := TextBetween(StrTemp,'''>', '</a>');}
+     // name
+     StrTemp := TextBetween(BasicInfo,'<div class="profileName">', '</div>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := TextBetween(StrTemp,'<h2>', '</h2>');
+       StrTemp := HTMLDecode(StrTemp);
+       StrTemp := Trim(StrTemp);
+       ContactFN := FullNameToNameSurnameNick(StrTemp);
+       if Trim(ContactFN.FirstName) <> '' Then
+         DBWriteContactSettingString(hContact, piShortName, 'FirstName', PChar(ContactFN.FirstName));
+       if Trim(ContactFN.LastName) <> '' Then
+         DBWriteContactSettingString(hContact, piShortName, 'LastName', PChar(ContactFN.LastName));
+     end;
 
-  // religion
-  {StrTemp := TextBetween(BasicInfo,'<td class="label">Религ. взгляды:</td>', '</td>');
-  StrTemp := TextBetween(StrTemp,'''>', '</a>');}
+     // gender
+     StrTemp := TextBetween(BasicInfo,'<td class="label">Пол:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := TextBetween(StrTemp,'''>', '</a>');
+       StrTemp := Trim(StrTemp);
+       if StrTemp = 'мужской' then
+         DBWriteContactSettingByte(hContact, piShortName, 'Gender', 77);
+       if StrTemp = 'женский' then
+         DBWriteContactSettingByte(hContact, piShortName, 'Gender', 70);
+     end;
 
-  // inform miranda that 2/4 data is received
-  ProtoBroadcastAck(piShortName,
-    hContact,
-    ACKTYPE_GETINFO,
-    ACKRESULT_SUCCESS,
-    4,
-    1);
+     // marital status
+     {StrTemp := TextBetween(BasicInfo,'<td class="label">Семейное положение:</td>', '</td>');
+     StrTemp := TextBetween(StrTemp,'''>', '</a>');}
 
-  ContactInfo := TextBetween(HTML,'<h4>Контактная информация', 'div id="wall"');
+     // birthday
+     StrTemp := TextBetween(BasicInfo,'<td class="label">День рождения:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
+       StrTemp := HTMLRemoveTags(StrTemp);
+       try
+         if Trim(StrTemp) <> '' then
+         begin
+           if Not TryStrToInt(RightStr(StrTemp, 4), BirthYear) then
+             StrTemp := StrTemp + ' 1900';
+           if Length(StrTemp) = 4 then // only year is given
+             DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(StrTemp))
+           else
+           begin
+             DOB := RusDateToDateTime(StrTemp, true);
+             DBWriteContactSettingByte(hContact, piShortName, 'BirthDay', StrToInt(FormatDateTime('dd', DOB)));
+             DBWriteContactSettingByte(hContact, piShortName, 'BirthMonth', StrToInt(FormatDateTime('mm', DOB)));
+             if StrToInt(FormatDateTime('yyyy', DOB)) <> 1900 then
+               DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
+           end;
+         end;
+       except
+       end;
+     end;
 
-  // mobile phone
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Моб. телефон:</td>', '</td>');
-  StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
-  if Trim(StrTemp) <> '' Then
-    DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone0', PChar(StrTemp));
+     // origin city
+     StrTemp := TextBetween(BasicInfo,'<td class="label">Родной город:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := TextBetween(StrTemp,'''>', '</a>');
+       StrTemp := Trim(StrTemp);
+       if StrTemp <> '' Then
+         DBWriteContactSettingString(hContact, piShortName, 'OriginCity', PChar(StrTemp));
+     end;
 
-  // home phone
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Дом. телефон:</td>', '</td>');
-  StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
-  if Trim(StrTemp) <> '' Then
-    DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone1', PChar(StrTemp));
+     // political
+     {StrTemp := TextBetween(BasicInfo,'<td class="label">Полит. взгляды:</td>', '</td>');
+     StrTemp := TextBetween(StrTemp,'''>', '</a>');}
 
-  // webpage
-  // depending on the setting we put here either contact's page (read from
-  // contact's page or just vkontakte's page url
-  if DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0) = 0 then
-  begin
-    StrTemp := TextBetween(ContactInfo,'<td class="label">Веб-сайт:</td>', '</td>');
-    StrTemp := TextBetween(StrTemp,'''>', '</a>');
-  end
-  else
-    StrTemp := Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]);
-  if Trim(StrTemp) <> '' Then
-    DBWriteContactSettingString(hContact, piShortName, 'Homepage', PChar(StrTemp));
+     // religion
+     {StrTemp := TextBetween(BasicInfo,'<td class="label">Религ. взгляды:</td>', '</td>');
+     StrTemp := TextBetween(StrTemp,'''>', '</a>');}
 
-  // business
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Деятельность:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Interest0Cat', PChar('Деятельность'));
-    DBWriteContactSettingString(hContact, piShortName, 'Interest0Text', PChar(StrTemp));
-  End;
+   end;
 
-  // hobby
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Интересы:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Interest1Cat', PChar('Интересы'));
-    DBWriteContactSettingString(hContact, piShortName, 'Interest1Text', PChar(StrTemp));
-  End;
+   // inform miranda that 2/4 data is received
+   ProtoBroadcastAck(piShortName,
+     hContact,
+     ACKTYPE_GETINFO,
+     ACKRESULT_SUCCESS,
+     4,
+     1);
 
-  // music
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Любимая музыка:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Interest2Cat', PChar('Любимая музыка'));
-    DBWriteContactSettingString(hContact, piShortName, 'Interest2Text', PChar(StrTemp));
-  End;
+   ContactInfo := TextBetween(HTML,'<h4>Контактная информация', 'div id="wall"');
 
-  // movies
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые фильмы:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Interest3Cat', PChar('Любимые фильмы'));
-    DBWriteContactSettingString(hContact, piShortName, 'Interest3Text', PChar(StrTemp));
-  End;
+   if Trim(ContactInfo) <> '' then
+   begin
+     // mobile phone
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Моб. телефон:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
+       if (Trim(StrTemp) <> '') and (Pos('Информация скрыта', StrTemp)=0) Then
+         DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone0', PChar(StrTemp));
+     end;
 
-  // tv-show
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые телешоу:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Interest4Cat', PChar('Любимые телешоу'));
-    DBWriteContactSettingString(hContact, piShortName, 'Interest4Text', PChar(StrTemp));
-  End;
+     // home phone
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Дом. телефон:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
+       if (Trim(StrTemp) <> '') and (Pos('Информация скрыта', StrTemp)=0) Then
+         DBWriteContactSettingString(hContact, 'UserInfo', 'MyPhone1', PChar(StrTemp));
+     end;
 
-  // books
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые книги:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Interest5Cat', PChar('Любимые книги'));
-    DBWriteContactSettingString(hContact, piShortName, 'Interest5Text', PChar(StrTemp));
-  End;
+     // webpage
+     // depending on the setting we put here either contact's page (read from
+     // contact's page or just vkontakte's page url
+     if DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0) = 0 then
+     begin
+       StrTemp := TextBetween(ContactInfo,'<td class="label">Веб-сайт:</td>', '</td>');
+       StrTemp := Trim(TextBetween(StrTemp,'''>', '</a>'));
+     end
+     else
+       StrTemp := Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]);
+     if Trim(StrTemp) <> '' Then
+       DBWriteContactSettingString(hContact, piShortName, 'Homepage', PChar(StrTemp));
 
-  // games
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые игры:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Interest6Cat', PChar('Любимые игры'));
-    DBWriteContactSettingString(hContact, piShortName, 'Interest6Text', PChar(StrTemp));
-  End;
+     // business
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Деятельность:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Interest0Cat', PChar('Деятельность'));
+         DBWriteContactSettingString(hContact, piShortName, 'Interest0Text', PChar(StrTemp));
+       End;
+     end;
 
-  // quotes
-  StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые цитаты:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Interest7Cat', PChar('Любимые цитаты'));
-    DBWriteContactSettingString(hContact, piShortName, 'Interest7Text', PChar(StrTemp));
-  End;
+     // hobby
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Интересы:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Interest1Cat', PChar('Интересы'));
+         DBWriteContactSettingString(hContact, piShortName, 'Interest1Text', PChar(StrTemp));
+       End;
+     end;
 
+     // music
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Любимая музыка:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Interest2Cat', PChar('Любимая музыка'));
+         DBWriteContactSettingString(hContact, piShortName, 'Interest2Text', PChar(StrTemp));
+       End;
+     end;
 
-  // ICQ
-  StrTemp := TextBetween(ContactInfo,'<td class="label">ICQ:</td>', '</td>');
-  StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
-  StrTemp := HTMLRemoveTags(StrTemp);
-  StrTemp := 'ICQ ' + StrTemp;
-  if Trim(StrTemp) <> '' Then
-    DBWriteContactSettingString(hContact, piShortName, 'About', PChar(StrTemp));
+     // movies
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые фильмы:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Interest3Cat', PChar('Любимые фильмы'));
+         DBWriteContactSettingString(hContact, piShortName, 'Interest3Text', PChar(StrTemp));
+       End;
+     end;
 
-  // about
-  StrTemp := TextBetween(ContactInfo,'<td class="label">О себе:</td>', '</td>');
-  StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
-  StrTemp := StringReplace(StrTemp, '<br>', Chr(13) + Chr(10), [rfReplaceAll]);
-  StrTemp := HTMLDecode(StrTemp);
-  StrTemp := DBReadString(hContact, piShortName, 'About', '') + #13#10 + StrTemp;
-  StrTemp := Trim(StrTemp);
-  DBWriteContactSettingString(hContact, piShortName, 'About', PChar(StrTemp));
+     // tv-show
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые телешоу:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Interest4Cat', PChar('Любимые телешоу'));
+         DBWriteContactSettingString(hContact, piShortName, 'Interest4Text', PChar(StrTemp));
+       End;
+     end;
 
-  // inform miranda that 3/4 data is received
-  ProtoBroadcastAck(piShortName,
-    hContact,
-    ACKTYPE_GETINFO,
-    ACKRESULT_SUCCESS,
-    4,
-    2);
+     // books
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые книги:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Interest5Cat', PChar('Любимые книги'));
+         DBWriteContactSettingString(hContact, piShortName, 'Interest5Text', PChar(StrTemp));
+       End;
+     end;
 
-  EduInfo := TextBetween(HTML, '<h2>Образование</h2>', 'div id="wall"');
+     // games
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые игры:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Interest6Cat', PChar('Любимые игры'));
+         DBWriteContactSettingString(hContact, piShortName, 'Interest6Text', PChar(StrTemp));
+       End;
+     end;
 
-  // higher education
-  StrTemp := TextBetween(EduInfo,'<td class="label">Вуз:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation0', PChar('Вуз'));
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation0Text', PChar(StrTemp));
-  End;
+     // quotes
+     StrTemp := TextBetween(ContactInfo,'<td class="label">Любимые цитаты:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Interest7Cat', PChar('Любимые цитаты'));
+         DBWriteContactSettingString(hContact, piShortName, 'Interest7Text', PChar(StrTemp));
+       End;
+     end;
 
-  StrTemp := TextBetween(EduInfo,'<td class="label">Факультет:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  StrTemp := Trim(StrTemp);
-  if StrTemp <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation1', PChar('Факультет'));
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation1Text', PChar(StrTemp));
-  End;
+     // ICQ
+     StrTemp := TextBetween(ContactInfo,'<td class="label">ICQ:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
+       StrTemp := Trim(HTMLRemoveTags(StrTemp));
+       if Trim(StrTemp) <> '' Then
+       begin
+         StrTemp := 'ICQ ' + StrTemp;
+         DBWriteContactSettingString(hContact, piShortName, 'About', PChar(StrTemp));
+       end;
+     end;
 
-  StrTemp := TextBetween(EduInfo,'<td class="label">Кафедра:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation2', PChar('Кафедра'));
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation2Text', PChar(StrTemp));
-  End;
+     // about
+     StrTemp := TextBetween(ContactInfo,'<td class="label">О себе:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
+       StrTemp := StringReplace(StrTemp, '<br>', Chr(13) + Chr(10), [rfReplaceAll]);
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' then
+       begin
+         StrTemp := DBReadString(hContact, piShortName, 'About', '') + #13#10 + StrTemp;
+         DBWriteContactSettingString(hContact, piShortName, 'About', PChar(StrTemp));
+       end;
+     end;
+   end;
 
-  // college
-  StrTemp := TextBetween(EduInfo,'<td class="label">Колледж:</td>', '</td>');
-  StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
-  StrTemp := HTMLRemoveTags(StrTemp);
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation3', PChar('Колледж'));
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation3Text', PChar(StrTemp));
-  End;
+   // inform miranda that 3/4 data is received
+   ProtoBroadcastAck(piShortName,
+     hContact,
+     ACKTYPE_GETINFO,
+     ACKRESULT_SUCCESS,
+     4,
+     2);
 
-  // school
-  StrTemp := TextBetween(EduInfo,'<td class="label">Школа:</td>', '</td>');
-  StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
-  StrTemp := HTMLRemoveTags(StrTemp);
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-  Begin
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation4', PChar('Школа'));
-    DBWriteContactSettingString(hContact, piShortName, 'Affiliation4Text', PChar(StrTemp));
-  End;
+   EduInfo := TextBetween(HTML, '<h2>Образование</h2>', 'div id="wall"');
 
-  PlaceInfo := TextBetween(HTML,'div id="places"', 'div id="wall"');
+   if Trim(EduInfo) <> '' then
+   begin
+     // higher education
+     StrTemp := TextBetween(EduInfo,'<td class="label">Вуз:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation0', PChar('Вуз'));
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation0Text', PChar(StrTemp));
+       End;
+     end;
 
-  // address
-  StrTemp := TextBetween(PlaceInfo,'<td class="label">Адрес:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-    DBWriteContactSettingString(hContact, piShortName, 'Street', PChar(StrTemp));
+     StrTemp := TextBetween(EduInfo,'<td class="label">Факультет:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation1', PChar('Факультет'));
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation1Text', PChar(StrTemp));
+       End;
+     end;
 
-  CareerInfo := TextBetween(HTML,'div id="career"', 'div id="wall"');
+     StrTemp := TextBetween(EduInfo,'<td class="label">Кафедра:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation2', PChar('Кафедра'));
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation2Text', PChar(StrTemp));
+       End;
+     end;
 
-  // company
-  StrTemp := TextBetween(CareerInfo,'<td class="label">Место работы:</td>', '</td>');
-  StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
-  StrTemp := HTMLDecode(StrTemp);
-  if Trim(StrTemp) <> '' Then
-    DBWriteContactSettingString(hContact, piShortName, 'Company', PChar(StrTemp));
+     // college
+     StrTemp := TextBetween(EduInfo,'<td class="label">Колледж:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
+       StrTemp := HTMLRemoveTags(StrTemp);
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation3', PChar('Колледж'));
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation3Text', PChar(StrTemp));
+       End;
+     end;
 
-  // if update of avatar is required
-  if DBGetContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, 0) = 1 then
-  begin
-    StrTemp := TextBetween(HTML,'div id="leftColumn"', '</div>');
-    StrTemp := TextBetween(StrTemp,'SRC=', ' ');
-    if Trim(StrTemp)<>'' then
-      vk_AvatarGetAndSave(IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)), StrTemp); // update avatar for a contact
-  end;
+     // school
+     StrTemp := TextBetween(EduInfo,'<td class="label">Школа:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>'));
+       StrTemp := HTMLRemoveTags(StrTemp);
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+       Begin
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation4', PChar('Школа'));
+         DBWriteContactSettingString(hContact, piShortName, 'Affiliation4Text', PChar(StrTemp));
+       End;
+     end;
+   end;
 
+   PlaceInfo := TextBetween(HTML,'div id="places"', 'div id="wall"');
 
-  // inform miranda that 4/4 (all!) data is received
-  ProtoBroadcastAck(piShortName,
-    hContact,
-    ACKTYPE_GETINFO,
-    ACKRESULT_SUCCESS,
-    4,
-    3);
+   if Trim(PlaceInfo) <> '' then
+   begin
+     // address
+     StrTemp := TextBetween(PlaceInfo,'<td class="label">Адрес:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+         DBWriteContactSettingString(hContact, piShortName, 'Street', PChar(StrTemp));
+     end;
+   end;
+
+   CareerInfo := TextBetween(HTML,'div id="career"', 'div id="wall"');
+
+   if Trim(CareerInfo) <> '' then
+   begin
+     // company
+     StrTemp := TextBetween(CareerInfo,'<td class="label">Место работы:</td>', '</td>');
+     if StrTemp <> '' then
+     begin
+       StrTemp := HTMLRemoveTags(Trim(TextBetween(StrTemp,'<div class="dataWrap">', '</div>')));
+       StrTemp := Trim(HTMLDecode(StrTemp));
+       if StrTemp <> '' Then
+         DBWriteContactSettingString(hContact, piShortName, 'Company', PChar(StrTemp));
+     end;
+   end;
+
+   // if update of avatar is required
+   if DBGetContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, 0) = 1 then
+   begin
+     StrTemp := TextBetween(HTML,'div id="leftColumn"', '</div>');
+     StrTemp := TextBetween(StrTemp,'SRC=', ' ');
+     if Trim(StrTemp)<>'' then
+       try
+         vk_AvatarGetAndSave(IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)), StrTemp); // update avatar for a contact
+       except
+       end;
+   end;
+
+   // inform miranda that 4/4 (all!) data is received
+   ProtoBroadcastAck(piShortName,
+     hContact,
+     ACKTYPE_GETINFO,
+     ACKRESULT_SUCCESS,
+     4,
+     3);
+ end;
 end;
 
 // =============================================================================

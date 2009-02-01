@@ -1,9 +1,13 @@
+@echo off
 rem http://www.rsdn.ru/article/winshell/batanyca.xml
-rem Переходим в текущую папку
+echo Переходим в текущую папку %~dp0
 cd %~dp0
-rem Компилируем файл ресурсов
+echo Компилируем файл ресурсов:
 brcc32.exe -32 dlgopt.rc
-rem Перемещаем результат в папку с проектом
+if %ERRORLEVEL% == 0 (
+echo Перемещаем результат в папку с проектом:
 move dlgopt.RES ..\..\dlgopt.RES
+)
+echo ---------------------------------------------
 pause
 
