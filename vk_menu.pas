@@ -44,6 +44,7 @@ uses
 
   vk_global, // module with global variables and constant used
   vk_common, // module with common functions
+  vk_info, // module to get contact's info
   htmlparse, // module to simplify html parsing
 
   ShellAPI,
@@ -57,7 +58,11 @@ type
     URL: String;
     Icon: String;
     Position: Integer;
+    Proc: TMIRANDASERVICEPARAM;
   end;
+
+function MenuContactPages(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
+function MenuMainUpdateDetailsAllUsers(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
 
 const
   // list of contact menu items
@@ -73,15 +78,16 @@ const
     );
 
   // list of main menu items
-  MenuMainItems: Array [1..8] of TMenuItem = (
-    (Name:'My &main page VKontakte...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:000000),
-    (Name:'My &photos VKontakte...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:100000),
-    (Name:'My &friends VKontakte...'; URL:vk_url_friends; Icon:'ICON_FRIENDS'; Position:100001),
-    (Name:'My &wall VKontakte...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:100002),
-    (Name:'My &groups VKontakte...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:100003),
-    (Name:'My &audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:100004),
-    (Name:'My &notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:100005),
-    (Name:'My &questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:100006)
+  MenuMainItems: Array [1..9] of TMenuItem = (
+    (Name:'My &main page VKontakte...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:000000; Proc: MenuContactPages),
+    (Name:'My &photos VKontakte...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:100000; Proc: MenuContactPages),
+    (Name:'My &friends VKontakte...'; URL:vk_url_friends; Icon:'ICON_FRIENDS'; Position:100001; Proc: MenuContactPages),
+    (Name:'My &wall VKontakte...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:100002; Proc: MenuContactPages),
+    (Name:'My &groups VKontakte...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:100003; Proc: MenuContactPages),
+    (Name:'My &audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:100004; Proc: MenuContactPages),
+    (Name:'My &notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:100005; Proc: MenuContactPages),
+    (Name:'My &questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:100006; Proc: MenuContactPages),
+    (Name:'&Update Details for all users'; URL:''; Icon:'ICON_INFO'; Position:200000; Proc: MenuMainUpdateDetailsAllUsers)
     );
 
 var
@@ -90,6 +96,30 @@ var
 
   vk_hMenuContactPages: Array [1..8] of THandle;
   vk_hMenuContactPagesSF: Array [1..8] of THandle;
+
+
+
+// =============================================================================
+// function to react on the plugin's main menu item to update details of all
+// users
+// -----------------------------------------------------------------------------
+function MenuMainUpdateDetailsAllUsers(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl;
+var hContact: THandle;
+    res: LongWord;
+begin
+  Netlib_Log(vk_hNetlibUser, PChar('(MenuMainUpdateDetailsAllUsers) Updating of details for all contacts started...'));
+  hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
+	while hContact <> 0 do
+  begin
+    if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, windows.lParam(PAnsiChar(piShortName))) <> 0 Then
+    begin
+      CloseHandle(BeginThread(nil, 0, @GetInfoProc, Pointer(hContact), 0, res));
+    end;
+    hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
+	end;
+  Netlib_Log(vk_hNetlibUser, PChar('(MenuMainUpdateDetailsAllUsers) ... updating of details for all contacts finished'));
+  Result := 0;
+end;
 
 // =============================================================================
 // function to react on the plugin's contact menu items to open contact's pages,
@@ -158,7 +188,8 @@ begin
     else
       mi.hIcon := 0;
     srvFce := PChar(Format('%s/MenuMain%d', [piShortName, i]));
-    vk_hMenuMainSF[i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuContactPages, i);
+    // vk_hMenuMainSF[i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuContactPages, i);
+    vk_hMenuMainSF[i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuMainItems[i].Proc, i);
     mi.pszService := srvFce;
     // WARNING: do not use Translate(TS) for p(t)szName or p(t)szPopupName as they
     // are translated by the core, which may lead to double translation.
