@@ -307,6 +307,10 @@ begin
 
   AvatarsInit();
 
+  // temp code - to be removed in the next version
+  if DBReadString(0, piShortName, 'user/defaultgroup', nil) <> nil then
+    DBWriteContactSettingString (0, piShortName, opt_UserDefaultGroup, PChar(DBReadString(0, piShortName, 'user/defaultgroup', nil)));
+
   Result:=0;
 end;
 

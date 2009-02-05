@@ -33,8 +33,12 @@ unit vk_info;
 
 interface
 
+uses
+  Windows;
+
   procedure InfoInit();
   procedure InfoDestroy();
+  function GetInfoProc(hContact: lParam): LongWord;
 
 implementation
 
@@ -50,22 +54,11 @@ uses
   vk_core, // module with core functions
 
   StrUtils,
-  Windows,
   SysUtils,
   Classes;
 
-type
-  TThreadGetInfo = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
-
 var
   vk_hGetInfo: THandle;
-
-  hContact_getinfo: THandle;
 
 // =============================================================================
 // procedure to get short information about contact
@@ -609,11 +602,11 @@ end;
 // function to react on miranda's request to get details about contact
 // -----------------------------------------------------------------------------
 function GetInfo(wParam: wParam; lParam: lParam): Integer; cdecl;
-var ccs_getinfo: PCCSDATA;
+var res: LongWord;
+    hContact: THandle;
 begin
-  ccs_getinfo := PCCSDATA(lParam);
-  hContact_getinfo := ccs_getinfo.hContact;
-  TThreadGetInfo.Create(False);
+  hContact := PCCSDATA(lParam).hContact;
+  CloseHandle(BeginThread(nil, 0, @GetInfoProc, Pointer(hContact), 0, res));
 
   Result := 0;
 end;
@@ -638,20 +631,9 @@ end;
 // =============================================================================
 // get info thread
 // -----------------------------------------------------------------------------
-procedure TThreadGetInfo.Execute;
-var ThreadNameInfo: TThreadNameInfo;
+function GetInfoProc(hContact: lParam): LongWord;
 begin
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadGetInfo) Thread started...'));
-
-  ThreadNameInfo.FType := $1000;
-  ThreadNameInfo.FName := 'ThreadNameInfo';
-  ThreadNameInfo.FThreadID := $FFFFFFFF;
-  ThreadNameInfo.FFlags := 0;
-  try
-    RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
-  except
-  end;
-
+  Netlib_Log(vk_hNetlibUser, PChar('(GetInfoProc) Thread started...'));
 
   if (vk_Status = ID_STATUS_INVISIBLE) Then
     if MessageBox(0, PChar(qst_read_info), Translate(piShortName), MB_YESNO + MB_ICONQUESTION) = IDYES then
@@ -660,19 +642,21 @@ begin
   if (vk_Status = ID_STATUS_ONLINE) Then
   begin
     if DBGetContactSettingByte(0, piShortName, opt_UserGetMinInfo, 1) = 1 then
-      vk_GetInfoMinimal(hContact_getinfo)
+      vk_GetInfoMinimal(hContact)
     else
-      vk_GetInfoFull(hContact_getinfo);
+      vk_GetInfoFull(hContact);
   end
   else
   ProtoBroadcastAck(piShortName,
-    hContact_getinfo,
+    hContact,
     ACKTYPE_GETINFO,
     ACKRESULT_SUCCESS,
     1,
     0);
 
- Netlib_Log(vk_hNetlibUser, PChar('(TThreadGetInfo) ... thread finished'));
+  Result := 0;
+
+  Netlib_Log(vk_hNetlibUser, PChar('(GetInfoProc) ... thread finished'));
 end;
 
 begin

@@ -3,7 +3,7 @@
 ; Locale: 0419
 ; Authors: LA
 ; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.1.7.0
+; ** VKontakte Protocol 0.1.7.1
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -310,3 +310,5 @@
 Факультет
 [Tags]
 Отметки
+[&Update Details for all users]
+&Обновить данные всех контактов
