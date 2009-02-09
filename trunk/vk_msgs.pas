@@ -293,7 +293,10 @@ begin
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', getting details'));
             HTML := HTTP_NL_Get(MsgUrl);
             // date of message
-            MsgDate := RusDateToDateTime(TextBetween(HTML, '<span class="label">Дата:</span> ', '<br/>'), false);
+            if DBGetContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, 0) = 0 then
+              MsgDate := RusDateToDateTime(TextBetween(HTML, '<span class="label">Дата:</span> ', '<br/>'), false)
+            else
+              MsgDate := Now; // use local time, if requested in the settings
             // from
             If Not TryStrToInt(TextBetween(HTML, 'name="to_id" value="', '"/>'), MsgSender) Then
              Exit;

@@ -320,3 +320,5 @@
 Запросить авторизацию
 [Enter an authorization request]
 Текст запроса авторизации
+[Use local time for incoming messages]
+Использовать локальное время для входящих сообшений

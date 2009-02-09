@@ -278,6 +278,9 @@ begin
         val := DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0);
         CheckDlgButton(dialog, VK_OPT_ADDLSTATUS_FOR_OFFLINE, val);
 
+        val := DBGetContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, 0);
+        CheckDlgButton(dialog, VK_OPT_LOCALTIME_FOR_INC_MSGS, val);
+
         // send Changed message - make sure we can save the dialog
         SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
 
@@ -302,6 +305,8 @@ begin
             DBWriteContactSettingByte (0, piShortName, opt_UserVKontakteURL, Byte(IsDlgButtonChecked(dialog, VK_OPT_VKONTAKTE_URL)));
 
             DBWriteContactSettingByte (0, piShortName, opt_UserAddlStatusForOffline, Byte(IsDlgButtonChecked(dialog, VK_OPT_ADDLSTATUS_FOR_OFFLINE)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_UserUseLocalTimeForIncomingMessages, Byte(IsDlgButtonChecked(dialog, VK_OPT_LOCALTIME_FOR_INC_MSGS)));
 
             Result:=True;
           end;
