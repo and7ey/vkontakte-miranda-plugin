@@ -72,3 +72,8 @@ const
   VK_ADVSRCH_ED_STATUS = 4015;
   VK_ADVSRCH_ONLINEONLY = 4016;
   
+  // Authorization request dialog elements IDs
+  VK_AUTH_TEXT = 5001;
+  VK_AUTH_OK = 5002;
+  VK_AUTH_CANCEL = 5003;
+  

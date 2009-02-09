@@ -48,6 +48,7 @@ uses
   vk_global, // module with global variables and constant used
   vk_common, // module with common functions
   vk_http, // module to connect with the site
+  vk_menu, // module to work with menus
 
   htmlparse, // module to simplify html parsing
 
@@ -146,7 +147,7 @@ begin
 
     // update status for online contacts only?
     if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
-      if DBGetContactSettingWord(TempFriend, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_OFFLINE then
+        if DBGetContactSettingWord(TempFriend, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_OFFLINE then
         XStatusUpdateTemp := False;
 
      While Pos('a href=''id', HTML)<>0 Do
@@ -368,7 +369,7 @@ end;
 function MenuContactAdditionalStatusRead(wParam: wParam; lParam: lParam): Integer; cdecl;
 var MsgCaption: String;
 begin
-  MsgCaption := String(Translate('Дополнительный статус')) + ', ' + DBReadString(wParam, piShortName, 'XStatusTime', '00:00');
+  MsgCaption := String(Translate('Additional status')) + ', ' + DBReadString(wParam, piShortName, 'XStatusTime', '00:00');
   MessageBox(0,
              DBReadString(wParam, piShortName, 'XStatusMsg', ''),
              PChar(MsgCaption),
@@ -526,7 +527,7 @@ begin
       if wParam<>0 then
         PPChar(wParam)^ := PChar('XStatusName');
       if lParam<>0 then
-        PPChar(lParam)^ := PChar('XStatusName');
+        PPChar(lParam)^ := PChar('XStatusMsg');
       Result := xStatuses[bXStatus].StatusID;
     end;
   End;
@@ -579,14 +580,31 @@ end;
 // -----------------------------------------------------------------------------
 function MenuContactPrebuild(wParam: wParam; lParam: lParam): Integer; cdecl;
 var cmi: TCListMenuItem;
+    flags: DWord;
 begin
+  // Read Additional Status menu
   FillChar(cmi, sizeof(cmi), 0);
   cmi.cbSize := sizeof(cmi);
-  if DBReadString(wParam, piShortName, 'XStatusMsg')<>'' then
-    cmi.flags := CMIM_FLAGS + CMIF_NOTOFFLINE
+  // display addl. status for online contacts only?
+  if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
+     flags := CMIM_FLAGS + CMIF_NOTOFFLINE // not show for offline
   else
-    cmi.flags := CMIM_FLAGS + CMIF_NOTOFFLINE + CMIF_HIDDEN;
+     flags := CMIM_FLAGS; // show for offline
+  if DBReadString(wParam, piShortName, 'XStatusMsg')<>'' then
+    cmi.flags := flags
+  else
+    cmi.flags := flags + CMIF_HIDDEN; // + CMIF_NOTOFFLINE;
   pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuContactStatusAdditionalRead, Windows.lparam(@cmi));
+
+  // Add permanently to contact list menu
+  FillChar(cmi, sizeof(cmi), 0);
+  cmi.cbSize := sizeof(cmi);
+  // display menu item only for non-Friends, and when plugin is online/invisible
+  if (DBGetContactSettingByte(wParam, piShortName, 'Friend', 1) = 0) and (vk_Status <> ID_STATUS_OFFLINE) then
+     cmi.flags := CMIM_FLAGS
+  else
+     cmi.flags := CMIM_FLAGS + CMIF_HIDDEN; // hide for Friends
+  pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuContactPages[1], Windows.lparam(@cmi));
 
   Result := 0;
 end;
@@ -648,7 +666,11 @@ begin
   // add contact menu item to read additional status - hidden by default
   FillChar(cmi, sizeof(cmi), 0);
   cmi.cbSize := sizeof(cmi);
-  cmi.flags := CMIF_HIDDEN + CMIF_NOTOFFLINE; // not show for offline
+  // display addl. status for online contacts only?
+  if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
+    cmi.flags := CMIF_HIDDEN + CMIF_NOTOFFLINE // not show for offline
+  else
+    cmi.flags := CMIF_HIDDEN; // show for offline
   cmi.Position := -2000004999;
   srvFce := PChar(Format('%s/MenuContactReadAdditionalStatus', [piShortName]));
   pluginLink^.CreateServiceFunction(srvFce, @MenuContactAdditionalStatusRead);

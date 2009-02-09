@@ -35,6 +35,8 @@ interface
 
   procedure AuthInit();
   procedure AuthDestroy();
+  procedure vk_AuthRequestSend(ID: Integer; SecureID, MessageText: String);
+  function vk_GetSecureIDAuthRequest(UserID: Integer): String;
 
 implementation
 
@@ -243,6 +245,18 @@ begin
     vk_AuthRequestReceivedDeny(IntToStr(DBGetContactSettingDword(hContact, piShortName, 'ID', 0)));
 
   Result := 0;
+end;
+
+// =============================================================================
+// function to read Secure ID to request authorization
+// (used only for contacts, which are already in contact list,
+// for search another procedure is used)
+// -----------------------------------------------------------------------------
+function vk_GetSecureIDAuthRequest(UserID: Integer): String;
+var HTML: String;
+begin
+  HTML := HTTP_NL_Get(Format(vk_url_searchbyid, [UserID]));
+  Result := TextBetween(HTML, '&h=', '">Добавить в друзья');
 end;
 
 // =============================================================================

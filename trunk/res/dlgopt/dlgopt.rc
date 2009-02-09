@@ -126,6 +126,22 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// Dialog - Ask authorization request text
+//
+VK_AUTHASK DIALOGEX 0, 0, 186, 95, 0
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | 
+    WS_CAPTION | WS_SYSMENU
+CAPTION "Enter an authorization request"
+FONT 8, "MS Shell Dlg", 400
+BEGIN
+    DEFPUSHBUTTON   "&Send",VK_AUTH_OK,34,74,50,14, 0x0,0
+    PUSHBUTTON      "&Cancel",VK_AUTH_CANCEL,98,74,50,14, 0x0,0
+    EDITTEXT        VK_AUTH_TEXT,7,7,172,59,ES_AUTOHSCROLL
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // Dialog - Advanced search
 //
 VK_SEARCHADVANCED DIALOGEX 0, 0, 335, 247, 0
@@ -199,3 +215,4 @@ ICON_POST       ICON    DISCARDABLE     "icons\\post_icon.ico"
 ICON_VIDEOS     ICON    DISCARDABLE     "icons\\videos_icon.ico"
 ICON_QUESTIONS  ICON    DISCARDABLE     "icons\\question_icon.ico"
 ICON_INFO       ICON    DISCARDABLE     "icons\\info_icon.ico"
+ICON_PLUS       ICON    DISCARDABLE     "icons\\add_icon.ico"

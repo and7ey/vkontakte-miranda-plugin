@@ -38,6 +38,7 @@ uses
 
   procedure InfoInit();
   procedure InfoDestroy();
+  function GetInfoAllProc(): LongWord;
   function GetInfoProc(hContact: lParam): LongWord;
 
 implementation
@@ -70,6 +71,8 @@ var HTML: String;
    DOB: TDateTime;
    PhoneMobile, PhoneHome, Education: String;
    AvatarURL: String;
+   BirthYear: Integer;
+   StrTemp: String;
 
 begin
  HTML := HTTP_NL_Get(Format(vk_url_pda_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]));
@@ -91,10 +94,17 @@ begin
      DBWriteContactSettingString(hContact, piShortName, 'LastName', PChar(ContactLastName));
 
      try
-       DOB := RusDateToDateTime(TextBetween(HTML, 'День рождения: ', '<br/>'), true);
-       DBWriteContactSettingByte(hContact, piShortName, 'BirthDay', StrToInt(FormatDateTime('dd', DOB)));
-       DBWriteContactSettingByte(hContact, piShortName, 'BirthMonth', StrToInt(FormatDateTime('mm', DOB)));
-       DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
+       StrTemp := TextBetween(HTML, 'День рождения: ', '<br/>');
+       if Trim(StrTemp) <> '' then
+       begin
+         if Not TryStrToInt(RightStr(StrTemp, 4), BirthYear) then
+           StrTemp := StrTemp + ' 1900';
+         DOB := RusDateToDateTime(StrTemp, true);
+         DBWriteContactSettingByte(hContact, piShortName, 'BirthDay', StrToInt(FormatDateTime('dd', DOB)));
+         DBWriteContactSettingByte(hContact, piShortName, 'BirthMonth', StrToInt(FormatDateTime('mm', DOB)));
+         if StrToInt(FormatDateTime('yyyy', DOB)) <> 1900 then
+           DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
+       end;
      except
      end;
 
@@ -629,14 +639,14 @@ end;
 
 
 // =============================================================================
-// get info thread
+// get info function - run in a separate thread
 // -----------------------------------------------------------------------------
 function GetInfoProc(hContact: lParam): LongWord;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(GetInfoProc) Thread started...'));
 
   if (vk_Status = ID_STATUS_INVISIBLE) Then
-    if MessageBox(0, PChar(qst_read_info), Translate(piShortName), MB_YESNO + MB_ICONQUESTION) = IDYES then
+    if MessageBox(0, Translate(qst_read_info), Translate(piShortName), MB_YESNO + MB_ICONQUESTION) = IDYES then
       vk_SetStatus(ID_STATUS_ONLINE);
 
   if (vk_Status = ID_STATUS_ONLINE) Then
@@ -658,6 +668,44 @@ begin
 
   Netlib_Log(vk_hNetlibUser, PChar('(GetInfoProc) ... thread finished'));
 end;
+
+// =============================================================================
+// get info for all contacts function - run in a separate thread
+// -----------------------------------------------------------------------------
+function GetInfoAllProc(): LongWord;
+var hContact: THandle;
+    hContactID: String;
+begin
+  Netlib_Log(vk_hNetlibUser, PChar('(GetInfoAllProc) Thread started...'));
+
+  if (vk_Status = ID_STATUS_INVISIBLE) Then
+    if MessageBox(0, Translate(qst_read_info), Translate(piShortName), MB_YESNO + MB_ICONQUESTION) = IDYES then
+      vk_SetStatus(ID_STATUS_ONLINE);
+
+  if (vk_Status = ID_STATUS_ONLINE) Then
+  begin
+    hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
+	  while hContact <> 0 do
+    begin
+      if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, windows.lParam(PAnsiChar(piShortName))) <> 0 Then
+      begin
+        hContactID := IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0));
+        Netlib_Log(vk_hNetlibUser, PChar('(GetInfoAllProc) Updating of details of contact ID ' + hContactID + ' ...'));
+        if DBGetContactSettingByte(0, piShortName, opt_UserGetMinInfo, 1) = 1 then
+          vk_GetInfoMinimal(hContact)
+        else
+          vk_GetInfoFull(hContact);
+        Netlib_Log(vk_hNetlibUser, PChar('(GetInfoAllProc) ... updating of details of contact ID ' + hContactID + ' finished'));
+      end;
+      hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
+	  end;
+    MessageBox(0, Translate(conf_info_update_completed), Translate(piShortName), MB_OK);
+  end;
+  Result := 0;
+
+  Netlib_Log(vk_hNetlibUser, PChar('(GetInfoAllProc) ... thread finished'));
+end;
+
 
 begin
 end.

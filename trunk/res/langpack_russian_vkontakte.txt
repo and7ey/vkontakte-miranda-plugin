@@ -3,7 +3,7 @@
 ; Locale: 0419
 ; Authors: LA
 ; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.1.7.1
+; ** VKontakte Protocol 0.1.7.2
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -94,6 +94,8 @@
 Аватары
 [Enable contacts additional status support]
 Включить поддержку дополнительных статусов контактов
+[Additional status]
+Дополнительный статус
 [Enable avatars support]
 Включить поддержку аватаров
 [Update contacts avatars each]
@@ -312,3 +314,9 @@
 Отметки
 [&Update Details for all users]
 &Обновить данные всех контактов
+[Details update completed for all contacts.]
+Обновление данных всех пользователей завершено.
+[Request authorization]
+Запросить авторизацию
+[Enter an authorization request]
+Текст запроса авторизации

@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 1 shl 16 + 7 shl 8 + 1;
+  piVersion = 0 shl 24 + 1 shl 16 + 7 shl 8 + 2;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -105,6 +105,9 @@ const
 
   // questions
   qst_read_info = 'Updating of user details requires status change to Online. Would you like to change status and update details now?';
+
+  // confirmations
+  conf_info_update_completed = 'Details update completed for all contacts.';
 
 const
   // List of settings in DB
