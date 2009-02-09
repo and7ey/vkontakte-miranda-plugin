@@ -36,6 +36,9 @@ interface
   procedure MenuInit();
   procedure MenuDestroy();
 
+var
+  vk_hMenuContactPages: Array [1..9] of THandle;
+
 implementation
 
 uses
@@ -46,7 +49,10 @@ uses
   vk_common, // module with common functions
   vk_info, // module to get contact's info
   htmlparse, // module to simplify html parsing
+  vk_opts, // unit to work with options
+  vk_auth, // module to support authorization process
 
+  Messages,
   ShellAPI,
   Windows,
   SysUtils,
@@ -59,22 +65,32 @@ type
     Icon: String;
     Position: Integer;
     Proc: TMIRANDASERVICEPARAM;
+    flags: DWord;
+  end;
+
+type
+  TAuthRequest = record
+    ID: Integer;
+    MessageText: String;
   end;
 
 function MenuContactPages(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
 function MenuMainUpdateDetailsAllUsers(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
+function MenuContactAddPermanently(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
+function DlgAuthAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall; forward;
 
 const
   // list of contact menu items
-  MenuContactPagesItems: Array [1..8] of TMenuItem = (
-    (Name:'&Main page VKontakte...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:400000),
-    (Name:'&Photos VKontakte...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:500000),
-    (Name:'&Friends VKontakte...'; URL:vk_url_friends; Icon:'ICON_FRIENDS'; Position:500001),
-    (Name:'The &wall VKontakte...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:500002),
-    (Name:'&Groups VKontakte...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:500003),
-    (Name:'&Audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:500004),
-    (Name:'&Notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:500005),
-    (Name:'&Questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:500006)
+  MenuContactPagesItems: Array [1..9] of TMenuItem = (
+    (Name:'Request authorization'; URL:''; Icon:'ICON_PLUS'; Position:-2000003999; Proc: MenuContactAddPermanently; flags: CMIF_HIDDEN), // don't change id of this item! it is used in vk_xstatus
+    (Name:'&Main page VKontakte...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:400000; Proc: MenuContactPages),
+    (Name:'&Photos VKontakte...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:500000; Proc: MenuContactPages),
+    (Name:'&Friends VKontakte...'; URL:vk_url_friends; Icon:'ICON_FRIENDS'; Position:500001; Proc: MenuContactPages),
+    (Name:'The &wall VKontakte...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:500002; Proc: MenuContactPages),
+    (Name:'&Groups VKontakte...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:500003; Proc: MenuContactPages),
+    (Name:'&Audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:500004; Proc: MenuContactPages),
+    (Name:'&Notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:500005; Proc: MenuContactPages),
+    (Name:'&Questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:500006; Proc: MenuContactPages)
     );
 
   // list of main menu items
@@ -91,12 +107,12 @@ const
     );
 
 var
-  vk_hMenuMain: Array [1..8] of THandle;
-  vk_hMenuMainSF: Array [1..8] of THandle;
+  vk_hMenuMain: Array [1..9] of THandle;
+  vk_hMenuMainSF: Array [1..9] of THandle;
 
-  vk_hMenuContactPages: Array [1..8] of THandle;
-  vk_hMenuContactPagesSF: Array [1..8] of THandle;
+  vk_hMenuContactPagesSF: Array [1..9] of THandle;
 
+  AuthRequestID: Integer; // temp variable to keep ID of contact, whom we are trying to get authorization from
 
 
 // =============================================================================
@@ -104,19 +120,12 @@ var
 // users
 // -----------------------------------------------------------------------------
 function MenuMainUpdateDetailsAllUsers(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl;
-var hContact: THandle;
-    res: LongWord;
+var res: LongWord;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(MenuMainUpdateDetailsAllUsers) Updating of details for all contacts started...'));
-  hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
-	while hContact <> 0 do
-  begin
-    if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, windows.lParam(PAnsiChar(piShortName))) <> 0 Then
-    begin
-      CloseHandle(BeginThread(nil, 0, @GetInfoProc, Pointer(hContact), 0, res));
-    end;
-    hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
-	end;
+
+  CloseHandle(BeginThread(nil, 0, @GetInfoAllProc, nil, 0, res));
+
   Netlib_Log(vk_hNetlibUser, PChar('(MenuMainUpdateDetailsAllUsers) ... updating of details for all contacts finished'));
   Result := 0;
 end;
@@ -132,6 +141,16 @@ begin
 end;
 
 // =============================================================================
+// function to react on the plugin's contact menu item to add non-Friend
+// contact to our list permanently (=request authorization)
+// -----------------------------------------------------------------------------
+function MenuContactAddPermanently(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl;
+begin
+  // requesting authorization text
+  Result := DialogBoxParam(hInstance, MAKEINTRESOURCE('VK_AUTHASK'), 0, @DlgAuthAsk, Windows.lParam(wParam));
+end;
+
+// =============================================================================
 // function to react on the plugin's menu item - Open Webpage
 // this is called by Miranda, thus has to use the cdecl calling convention
 // all services and hooks need this.
@@ -143,18 +162,81 @@ begin
 end;
 
 // =============================================================================
+// procedure to request authorization - run in a separate thread
+// -----------------------------------------------------------------------------
+procedure AuthAsk(AuthRequest: TAuthRequest);
+var SecureID: String;
+begin
+  SecureID := vk_GetSecureIDAuthRequest(AuthRequest.ID);
+  if Trim(SecureID) <> '' then
+    vk_AuthRequestSend(AuthRequest.ID, SecureID, AuthRequest.MessageText);
+end;
+
+// =============================================================================
+// Dialog function to ask Auth request text
+// -----------------------------------------------------------------------------
+function DlgAuthAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+var
+  str: String;  // temp variable for types conversion
+  pc: PChar;    // temp variable for types conversion
+  res: LongWord;
+  AuthRequest: TAuthRequest;
+begin
+  Result := False;
+  case Msg of
+     WM_INITDIALOG:
+       begin
+         // translate all dialog texts
+         TranslateDialogDefault(Dialog);
+         AuthRequestID := DBGetContactSettingDWord(lParam, piShortName, 'ID', 0);
+         SetFocus(GetDlgItem(Dialog, VK_AUTH_TEXT));
+       end;
+     WM_CLOSE:
+       begin
+         EndDialog(Dialog, 0);
+         Result := True;
+       end;
+     WM_COMMAND:
+       begin
+         case wParam of
+           VK_AUTH_OK:
+             begin
+               SetLength(Str, 2048);
+               pc := PChar(Str);
+               GetDlgItemText(Dialog, VK_AUTH_TEXT, pc, 2048);
+               AuthRequest.MessageText := pc;
+               AuthRequest.ID := AuthRequestID;
+               // request authorization in a separate thread
+               if AuthRequest.ID <> 0 then
+                 CloseHandle(BeginThread(nil, 0, @AuthAsk, @AuthRequest, 0, res));
+               EndDialog(Dialog, 0);
+               Result := True;
+             end;
+           VK_AUTH_CANCEL:
+             begin
+               EndDialog(Dialog, 0);
+               Result := True;
+             end;
+         end;
+       end;
+  end;
+end;
+
+
+
+// =============================================================================
 // TEST FUNCTION
 // -----------------------------------------------------------------------------
 function MenuContactTest(wParam: WPARAM; lParam: LPARAM): Integer; cdecl;
-var iec: TIconExtraColumn;
+// var iec: TIconExtraColumn;
 begin
-  iec.cbSize := sizeof(iec);
+  {iec.cbSize := sizeof(iec);
   if DBGetContactSettingWord(wParam, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_ONLINE then // apply icon to online contacts only
     iec.hImage := xStatuses[1].IconExtraIndex
   else
     iec.hImage := THandle(-1);
   iec.ColumnType := EXTRA_ICON_ADV2;
-  pluginLink^.CallService(MS_CLIST_EXTRA_SET_ICON, wParam, Windows.lParam(@iec));
+  pluginLink^.CallService(MS_CLIST_EXTRA_SET_ICON, wParam, Windows.lParam(@iec));}
   Result := 0;
 end;
 
@@ -200,23 +282,24 @@ begin
   // creation of contact menu items
   FillChar(cmi, sizeof(cmi), 0);
   cmi.cbSize := sizeof(cmi);
-  cmi.flags := 0;
   for i:=Low(MenuContactPagesItems) to High(MenuContactPagesItems) do
   begin
     cmi.Position := MenuContactPagesItems[i].Position;
+    cmi.flags := MenuContactPagesItems[i].flags;
     if MenuContactPagesItems[i].Icon<>'' then
       cmi.hIcon := LoadImage(hInstance, MAKEINTRESOURCE(MenuContactPagesItems[i].Icon), IMAGE_ICON, 16, 16, 0)
     else
       cmi.hIcon := 0;
     srvFce := PChar(Format('%s/MenuContactPages%d', [piShortName, i]));
-    vk_hMenuContactPagesSF[i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuContactPages, i);
+    vk_hMenuContactPagesSF[i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuContactPagesItems[i].Proc, i);
     cmi.pszService := srvFce;
     cmi.szName.a := PChar(MenuContactPagesItems[i].Name);
     cmi.pszContactOwner := piShortName;
     vk_hMenuContactPages[i] := pluginLink^.CallService(MS_CLIST_ADDCONTACTMENUITEM, 0,  Windows.lparam(@cmi));
     if cmi.hIcon<>0 then DestroyIcon(cmi.hIcon);
   end;
-  // add Read Additional status item, hidden by default
+
+  // 'Read Additional status' menu item is added in vk_xstatus
 
   // add one more, temp item
   cmi.flags := 0;

@@ -436,30 +436,33 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) Dowloading file: '+ szUrl));
   // download the page
   nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
-  if (nlhrReply.resultCode = 200) then
-  Begin
+  if (nlhrReply <> nil) Then
+    Begin
+      if (nlhrReply.resultCode = 200) then
+      Begin
 
-    if nlhrReply.dataLength > 0 Then // not empty
-    begin
-      // create directory first
-      Windows.CreateDirectory(PChar(ExtractFileDir(szFileName)), nil);
-      // write file
-      hFile := Windows.CreateFile(PChar(szFileName),
-    								              GENERIC_WRITE,
-    								              FILE_SHARE_WRITE,
-                                  nil,
-                                  CREATE_ALWAYS, // overwrite file, if exists
-                                  FILE_ATTRIBUTE_NORMAL, 0);
-      if hFile <> INVALID_HANDLE_VALUE then
-      begin
-    		Windows.WriteFile(hFile, nlhrReply.pData^, nlhrReply.dataLength, BytesWritten, nil);
-    		CloseHandle(hFile);
-        Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) ... file '+ szFileName + ' save successfully'));
+        if nlhrReply.dataLength > 0 Then // not empty
+        begin
+          // create directory first
+          Windows.CreateDirectory(PChar(ExtractFileDir(szFileName)), nil);
+          // write file
+          hFile := Windows.CreateFile(PChar(szFileName),
+                                      GENERIC_WRITE,
+                                      FILE_SHARE_WRITE,
+                                      nil,
+                                      CREATE_ALWAYS, // overwrite file, if exists
+                                      FILE_ATTRIBUTE_NORMAL, 0);
+          if hFile <> INVALID_HANDLE_VALUE then
+          begin
+            Windows.WriteFile(hFile, nlhrReply.pData^, nlhrReply.dataLength, BytesWritten, nil);
+            CloseHandle(hFile);
+            Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) ... file '+ szFileName + ' save successfully'));
+          end;
+          Result := True;
+        end;
       end;
-      Result := True;
+    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
     end;
-  end;
-  CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
 end;
 
 begin

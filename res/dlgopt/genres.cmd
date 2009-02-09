@@ -6,7 +6,7 @@ echo Компилируем файл ресурсов:
 brcc32.exe -32 dlgopt.rc
 if %ERRORLEVEL% == 0 (
 echo Перемещаем результат в папку с проектом:
-move dlgopt.RES ..\..\dlgopt.RES
+move dlgopt.res ..\..\dlgopt.res
 )
 echo ---------------------------------------------
 pause

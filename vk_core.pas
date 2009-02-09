@@ -412,7 +412,9 @@ begin
   Result := hContactNew;
 end;
 
+// =============================================================================
 // function to get list of friends, their statuses and additional statuses
+// -----------------------------------------------------------------------------
 function vk_GetFriends(): integer;
 type
   TFriends = record  // new type of record
@@ -567,7 +569,7 @@ begin
 
       // updating status & nick of existing contacts
       for i:=Low(Friends) to High(Friends) do
-        if (Friends[i].ID = DBGetContactSettingDword(hContact, piShortName, 'ID', 0)) and (Friends[i].ID<>0) Then
+        if (Friends[i].ID = DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)) and (Friends[i].ID<>0) Then
         Begin
           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Updating data of existing contact, id: '+IntToStr(Friends[i].ID)+', nick: '+Friends[i].Name));
           Friends[i].InList := True;
@@ -644,6 +646,7 @@ begin
   if UserID <> '' Then
     DBWriteContactSettingString (0, piShortName, 'ID', PChar(UserID));
 end;
+
 
 // =============================================================================
 // procedure to change the status of all contacts to offline
@@ -801,6 +804,17 @@ begin
   except
   end;
 
+  // detecting news id handle
+  if DBGetContactSettingByte(0, piShortName, opt_NewsSupport, 1) = 1 then
+  begin
+    // we need it only if getting news in a separate contact
+    if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
+    begin
+      NewsContactID := DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234);
+      NewsContactID := GetContactByID(NewsContactID);
+    end;
+  end;
+
   while true do // never ending cycle
   begin
     try
@@ -851,8 +865,6 @@ begin
           // if we use separate contact for News, then make the contact online
           if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
           begin
-            NewsContactID := DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234);
-            NewsContactID := GetContactByID(NewsContactID);
             if DBGetContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_ONLINE then
               DBWriteContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_ONLINE);
           end;
