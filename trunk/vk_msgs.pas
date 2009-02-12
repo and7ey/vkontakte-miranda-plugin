@@ -735,11 +735,17 @@ begin
 
   if High(NewsAll) > -1 then // received news
   begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) Verifying '+IntToStr(High(NewsAll))+' received news...'));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... last news received, date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 0)))));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... current local date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', Now)));
     for CurrNews:=0 to High(NewsAll)-1 do
     begin
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... checking news '+IntToStr(CurrNews+1)+' (from '+IntToStr(High(NewsAll))+')...'));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
       // validate date & time of message (if never was shown before)
       if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 0) then
       begin
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... news ' +IntToStr(CurrNews+1)+' identified as not shown before'));
         ValidNews := True;
         // filter news, if not minimal news chosen
         if DBGetContactSettingByte(0, piShortName, opt_NewsMin, 0) = 0 then
@@ -798,6 +804,7 @@ begin
         end;
       end;
     end;
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... verification of received news finished'));
     // write into DB date of last news we've received (in order to not display the same news
     // with next update)
     DBWriteContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, DateTimeToFileDate(NewsAll[0].NTime));

@@ -49,7 +49,8 @@ uses Windows,
      m_api,
 
      vk_global, // module with global variables and constant used
-     vk_common; // module with common functions
+     vk_common, // module with common functions
+     vk_popup; // module to support popups
 
 {$include res\dlgopt\i_const.inc} // contains list of ids used in dialogs
 
@@ -59,6 +60,7 @@ function DlgProcOptionsAcc(Dialog: HWnd; Message, wParam, lParam: DWord): Boolea
 function DlgProcOptionsAdv(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsAdv2(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsNews(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+function DlgProcOptionsPopup(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function OnOptInitialise(wParam, lParam: DWord): Integer; cdecl;
 
 implementation
@@ -93,6 +95,17 @@ begin
   odp.pszTemplate := 'SETTINGS_NEWS'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsNews;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
+
+  // popups
+  if bPopupSupported then
+  begin
+    odp.szTab.a := nil;
+    odp.Position := 900004000;
+    odp.szGroup.a := 'PopUps';
+    odp.pszTemplate := 'SETTINGS_POPUP';
+    odp.pfnDlgProc := @DlgProcOptionsPopup;
+    PluginLink^.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
+  end;
 
   Result:=0;
 end;
@@ -324,10 +337,6 @@ begin
     // code is executed, when options are initialized
     WM_INITDIALOG:
       begin
-        // temp
-        // val := DBGetContactSettingDWord(0, piShortName, opt_NewsLastUpdateDateTime, 0);
-        // MessageBox(0, PChar(FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(val))), 'Plugin-o-rama', MB_OK);
-
         // translate all dialog texts
         TranslateDialogDefault(Dialog);
 
@@ -418,6 +427,182 @@ begin
   end;
 end;
 
+
+function DlgProcOptionsPopup(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+var
+  val: Integer;
+  popupColorOption,
+  popupDelayOption: Byte;
+begin
+  Result:=False;
+
+  case message of
+    // code is executed, when options are initialized
+    WM_INITDIALOG:
+      begin
+        // translate all dialog texts
+        TranslateDialogDefault(Dialog);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_PopupsEnabled, 1);
+        CheckDlgButton(dialog, VK_POPUPS_ENABLED, val);
+
+        // color
+        case DBGetContactSettingByte(0, piShortName, opt_PopupsColorOption, 0) of
+          0: CheckDlgButton(dialog, VK_POPUPS_COLORDEF, BST_CHECKED);
+          1: CheckDlgButton(dialog, VK_POPUPS_COLORWIN, BST_CHECKED);
+          2:
+            begin
+              CheckDlgButton(dialog, VK_POPUPS_COLORCUST, BST_CHECKED);
+              EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_ERR_BACK), true);
+              EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_ERR_FORE), true);
+              EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_INF_BACK), true);
+              EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_INF_FORE), true);
+            end;
+        end;
+
+        // delay
+        val := DBGetContactSettingDWord(0, piShortName, opt_PopupsDelaySecs, 0);
+        if val <> 0 then
+          SetDlgItemText(dialog, VK_POPUPS_DELAY_SEC, PChar(IntToStr(val)));
+        case DBGetContactSettingByte(0, piShortName, opt_PopupsDelayOption, 0) of
+          0: CheckDlgButton(dialog, VK_POPUPS_DELAYDEF, BST_CHECKED);
+          1: CheckDlgButton(dialog, VK_POPUPS_DELAYPERM, BST_CHECKED);
+          2:
+            begin
+              CheckDlgButton(dialog, VK_POPUPS_DELAYCUST, BST_CHECKED);
+              EnableWindow(GetDlgItem(dialog, VK_POPUPS_DELAY_SEC), true);
+            end;
+        end;
+
+        val := DBGetContactSettingDWord(0, piShortName, opt_PopupsColorErrorBackground, GetSysColor(COLOR_BTNFACE));
+        SendDlgItemMessage(dialog, VK_POPUPS_COLOR_ERR_BACK, CPM_SETCOLOUR, 0, val);
+        SendDlgItemMessage(dialog, VK_POPUPS_COLOR_ERR_BACK, CPM_SETDEFAULTCOLOUR, 0, GetSysColor(COLOR_BTNFACE));
+        val := DBGetContactSettingDWord(0, piShortName, opt_PopupsColorErrorForeground, GetSysColor(COLOR_BTNTEXT));
+        SendDlgItemMessage(dialog, VK_POPUPS_COLOR_ERR_FORE, CPM_SETCOLOUR, 0, val);
+        SendDlgItemMessage(dialog, VK_POPUPS_COLOR_ERR_FORE, CPM_SETDEFAULTCOLOUR, 0, GetSysColor(COLOR_BTNTEXT));
+        val := DBGetContactSettingDWord(0, piShortName, opt_PopupsColorInfBackground, RGB(223, 227, 230)); // GetSysColor(COLOR_BTNFACE));
+        SendDlgItemMessage(dialog, VK_POPUPS_COLOR_INF_BACK, CPM_SETCOLOUR, 0, val);
+        SendDlgItemMessage(dialog, VK_POPUPS_COLOR_INF_BACK, CPM_SETDEFAULTCOLOUR, 0, GetSysColor(COLOR_BTNFACE));
+        val := DBGetContactSettingDWord(0, piShortName, opt_PopupsColorInfForeground, RGB(20, 85, 214)); // GetSysColor(COLOR_BTNTEXT));
+        SendDlgItemMessage(dialog, VK_POPUPS_COLOR_INF_FORE, CPM_SETCOLOUR, 0, val);
+        SendDlgItemMessage(dialog, VK_POPUPS_COLOR_INF_FORE, CPM_SETDEFAULTCOLOUR, 0, GetSysColor(COLOR_BTNTEXT));
+
+        Result:=True;
+      end;
+    WM_COMMAND:
+      begin
+        if HiWord(wParam)=BN_CLICKED then
+        begin
+          case LoWord(wParam) of
+            VK_POPUPS_TEST:
+              begin
+                // color
+                if IsDlgButtonChecked(Dialog, VK_POPUPS_COLORDEF) = BST_CHECKED then
+                  popupColorOption := 0
+                else if IsDlgButtonChecked(Dialog, VK_POPUPS_COLORWIN) = BST_CHECKED then
+                    popupColorOption := 1
+                      else
+                        popupColorOption := 2;
+                // delay
+                if IsDlgButtonChecked(Dialog, VK_POPUPS_DELAYDEF) = BST_CHECKED then
+                  popupDelayOption := 0
+                else if IsDlgButtonChecked(Dialog, VK_POPUPS_DELAYPERM) = BST_CHECKED then
+                    popupDelayOption := 1
+                      else
+                        popupDelayOption := 2;
+
+                Popup (
+                        0, // hContact
+                        'Test informational popup', // MsgText
+                        1, // MsgType = info
+                        popupDelayOption, // DelayOption
+                        GetDlgInt(dialog, VK_POPUPS_DELAY_SEC), // DelaySecs
+                        popupColorOption, // ColorOption
+                        SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_INF_BACK, CPM_GETCOLOUR, 0, 0), // ColorInfBack
+                        SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_INF_FORE, CPM_GETCOLOUR, 0, 0), // ColorInfFore
+                        SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_ERR_BACK, CPM_GETCOLOUR, 0, 0), // ColorErrorBack
+                        SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_ERR_FORE, CPM_GETCOLOUR, 0, 0) // ColorErrorFore
+                       );
+                Popup (
+                        0, // hContact
+                        'Test error popup', // MsgText
+                        2, // MsgType = error
+                        popupDelayOption, // DelayOption
+                        GetDlgInt(dialog, VK_POPUPS_DELAY_SEC), // DelaySecs
+                        popupColorOption, // ColorOption
+                        SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_INF_BACK, CPM_GETCOLOUR, 0, 0), // ColorInfBack
+                        SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_INF_FORE, CPM_GETCOLOUR, 0, 0), // ColorInfFore
+                        SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_ERR_BACK, CPM_GETCOLOUR, 0, 0), // ColorErrorBack
+                        SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_ERR_FORE, CPM_GETCOLOUR, 0, 0) // ColorErrorFore
+                       );
+
+              end;
+            VK_POPUPS_DELAYCUST:
+              begin
+                EnableWindow(GetDlgItem(dialog, VK_POPUPS_DELAY_SEC), true);
+                SetFocus(GetDlgItem(dialog, VK_POPUPS_DELAY_SEC));
+              end;
+            VK_POPUPS_DELAYDEF, VK_POPUPS_DELAYPERM:
+              EnableWindow(GetDlgItem(dialog, VK_POPUPS_DELAY_SEC), false);
+            VK_POPUPS_COLORCUST:
+              begin
+                EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_ERR_BACK), true);
+                EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_ERR_FORE), true);
+                EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_INF_BACK), true);
+                EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_INF_FORE), true);
+              end;
+            VK_POPUPS_COLORDEF, VK_POPUPS_COLORWIN:
+              begin
+                EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_ERR_BACK), false);
+                EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_ERR_FORE), false);
+                EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_INF_BACK), false);
+                EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_INF_FORE), false);
+              end;
+          end;
+        end;
+        SendMessage(GetParent(Dialog), PSM_CHANGED, 0, 0);
+        Result := False;
+      end;
+    // code is executed, when user pressed OK or Apply
+    WM_NOTIFY:
+      begin
+        // if user pressed Apply
+        if PNMHdr(lParam)^.code = PSN_APPLY then
+          begin
+            DBWriteContactSettingByte(0, piShortName, opt_PopupsEnabled, Byte(IsDlgButtonChecked(dialog, VK_POPUPS_ENABLED)));
+            // color
+            if IsDlgButtonChecked(Dialog, VK_POPUPS_COLORDEF) = BST_CHECKED then
+              DBWriteContactSettingByte(0, piShortName, opt_PopupsColorOption, 0)
+            else if IsDlgButtonChecked(Dialog, VK_POPUPS_COLORWIN) = BST_CHECKED then
+              DBWriteContactSettingByte(0, piShortName, opt_PopupsColorOption, 1)
+            else
+            begin
+              DBWriteContactSettingByte(0, piShortName, opt_PopupsColorOption, 2);
+              DBWriteContactSettingDWord(0, piShortName, opt_PopupsColorErrorBackground, SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_ERR_BACK, CPM_GETCOLOUR, 0, 0));
+              DBWriteContactSettingDWord(0, piShortName, opt_PopupsColorErrorForeground, SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_ERR_FORE, CPM_GETCOLOUR, 0, 0));
+              DBWriteContactSettingDWord(0, piShortName, opt_PopupsColorInfBackground, SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_INF_BACK, CPM_GETCOLOUR, 0, 0));
+              DBWriteContactSettingDWord(0, piShortName, opt_PopupsColorInfForeground, SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_INF_FORE, CPM_GETCOLOUR, 0, 0));
+            end;
+            // delay
+            if IsDlgButtonChecked(Dialog, VK_POPUPS_DELAYDEF) = BST_CHECKED then
+              DBWriteContactSettingByte(0, piShortName, opt_PopupsDelayOption, 0)
+            else if IsDlgButtonChecked(Dialog, VK_POPUPS_DELAYPERM) = BST_CHECKED then
+              DBWriteContactSettingByte(0, piShortName, opt_PopupsDelayOption, 1)
+            else
+            begin
+              DBWriteContactSettingByte(0, piShortName, opt_PopupsDelayOption, 2);
+              val := GetDlgInt(dialog, VK_POPUPS_DELAY_SEC);
+              if val <> -1 then
+                DBWriteContactSettingDWord (0, piShortName, opt_PopupsDelaySecs, val);
+            end;
+
+            Result := True;
+          end;
+      end;
+  end;
+end;
+
 end.
+
 
 

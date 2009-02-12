@@ -47,6 +47,7 @@ uses
   vk_msgs, // module to send/receive messages
   vk_xstatus, // module to support additional status
   vk_opts, // my unit to work with options
+  vk_popup, // module to support popups
 
   MSHTML_TLB, // module to parse html
   htmlparse, // module to simplify html parsing
@@ -244,14 +245,14 @@ end;
 //  MB_ICONSTOP
 //     A stop-sign icon appears in the message box.
 // -----------------------------------------------------------------------------
-procedure MessageUser(lpText: String; uType: Integer);
+{procedure MessageUser(lpText: String; uType: Integer);
 begin
-    { for future popup purposes
-      if (!ShowPopUpMsg(NULL, szLevelDescr[level], szMsg, (BYTE)level))
-        return; // Popup showed successfuly
-    }
+    // for future popup purposes
+    //  if (!ShowPopUpMsg(NULL, szLevelDescr[level], szMsg, (BYTE)level))
+    //    return; // Popup showed successfuly
+    //
    MessageBox(0, Translate(PChar(lpText)), Translate(piShortName), MB_OK + uType);
-end;
+end;}
 
 // =============================================================================
 // function to change the status
@@ -741,9 +742,9 @@ begin
           vk_Status := ID_STATUS_OFFLINE; // need to change status to offline
           ProtoBroadcastAck(piShortName, 0, ACKTYPE_LOGIN, ACKRESULT_FAILED, 0, ErrorCode);
           case ErrorCode of
-            LOGINERR_WRONGPASSWORD: MessageUser('Error: Your e-mail or password was rejected', MB_ICONSTOP);
-            LOGINERR_TIMEOUT: MessageUser('Error: Unknown error during sign on', MB_ICONSTOP);
-            LOGINERR_NONETWORK: MessageUser('Error: Cannot connect to the server', MB_ICONSTOP);
+            LOGINERR_WRONGPASSWORD: ShowPopupMsg(0, 'Error: Your e-mail or password was rejected', 2);
+            LOGINERR_TIMEOUT: ShowPopupMsg(0, 'Error: Unknown error during sign on', 2);
+            LOGINERR_NONETWORK: ShowPopupMsg(0, 'Error: Cannot connect to the server', 2);
           end;
 
       end
