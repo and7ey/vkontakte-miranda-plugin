@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (Ñ) 2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 1 shl 16 + 7 shl 8 + 3;
+  piVersion = 0 shl 24 + 1 shl 16 + 8 shl 8 + 0;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -151,6 +151,16 @@ const
   opt_LastUpdateDateTimeFriendsStatus: PChar = 'LastUpdateDateTimeFriendsStatus';
   opt_LastUpdateDateTimeKeepOnline: PChar = 'LastUpdateDateTimeKeepOnline';
   opt_LastUpdateDateTimeAvatars: PChar = 'LastUpdateDateTimeAvatars';
+  opt_PopupsEnabled: PChar = 'PopupsEnabled';
+  opt_PopupsDelaySecs: PChar = 'PopupsDelaySecs';
+  opt_PopupsDelayOption: PChar = 'PopupsDelayOption';
+  opt_PopupsColorErrorBackground: PChar = 'PopupsColorErrorBackground';
+  opt_PopupsColorErrorForeground: PChar = 'PopupsColorErrorForeground';
+  opt_PopupsColorInfBackground: PChar = 'PopupsColorInfBackground';
+  opt_PopupsColorInfForeground: PChar = 'PopupsColorInfForeground';
+  opt_PopupsColorOption: PChar = 'PopupsColorOption';
+
+
 
 type
   TAdditionalStatusIcon = record
@@ -210,6 +220,10 @@ type // for debuging purposes use Thread Names
 
 
 var
+  bMirandaUnicode: Boolean = False;
+  MirandaVersion: DWord;
+  bPopupSupported: Boolean = False;
+
   vk_hNetlibUser: THandle;
 
   he_StatusAdditionalChanged: THandle;

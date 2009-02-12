@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (С) 2008 Andrey Lukyanov
+    Copyright (С) 2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -49,6 +49,7 @@ uses
   vk_common, // module with common functions
   vk_http, // module to connect with the site
   vk_menu, // module to work with menus
+  vk_popup, // module to support popups  
 
   htmlparse, // module to simplify html parsing
 
@@ -158,10 +159,13 @@ begin
           (Pos('добавил',StrTemp)=0) and
           (Pos('вступил',StrTemp)=0) and
           (Pos('новую тему',StrTemp)=0) and
+          (Pos('открыл темы',StrTemp)=0) and
+          (Pos('открыла темы',StrTemp)=0) and
           (Pos('вышла замуж за',StrTemp)=0) and
           (Pos('женился на',StrTemp)=0) and // does it exist?
           (Pos('примет участие во встрече',StrTemp)=0) and
           (Pos('начал встречаться с ',StrTemp)=0) and
+          (Pos('начала встречаться с ',StrTemp)=0) and
           (Pos('примет участие во встречах ',StrTemp)=0) and
           (Pos('появилась подруга',StrTemp)=0) and
           (Pos('не будет участвовать во встрече ',StrTemp)=0) then
@@ -369,11 +373,14 @@ end;
 function MenuContactAdditionalStatusRead(wParam: wParam; lParam: lParam): Integer; cdecl;
 var MsgCaption: String;
 begin
-  MsgCaption := String(Translate('Additional status')) + ', ' + DBReadString(wParam, piShortName, 'XStatusTime', '00:00');
-  MessageBox(0,
+  MsgCaption := String(Translate('Additional status')) + ', ' + DBReadString(wParam, piShortName, 'XStatusTime', '00:00') + ': '+#10#13+
+                DBReadString(wParam, piShortName, 'XStatusMsg', '');
+  ShowPopupMsg(wParam, MsgCaption, 1);
+
+  {MessageBox(0,
              DBReadString(wParam, piShortName, 'XStatusMsg', ''),
              PChar(MsgCaption),
-             MB_OK + MB_ICONINFORMATION); // here icon can be changed to xStatus Icon
+             MB_OK + MB_ICONINFORMATION); // here icon can be changed to xStatus Icon}
   Result := 0;
 end;
 

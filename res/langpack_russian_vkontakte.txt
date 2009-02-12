@@ -322,3 +322,35 @@
 Текст запроса авторизации
 [Use local time for incoming messages]
 Использовать локальное время для входящих сообшений
+[Show popups]
+Показывать всплывающие окна
+[Delay]
+Пауза
+[Default]
+По умолчанию
+[Custom]
+Настроить
+[Permanent]
+Постоянно
+[Colors]
+Цвета
+[Back]
+Фон
+[Text]
+Текст
+[Errors]
+Ошибки
+[Information]
+Информация
+[Default colors]
+Цвета по умолчанию
+[Windows colors]
+Цвета Windows
+[Custom colors]
+Задать цвета
+[Test]
+Тест
+[Test informational popup]
+Проверочное информационное сообщение
+[Test error popup]
+Проверочное сообщение об ошибке

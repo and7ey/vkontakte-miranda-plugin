@@ -228,15 +228,25 @@ end;
 // TEST FUNCTION
 // -----------------------------------------------------------------------------
 function MenuContactTest(wParam: WPARAM; lParam: LPARAM): Integer; cdecl;
-// var iec: TIconExtraColumn;
+{var hContact: THandle;
+    MsgB: TMsgBox;
+var ppd: TPOPUPDATAEX; }
 begin
-  {iec.cbSize := sizeof(iec);
-  if DBGetContactSettingWord(wParam, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_ONLINE then // apply icon to online contacts only
-    iec.hImage := xStatuses[1].IconExtraIndex
-  else
-    iec.hImage := THandle(-1);
-  iec.ColumnType := EXTRA_ICON_ADV2;
-  pluginLink^.CallService(MS_CLIST_EXTRA_SET_ICON, wParam, Windows.lParam(@iec));}
+  pluginLink^.CallService(MS_POPUP_SHOWMESSAGE, Windows.wParam(PChar('text message')), SM_WARNING);
+
+  {hContact := 0;
+  FillChar(MsgB, SizeOf(MsgB), 0);
+  MsgB.uSize := SizeOf(MsgB);
+  MsgB.uType := MB_OK + MB_ICON_ERROR; // MB_ICON_OTHER;
+  // MsgB.hiLogo := LoadImage(hInstance, MAKEINTRESOURCE(MenuContactPagesItems[1].Icon), IMAGE_ICON, 16, 16, 0);
+  // MsgB.hiMsg := LoadImage(hInstance, MAKEINTRESOURCE(MenuContactPagesItems[2].Icon), IMAGE_ICON, 16, 16, 0);
+  MsgB.szTitle := 'Title';
+  MsgB.szInfoText := 'Info Text';
+  MsgB.szMsg := 'Message';
+  // MsgB.hParent := ;
+
+  pluginLink^.CallService(MS_MSGBOX, wParam, Windows.lParam(@MsgB));    }
+
   Result := 0;
 end;
 

@@ -334,7 +334,7 @@ Returns: 0 if the popup was shown, -1 in case of failure.
 }
   MS_POPUP_REGISTERACTIONS = 'PopUp/RegisterActions';
 
-(*
+
 {
   Each skinned popup (e.g. with colorBack == POPUP_USE_SKINNED_BG) should have
   class set. Then you can choose separate skin for each class (for example, you
@@ -359,6 +359,7 @@ Returns: 0 if the popup was shown, -1 in case of failure.
   POPUP_CLASS_NOTIFY  = 'Notify';
   POPUP_CLASS_OLDAPI  = 'PopUp 1.0.1.x compatability'; // for internal purposes
 
+(*
 const
   NFOPT_POPUP2_BACKCOLOR    = 'Popup2/BackColor';
   NFOPT_POPUP2_TEXTCOLOR    = 'Popup2/TextColor';

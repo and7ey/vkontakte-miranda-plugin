@@ -16,6 +16,7 @@ uses
   vk_msgs, // module to send/receive messages
   vk_core, // module with core functions
   vk_search, // module to support search functionality
+  vk_popup, // module to support popups
 
   vk_opts, // unit to work with options
 
@@ -231,6 +232,7 @@ end;
 function Load(link: PPLUGINLINK): integer; cdecl;
 var
   pd: TPROTOCOLDESCRIPTOR;
+  szTemp: array [0..255] of AnsiChar;
 begin
   // the following two lines are VERY VERY important, if it's not present, expect crashes
   pluginLink := Pointer(link);
@@ -252,6 +254,18 @@ begin
   vk_hOnCreateAccMgrUI := CreateProtoServiceFunction(piShortName, PS_CREATEACCMGRUI, OnCreateAccMgrUI); // for Miranda 0.8+ Account Manager support
 
   ConnectionErrorsCount := 0;
+
+  // get miranda's version
+  MirandaVersion := CallService(MS_SYSTEM_GETVERSION, 0, 0);
+  // identify Unicode miranda
+  if CallService(MS_SYSTEM_GETVERSIONTEXT, MAX_PATH, DWord(@szTemp)) = 0 then
+    if StrPos(szTemp, 'Unicode') <> nil then
+      bMirandaUnicode := True;
+  // if IsMirandaUnicode then
+  //  PluginInfo.flags := UNICODE_AWARE;
+
+  // register functions to support popups
+  PopupInit();
 
   // register functions required to send and receive messages
   MsgsInit();
@@ -352,6 +366,7 @@ begin
   pluginLink^.DestroyServiceFunction(vk_hkHookOkToExit);
   pluginLink^.DestroyServiceFunction(vk_hOnCreateAccMgrUI);
 
+  PopupDestroy();
 
   MsgsDestroy();
 

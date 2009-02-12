@@ -253,9 +253,10 @@ type
     uType     :uint;  // parameters
     hiLogo    :HICON; // right upper icon of the info bar
     hiMsg     :HICON; // icon left next to the message text
-    szTitle   :TCHAR; // dialog window title text
-    szInfoText:TCHAR; // text of the infobar on the top of the dialog
-    szMsg     :TCHAR; // the message text
+    // changed by LA from TChar to PChar
+    szTitle   :PCHAR; // dialog window title text
+    szInfoText:PCHAR; // text of the infobar on the top of the dialog
+    szMsg     :PCHAR; // the message text
     hParent   :hwnd;  // parent window for the messagebox
   end;
 

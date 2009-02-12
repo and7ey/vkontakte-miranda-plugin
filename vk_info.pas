@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (Ñ) 2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -53,6 +53,7 @@ uses
   vk_avatars, // module to support avatars
   htmlparse, // module to simplify html parsing
   vk_core, // module with core functions
+  vk_popup, // module to support popups  
 
   StrUtils,
   SysUtils,
@@ -699,7 +700,7 @@ begin
       end;
       hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
 	  end;
-    MessageBox(0, Translate(conf_info_update_completed), Translate(piShortName), MB_OK);
+    ShowPopupMsg(0, conf_info_update_completed, 1);
   end;
   Result := 0;
 
