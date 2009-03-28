@@ -84,7 +84,7 @@ uses
 
   function SearchAdv(wnd: HWnd): DWord; forward;
   function SearchName(lParam: lParam): DWord; forward;
-  function SearchID(lParam: lParam): DWord; forward;
+  function SearchID(ContactID: PChar): DWord; forward;
 
 const
   SearchHandle = 230;
@@ -132,6 +132,7 @@ end;
 // -----------------------------------------------------------------------------
 function SearchBasic(wParam: wParam; lParam: lParam): Integer; cdecl;
 var res: DWord;
+    ContactID: PChar;
 begin
   if lParam = 0 then
     result := 0
@@ -145,7 +146,8 @@ begin
     else
     begin
       result := SearchHandle;
-      CloseHandle(BeginThread(nil, 0, @SearchID, pointer(lParam), 0, res));
+      ContactID := StrNew(PChar(lParam));
+      CloseHandle(BeginThread(nil, 0, @SearchID, ContactID, 0, res));
     end;
   end;
 end;
@@ -276,7 +278,7 @@ var
     FriendStatus,
     FriendID,
     FriendFullName,
-    FriendSecID,
+//    FriendSecID,
     FriendGraduated,
     FriendFaculty: String;
 
@@ -345,11 +347,11 @@ begin
           else
             FriendFaculty := TextBetween(FriendDetails_temp, '<DT>Факультет:', '</DD>');
           FriendFaculty := Trim(HTMLRemoveTags(HTMLDecode(FriendFaculty)));
-          FriendSecID := TextBetween(FoundTemp.Strings[i], '&amp;h=', '">Добавить в друзья');
+          // FriendSecID := TextBetween(FoundTemp.Strings[i], '&amp;h=', '">Добавить в друзья');
           FriendStatus := TextBetween(FriendDetails_temp, '<span class=''bbb''>', '</span>');
 
-          if TryStrToInt(FriendID, TempInteger) and (FriendID<>'') and (FriendFullName<>'') and (FriendSecID<>'') Then
-          Begin
+          if TryStrToInt(FriendID, TempInteger) and (FriendID<>'') and (FriendFullName<>'') then
+          begin
             FillChar(csr, sizeof(csr), 0);
             csr.psr.cbSize := sizeOf(csr.psr);
             csr.psr.nick := StrNew(PChar(FriendID));
@@ -357,7 +359,7 @@ begin
             csr.psr.lastName := StrNew(PChar(FriendGraduated));
             csr.psr.email := StrNew(PChar(FriendFaculty));
             csr.psr.id := TempInteger;
-            csr.psr.SecureID := StrNew(PChar(FriendSecID));
+            // csr.psr.SecureID := StrNew(PChar(FriendSecID));
             if FriendStatus = 'Online' then
               csr.psr.Status := ID_STATUS_ONLINE
             else
@@ -470,7 +472,7 @@ end;
 // =============================================================================
 // search by ID functionality - runs in a separate thread
 // -----------------------------------------------------------------------------
-function SearchID(lParam: lParam): DWord;
+function SearchID(ContactID: PChar): DWord;
 var
   SearchURL: String;
 
@@ -478,7 +480,8 @@ var
   srchIDInt: Integer;
 
 begin
-  srchID := PChar(lParam);
+  srchID := String(ContactID);
+  StrDispose(ContactID);
 
   if TryStrToInt(srchID, srchIDInt) then // id provided should be numeric
   begin

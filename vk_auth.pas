@@ -33,25 +33,34 @@ unit vk_auth;
 
 interface
 
-  procedure AuthInit();
-  procedure AuthDestroy();
-  procedure vk_AuthRequestSend(ID: Integer; SecureID, MessageText: String);
-  function vk_GetSecureIDAuthRequest(UserID: Integer): String;
-
-implementation
-
 uses
   m_globaldefs,
   m_api,
 
+  Windows;
+
+  procedure AuthInit();
+  procedure AuthDestroy();
+  procedure vk_AuthRequestSend(ID: Integer; MessageText: String);
+  function DlgAuthAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+
+implementation
+
+uses
   vk_global, // module with global variables and constant used
   vk_http, // module to connect with the site
+  vk_opts, // unit to work with options
   htmlparse, // module to simplify html parsing
 
-  Windows,
+  Messages,
   SysUtils,
   Classes;
 
+type
+  TAuthRequest = record
+    ID: Integer;
+    MessageText: String;
+  end;
 
 var
   vk_hAuthRequestSend,
@@ -59,16 +68,28 @@ var
   vk_hAuthRequestReceivedAllow,
   vk_hAuthRequestReceivedDeny: THandle;
 
+  AuthRequestID: Integer; // temp variable to keep ID of contact, whom we are trying to get authorization from
 
 // =============================================================================
 // procedure to request authorization
 // -----------------------------------------------------------------------------
-procedure vk_AuthRequestSend(ID: Integer; SecureID, MessageText: String);
+procedure vk_AuthRequestSend(ID: Integer; MessageText: String);
+var HTML: String;
+    SecureID: String;
 begin
-  // we don't care about result as of now
-  // we also don't need page html body, so request head only
-  MessageText := URLEncode(MessageText); // encode all Russian and other characters
-  HTTP_NL_Get(Format(vk_url_authrequestsend, [ID, SecureID, MessageText]), REQUEST_HEAD);
+  HTML := HTTP_NL_Get(Format(vk_url_auth_securityid, [ID]));
+  if Trim(HTML) <> '' then
+  begin
+    SecureID := TextBetween(HTML, 'id=\"h\" value=\"', '\"');
+    if Trim(SecureID) <> '' then
+    begin
+      MessageText := URLEncode(MessageText); // encode all Russian and other characters
+      // GAP (?): we don't care about result as of now
+      // we also don't need page html body, so request head only
+      // text for verification - получил уведомление и подтвердит, что Вы его друг
+      HTTP_NL_Get(Format(vk_url_authrequestsend, [ID, SecureID, MessageText]));
+   end;   
+ end;
 end;
 
 // =============================================================================
@@ -115,7 +136,7 @@ var ccs_ar: PCCSDATA;
 begin
   ccs_ar := PCCSDATA(lParam);
   // call function to send authorization request
-  vk_AuthRequestSend(psreID, psreSecureID, PChar(ccs_ar.lParam));
+  vk_AuthRequestSend(psreID, PChar(ccs_ar.lParam));
   Result := 0;
 end;
 
@@ -258,6 +279,68 @@ begin
   HTML := HTTP_NL_Get(Format(vk_url_searchbyid, [UserID]));
   Result := TextBetween(HTML, '&h=', '">Добавить в друзья');
 end;
+
+// =============================================================================
+// procedure to request authorization - run in a separate thread
+// -----------------------------------------------------------------------------
+procedure AuthAsk(AuthRequest: TAuthRequest);
+var SecureID: String;
+begin
+  SecureID := vk_GetSecureIDAuthRequest(AuthRequest.ID);
+  if Trim(SecureID) <> '' then
+    vk_AuthRequestSend(AuthRequest.ID, AuthRequest.MessageText);
+end;
+
+// =============================================================================
+// Dialog function to ask Auth request text
+// -----------------------------------------------------------------------------
+function DlgAuthAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+var
+  str: String;  // temp variable for types conversion
+  pc: PChar;    // temp variable for types conversion
+  res: LongWord;
+  AuthRequest: TAuthRequest;
+begin
+  Result := False;
+  case Msg of
+     WM_INITDIALOG:
+       begin
+         // translate all dialog texts
+         TranslateDialogDefault(Dialog);
+         AuthRequestID := DBGetContactSettingDWord(lParam, piShortName, 'ID', 0);
+         SetFocus(GetDlgItem(Dialog, VK_AUTH_TEXT));
+       end;
+     WM_CLOSE:
+       begin
+         EndDialog(Dialog, 0);
+         Result := True;
+       end;
+     WM_COMMAND:
+       begin
+         case wParam of
+           VK_AUTH_OK:
+             begin
+               SetLength(Str, 2048);
+               pc := PChar(Str);
+               GetDlgItemText(Dialog, VK_AUTH_TEXT, pc, 2048);
+               AuthRequest.MessageText := pc;
+               AuthRequest.ID := AuthRequestID;
+               // request authorization in a separate thread
+               if AuthRequest.ID <> 0 then
+                 CloseHandle(BeginThread(nil, 0, @AuthAsk, @AuthRequest, 0, res));
+               EndDialog(Dialog, 0);
+               Result := True;
+             end;
+           VK_AUTH_CANCEL:
+             begin
+               EndDialog(Dialog, 0);
+               Result := True;
+             end;
+         end;
+       end;
+  end;
+end;
+
 
 // =============================================================================
 // function to initiate authorization process support

@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (Ñ) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -71,6 +71,7 @@ var
 begin
   ZeroMemory(@odp, sizeof(odp));
   odp.cbSize := sizeof(odp);
+  odp.flags := ODPF_BOLDGROUPS;
   odp.Position := 900002000;
   odp.hInstance := hInstance;
   odp.szGroup.a := 'Network'; // identifies where plugin's options should appear
@@ -487,6 +488,9 @@ begin
         SendDlgItemMessage(dialog, VK_POPUPS_COLOR_INF_FORE, CPM_SETCOLOUR, 0, val);
         SendDlgItemMessage(dialog, VK_POPUPS_COLOR_INF_FORE, CPM_SETDEFAULTCOLOUR, 0, GetSysColor(COLOR_BTNTEXT));
 
+        val := DBGetContactSettingByte(0, piShortName, opt_PopupsProtoIcon, 1);
+        CheckDlgButton(dialog, VK_POPUPS_PROTO_ICON, val);
+
         Result:=True;
       end;
     WM_COMMAND:
@@ -515,8 +519,9 @@ begin
                         0, // hContact
                         'Test informational popup', // MsgText
                         1, // MsgType = info
-                        popupDelayOption, // DelayOption
-                        GetDlgInt(dialog, VK_POPUPS_DELAY_SEC), // DelaySecs
+                        (IsDlgButtonChecked(Dialog, VK_POPUPS_PROTO_ICON) = BST_CHECKED), // ProtoIcon
+                        popupDelayOption, // DelayOption                
+                        GetDlgInt(Dialog, VK_POPUPS_DELAY_SEC), // DelaySecs
                         popupColorOption, // ColorOption
                         SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_INF_BACK, CPM_GETCOLOUR, 0, 0), // ColorInfBack
                         SendDlgItemMessage(Dialog, VK_POPUPS_COLOR_INF_FORE, CPM_GETCOLOUR, 0, 0), // ColorInfFore
@@ -527,6 +532,7 @@ begin
                         0, // hContact
                         'Test error popup', // MsgText
                         2, // MsgType = error
+                        (IsDlgButtonChecked(Dialog, VK_POPUPS_PROTO_ICON) = BST_CHECKED), // ProtoIcon
                         popupDelayOption, // DelayOption
                         GetDlgInt(dialog, VK_POPUPS_DELAY_SEC), // DelaySecs
                         popupColorOption, // ColorOption
@@ -595,6 +601,7 @@ begin
               if val <> -1 then
                 DBWriteContactSettingDWord (0, piShortName, opt_PopupsDelaySecs, val);
             end;
+            DBWriteContactSettingByte(0, piShortName, opt_PopupsProtoIcon, Byte(IsDlgButtonChecked(dialog, VK_POPUPS_PROTO_ICON)));
 
             Result := True;
           end;

@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (Ñ) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -45,7 +45,7 @@ uses
 
   procedure HTTP_NL_Init();
   function HTTP_NL_Get(szUrl: String; szRequestType: Integer = REQUEST_GET): String;
-  function HTTP_NL_Post(szUrl: String; szData: String): String;
+  function HTTP_NL_PostPicture(szUrl: String; szData: String; Boundary: String): String;
   function HTTP_NL_GetPicture(szUrl, szFileName: String): Boolean;  
 
 implementation
@@ -175,7 +175,8 @@ begin
       end
       // if the recieved code is 302 Moved, Found, etc
       // workaround for url forwarding
-      else if (nlhrReply.resultCode = 302) then // page moved
+      else if (nlhrReply.resultCode = 302) and // page moved
+              (szRequestType <> REQUEST_HEAD) then  // no need to redirect if REQUEST_HEAD
       begin
         ConnectionErrorsCount := 0;
         // get the url for the new location and save it to szInfo
@@ -244,13 +245,14 @@ end;
 // return value = HTML string
 // global var used: vk_hNetlibUser = contains handle to netlibuser created
 // -----------------------------------------------------------------------------
-function HTTP_NL_Post(szUrl: String; szData: String): String;
+function HTTP_NL_PostPicture(szUrl: String; szData: String; Boundary: String): String;
 var nlhr: TNETLIBHTTPREQUEST;
     nlhrReply: PNETLIBHTTPREQUEST;
     szRedirUrl: String;
+    szHost: String;
     i: Integer;
     UTF8Result: Boolean;
-    Boundary, FileHeader, FileTrailer, szDataFinal: String;
+
 
 begin
   result := ' ';
@@ -275,24 +277,8 @@ begin
   nlhr.flags := NLHRF_DUMPASTEXT or NLHRF_HTTP11;
   nlhr.szUrl := PChar(szUrl);
 
-  Boundary := '-----------------------------30742771025321';
-  FileHeader :=
-              '--' + Boundary +
-              #10 +
-              'Content-Disposition: form-data; name="subm"' +
-              #10 + #10 +
-              '1' +
-              #10 +
-              '--' + Boundary +
-              #10 +
-              'Content-Disposition: form-data; name="photo"; filename="310927.jpg"' +
-              #10 +
-              'Content-Type: image/jpeg' +
-              #10 + #10;
-  FileTrailer := #10 + '--' + Boundary + '--';
-  szDataFinal := FileHeader + szData + FileTrailer;
-  nlhr.pData := PChar(szDataFinal);
-  nlhr.dataLength := Length(szDataFinal)+1;
+  nlhr.pData := PChar(szData);
+  nlhr.dataLength := Length(szData)+1;
 
   nlhr.headersCount := 5;
   SetLength(nlhr.headers, 5);
@@ -356,7 +342,15 @@ begin
           if nlhrReply.headers[i].szName = 'Location' then
           begin
             // if location url doesn't contain host name, we should add it
-            szRedirUrl := nlhrReply.headers[i].szValue;
+            szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
+            if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
+            begin
+              if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                szHost := szHost + '/';
+              szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
+            end
+            Else
+              szRedirUrl := nlhrReply.headers[i].szValue;
             nlhr.szUrl := PChar(szRedirUrl);
 
             Result := HTTP_NL_Get(szRedirUrl);
@@ -456,7 +450,7 @@ begin
           begin
             Windows.WriteFile(hFile, nlhrReply.pData^, nlhrReply.dataLength, BytesWritten, nil);
             CloseHandle(hFile);
-            Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) ... file '+ szFileName + ' save successfully'));
+            Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) ... file '+ szFileName + ' saved successfully'));
           end;
           Result := True;
         end;

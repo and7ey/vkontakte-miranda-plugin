@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (С) 2009 Andrey Lukyanov
+    Copyright (С) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -35,32 +35,31 @@ unit vk_xstatus;
 
 interface
 
+uses
+  m_globaldefs,
+  m_api,
+  Windows;
+
   procedure AddlStatusInit();
   procedure AddlStatusDestroy();
   procedure vk_StatusAdditionalGet();
+  function MenuStatusAdditionalPrebuild(wParam: wParam; lParam: lParam): Integer; cdecl;
 
 implementation
 
 uses
-  m_globaldefs,
-  m_api,
-
   vk_global, // module with global variables and constant used
   vk_common, // module with common functions
   vk_http, // module to connect with the site
   vk_menu, // module to work with menus
-  vk_popup, // module to support popups  
+  vk_popup, // module to support popups
 
   htmlparse, // module to simplify html parsing
 
   CommCtrl,
-  Forms,
   Dialogs,
-  Windows,
   SysUtils,
   Classes;
-
-
 
 type
   TThreadStatusSet = class(TThread)
@@ -74,7 +73,6 @@ const
   opt_AddlStatus: PChar = 'AddlStatus';   // List of settings in DB file
 
 var
-  vk_hkMenuStatusAdditionalPrebuild,
   vk_hkListStatusAdditionalPrebuild,
   vk_hkListStatusAdditionalImageApply,
   vk_hkIconsSkinReload: THandle;
@@ -153,7 +151,7 @@ begin
 
      While Pos('a href=''id', HTML)<>0 Do
      Begin
-       StrTemp := TextBetweenInc(HTML, '<a href=''id', '<br/>');
+       StrTemp := TextBetweenInc(HTML, '<a href=''/id', '<br/>');
        // <a href='id123456'>Александр Фамилия</a> Avs advanced to next round <span class="stTime">11:46</span><br/>
        if (Pos('покинул',StrTemp)=0) and
           (Pos('добавил',StrTemp)=0) and
@@ -168,9 +166,10 @@ begin
           (Pos('начала встречаться с ',StrTemp)=0) and
           (Pos('примет участие во встречах ',StrTemp)=0) and
           (Pos('появилась подруга',StrTemp)=0) and
+          (Pos('в активном поиске',StrTemp)=0) and
           (Pos('не будет участвовать во встрече ',StrTemp)=0) then
           begin
-            MsgID := TextBetween(StrTemp, '<a href=''id', '''>');
+            MsgID := TextBetween(StrTemp, '<a href=''/id', '''>');
             MsgText := Trim(TextBetween(StrTemp, '</a> ', ' <span class="stTime">'));
             MsgText := HTMLDecode(MsgText);
             if (TryStrToInt(MsgID, MsgSender)) and (MsgText<>'') then
@@ -613,6 +612,15 @@ begin
      cmi.flags := CMIM_FLAGS + CMIF_HIDDEN; // hide for Friends
   pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuContactPages[1], Windows.lparam(@cmi));
 
+  // display 'Write on the wall' menu item only when online
+  FillChar(cmi, sizeof(cmi), 0);
+  cmi.cbSize := sizeof(cmi);
+  if (vk_Status <> ID_STATUS_OFFLINE) then
+     cmi.flags := CMIM_FLAGS
+  else
+     cmi.flags := CMIM_FLAGS + CMIF_HIDDEN;
+  pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuContactPages[10], Windows.lparam(@cmi));
+
   Result := 0;
 end;
 
@@ -633,15 +641,15 @@ begin
   DBDeleteContactSetting(0, piShortName, 'XStatusSelectedItem');
 
   // load icons for Additional Statuses
-  szFile := ExtractFilePath(Application.ExeName) + 'Icons\' + piShortName + '_xstatus.dll';
+  szFile := ExtractFilePath(ParamStr(0)) + 'Icons\' + piShortName + '_xstatus.dll';
   if not FileExists(szFile) then
-    szFile := ExtractFilePath(Application.ExeName) + 'Icons\' + 'xstatus_' + piShortName + '.dll';
+    szFile := ExtractFilePath(ParamStr(0)) + 'Icons\' + 'xstatus_' + piShortName + '.dll';
   FillChar(sid, SizeOf(TSKINICONDESC), 0);
   sid.cbSize := SizeOf(TSKINICONDESC);
   sid.cx := 16;
   sid.cy := 16;
   sid.pszDefaultFile := PChar(szFile);
-  sid.szSection.a := PChar(piShortName + '/Additional Status');   // identifies group of icons - protocol specific
+  sid.szSection.a := PChar(piShortName + '/Additional status');   // identifies group of icons - protocol specific
   for i:=Low(xStatuses)+2 to High(xStatuses) do
   begin
     sid.pszName         := PChar(xStatuses[i].Name);
@@ -649,8 +657,6 @@ begin
     sid.szDescription.a := Translate(PChar(xStatuses[i].Text));
     {vk_hIconsStatusAddl[i] := }PluginLink^.CallService(MS_SKIN2_ADDICON, 0, dword(@sid));
   end;
-  vk_hkMenuStatusAdditionalPrebuild := pluginLink^.HookEvent(ME_CLIST_PREBUILDSTATUSMENU, @MenuStatusAdditionalPrebuild);
-  MenuStatusAdditionalPrebuild(0,0);
   vk_hkListStatusAdditionalPrebuild := pluginLink^.HookEvent(ME_CLIST_EXTRA_LIST_REBUILD, @ListStatusAdditionalPrebuild);
   vk_hkListStatusAdditionalImageApply := pluginLink^.HookEvent(ME_CLIST_EXTRA_IMAGE_APPLY, @ListStatusAdditionalImageApply);
 
@@ -704,7 +710,6 @@ begin
   end;
   pluginLink^.DestroyServiceFunction(vk_hMenuContactStatusAdditionalRead);
 
-  pluginLink^.UnhookEvent(vk_hkMenuStatusAdditionalPrebuild);
   pluginLink^.UnhookEvent(vk_hkListStatusAdditionalPrebuild);
   pluginLink^.UnhookEvent(vk_hkListStatusAdditionalImageApply);
   pluginLink^.UnhookEvent(vk_hkIconsSkinReload);

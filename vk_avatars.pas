@@ -80,6 +80,7 @@ var AvatarURLOrig: String;
     AvatarFileName: String;
     hContact: THandle;
     pai: TPROTO_AVATAR_INFORMATION;
+    bAvatarDownloaded: Boolean;
 
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) Getting avatar for id '+ ID));
@@ -98,14 +99,24 @@ begin
   if (DBReadString(hContact, 'ContactPhoto', 'AvatarURL', nil) <> AvatarURL) or
   (not FileExists(DBReadString(hContact, 'ContactPhoto', 'File', nil))) then
   begin
-    // write Avatar URL to DB
-    DBWriteContactSettingString(hContact, 'ContactPhoto', 'AvatarURL', PChar(AvatarURL));
-
     AvatarFileName := FolderAvatars + '\' + ID + '.jpg';
     Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... downloading avatar'));
 
-    {$B-}
-    if HTTP_NL_GetPicture(AvatarURL, AvatarFileName) or HTTP_NL_GetPicture(AvatarURLOrig, AvatarFileName) then // downloaded successfully
+    bAvatarDownloaded := False;
+    if HTTP_NL_GetPicture(AvatarURL, AvatarFileName) then // small avatar
+    begin
+      // write Avatar URL to DB
+      DBWriteContactSettingString(hContact, 'ContactPhoto', 'AvatarURL', PChar(AvatarURL));
+      bAvatarDownloaded := True;
+    end
+    else
+      if HTTP_NL_GetPicture(AvatarURLOrig, AvatarFileName) then // big avatar
+      begin
+        // write Avatar URL to DB
+        DBWriteContactSettingString(hContact, 'ContactPhoto', 'AvatarURL', PChar(AvatarURLOrig));
+        bAvatarDownloaded := True;
+      end;
+    if bAvatarDownloaded then // downloaded successfully
     begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... avatar downloaded successfully and saved to '+ AvatarFileName));
       // write Avatar File Name to DB
@@ -170,7 +181,7 @@ var AvatarFileNameNew: String;
     AvatarFile: TFileStream;
     szData: String;
     DelPhoto, DSubm, DHash: String;
-
+    Boundary, FileHeader, FileTrailer, szDataFinal: String;
 begin
   if AvatarFileName <> '' then
   begin
@@ -194,7 +205,23 @@ begin
         URLUpload := TextBetween(HTML, 'form enctype="multipart/form-data" method="post" action="', '"');
         If Trim(URLUpload) <> '' Then
         begin
-          HTML := HTTP_NL_Post(URLUpload, szData);
+				  Boundary := '-----------------------------30742771025321';
+				  FileHeader :=
+							  '--' + Boundary +
+							  #10 +
+							  'Content-Disposition: form-data; name="subm"' +
+							  #10 + #10 +
+							  '1' +
+							  #10 +
+							  '--' + Boundary +
+							  #10 +
+							  'Content-Disposition: form-data; name="photo"; filename="310927.jpg"' +
+							  #10 +
+							  'Content-Type: image/jpeg' +
+							  #10 + #10;
+				  FileTrailer := #10 + '--' + Boundary + '--';
+				  szDataFinal := FileHeader + szData + FileTrailer;
+          HTML := HTTP_NL_PostPicture(URLUpload, szDataFinal, Boundary);
           If Trim(HTML) <> '' Then
             Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... finished setting up of our avatar'));
         end;

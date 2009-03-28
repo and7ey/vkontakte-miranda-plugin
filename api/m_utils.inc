@@ -61,7 +61,7 @@ type
     cbSize    : int;
     hwndDlg   : HWND;
     hInstance : THANDLE;
-    lpTemplate: PChar;
+    lpTemplate: PAnsiChar;
     lParam    : LPARAM;
     pfnResizer: TDIALOGRESIZERPROC;
   end;
@@ -69,7 +69,7 @@ type
   PCountryListEntry = ^TCountryListEntry;
   TCountryListEntry = record
     id    : int;
-    szName: PChar;
+    szName: PAnsiChar;
   end;
 
   PWINDOWLISTENTRY = ^TWINDOWLISTENTRY;
@@ -83,8 +83,8 @@ type
   TSAVEWINDOWPOS = record
     hWnd        : HWND;
     hContact    : THANDLE;
-    szModule    : PChar;        // module name eto store the settings in
-    szNamePrefix: PChar;        // text to prefix on 'x', 'width', etc
+    szModule    : PAnsiChar;        // module name eto store the settings in
+    szNamePrefix: PAnsiChar;        // text to prefix on 'x', 'width', etc
   end;
 
 const
@@ -98,7 +98,7 @@ const
              if there's no browser running, it will be started to show the URL
     Version: v0.1.0.1+
   }
-  MS_UTILS_OPENURL = 'Utils/OpenURL';
+  MS_UTILS_OPENURL:PAnsiChar = 'Utils/OpenURL';
 
   {
     wParam : 0
@@ -112,7 +112,7 @@ const
              .pfnResizer should return a combination of one RD_ANCHORx_ and one RD_ANCHORy constant
     Version: v0.1.0.1+
   }
-  MS_UTILS_RESIZEDIALOG = 'Utils/ResizeDialog';
+  MS_UTILS_RESIZEDIALOG:PAnsiChar = 'Utils/ResizeDialog';
 
   {
     wParam : countryID
@@ -122,7 +122,7 @@ const
              NULL(0) on failure
     Version: v0.1.2.0+
   }
-  MS_UTILS_GETCOUNTRYBYNUMBER = 'Utils/GetCountryByNumber';
+  MS_UTILS_GETCOUNTRYBYNUMBER:PAnsiChar = 'Utils/GetCountryByNumber';
 
   {
     wParam : Pointer to an int to be filled with count  -- !TODO! test.
@@ -144,7 +144,7 @@ const
              so don't try it.
     Version: v0.1.2.0+
   }
-  MS_UTILS_GETCOUNTRYLIST = 'Utils/GetCountryList';
+  MS_UTILS_GETCOUNTRYLIST:PAnsiChar = 'Utils/GetCountryList';
 
   // see WindowList_* functions below
 
@@ -155,7 +155,7 @@ const
     Returns: A handle to the new window list
     Version: v0.1.0.1+
   }
-  MS_UTILS_ALLOCWINDOWLIST = 'Utils/AllocWindowList';
+  MS_UTILS_ALLOCWINDOWLIST:PAnsiChar = 'Utils/AllocWindowList';
 
   {
     wParam : 0
@@ -164,7 +164,7 @@ const
     Returns: 0 on success, [non zero] on failure
     Version: v0.1.0.1+
   }
-  MS_UTILS_ADDTOWINDOWLIST = 'Utils/AddToWindowList';
+  MS_UTILS_ADDTOWINDOWLIST:PAnsiChar = 'Utils/AddToWindowList';
 
   {
     wParam : Handle to window list to remove from
@@ -173,7 +173,7 @@ const
     Returns: 0 on success, [non zero] on failure
     Version: v0.1.0.1+
   }
-  MS_UTILS_REMOVEFROMWINDOWLIST = 'Utils/RemoveFromWindowList';
+  MS_UTILS_REMOVEFROMWINDOWLIST:PAnsiChar = 'Utils/RemoveFromWindowList';
 
   {
     wParam : Handle to the window list to look in
@@ -182,7 +182,7 @@ const
     Returns: The found window handle or NULL(0) on failure
     Version: v0.1.0.1+
   }
-  MS_UTILS_FINDWINDOWINLIST = 'Utils/FindWindowInList';
+  MS_UTILS_FINDWINDOWINLIST:PAnsiChar = 'Utils/FindWindowInList';
 
   {
     wParam : Handle to window list
@@ -192,7 +192,7 @@ const
     Notes  : only TMSG.Message, .wParam, .lParam are used
     Version: v0.1.0.1+
   }
-  MS_UTILS_BROADCASTTOWINDOWLIST = 'Utils/BroadcastToWindowList';
+  MS_UTILS_BROADCASTTOWINDOWLIST:PAnsiChar = 'Utils/BroadcastToWindowList';
 
   {
   Version: 0.3.0.0+
@@ -203,7 +203,7 @@ const
   Returns: 0 on success, nonzero on failure, this service does not fail,
            even if PostMessage() fails for whatever reason
   }
-  MS_UTILS_BROADCASTTOWINDOWLIST_ASYNC = 'Utils/BroadcastToWindowListAsync';
+  MS_UTILS_BROADCASTTOWINDOWLIST_ASYNC:PAnsiChar = 'Utils/BroadcastToWindowListAsync';
 
   {
     There aren't any services here, there's no need for them, the control class
@@ -223,7 +223,7 @@ const
     Notes  :
     Version: v0.1.1.0+
   }
-  MS_UTILS_SAVEWINDOWPOSITION = 'Utils/SaveWindowPos';
+  MS_UTILS_SAVEWINDOWPOSITION:PAnsiChar = 'Utils/SaveWindowPos';
 
   {
     wParam : see RWPF_* flags
@@ -239,7 +239,7 @@ const
              that there's only one function and not three (which just passed different flags)
     Version: v0.1.1.0+
   }
-  MS_UTILS_RESTOREWINDOWPOSITION = 'Utils/RestoreWindowPos';
+  MS_UTILS_RESTOREWINDOWPOSITION:PAnsiChar = 'Utils/RestoreWindowPos';
 
   {
     wParam : 0
@@ -253,7 +253,7 @@ const
              Remember to delete the returned handle with DeleteObject (see GDI documentation for WINAPI)
     Version: v0.1.2.1+
   }
-  MS_UTILS_LOADBITMAP = 'Utils/LoadBitmap';
+  MS_UTILS_LOADBITMAP:PAnsiChar = 'Utils/LoadBitmap';
 
   {
       wParam : byte length of buffer (not to be confused with byte range)
@@ -270,7 +270,7 @@ const
                followed by more filters and their descriptive texts -- end with double NULL(0)
                e.g. *.bmp' #0 'All bitmaps' #0 '*.*' #0 'All Files' #0 #0
   }
-  MS_UTILS_GETBITMAPFILTERSTRINGS = 'Utils/GetBitmapFilterStrings';
+  MS_UTILS_GETBITMAPFILTERSTRINGS:PAnsiChar = 'Utils/GetBitmapFilterStrings';
 
   {
     wParam : pszPath
@@ -282,9 +282,9 @@ const
              the new path is copied too. pszNewPath MUST be of the size MAX_PATH.
     Returns: numbers of chars copied.
   }
-  MS_UTILS_PATHTORELATIVE  = 'Utils/PathToRelative';
+  MS_UTILS_PATHTORELATIVE :PAnsiChar = 'Utils/PathToRelative';
 //Unicode versions (0.6.2+)
-  MS_UTILS_PATHTORELATIVEW = 'Utils/PathToRelativeW';
+  MS_UTILS_PATHTORELATIVEW:PAnsiChar = 'Utils/PathToRelativeW';
 
   {
     Affect : Saves a path to a absolute path (from the miranda directory)
@@ -294,14 +294,32 @@ const
              the new path is copied too. pszNewPath MUST be of the size MAX_PATH.
     Returns: numbers of chars copied.
   }
-  MS_UTILS_PATHTOABSOLUTE  = 'Utils/PathToAbsolute';
+  MS_UTILS_PATHTOABSOLUTE :PAnsiChar = 'Utils/PathToAbsolute';
 //Unicode versions (0.6.2+)
-  MS_UTILS_PATHTOABSOLUTEW = 'Utils/PathToAbsoluteW';
+  MS_UTILS_PATHTOABSOLUTEW:PAnsiChar = 'Utils/PathToAbsoluteW';
 
 {
-	MD5 interface. 0.7.0.12
+  Creates a directory tree (even more than one directories levels are missing) 0.7.0+
+  wParam=0 (unused)
+  lParam=pszPath - directory to be created
+  Always returns 0
+  Unicode version is available since 0.7.0
+}
+  MS_UTILS_CREATEDIRTREE :PAnsiChar = 'Utils/CreateDirTree';
+  MS_UTILS_CREATEDIRTREEW:PAnsiChar = 'Utils/CreateDirTreeW';
 
-	Contains functions for md5 handling
+{
+   Generates Random number of any length
+  wParam=size - length of the random number to generate
+  lParam=(LPARAM)(char*)pszArray - pointer to array to fill with random number
+  Always returns 0
+}
+  MS_UTILS_GETRANDOM:PAnsiChar = 'Utils/GetRandom';
+
+{
+  MD5 interface. 0.7.0.12
+
+  Contains functions for md5 handling
 }
 // Define the state of the MD5 Algorithm.
 type
@@ -317,25 +335,36 @@ type
     buf  :array [0..63] of mir_md5_byte_t; // accumulate block
   end;
 
+// modified by LA
+  TMD5_Digest = array[0..15] of mir_md5_byte_t;
   TMD5_INTERFACE = record
-	  cbSize:int;
+    cbSize:int;
+    md5_init  : procedure(var pms:mir_md5_state_t); cdecl;
+    md5_append : procedure(var pms:mir_md5_state_t; const data; nbytes:int); cdecl;
+    md5_finish : procedure(var pms:mir_md5_state_t; out digest:TMD5_Digest); cdecl;
+    md5_hash  : procedure(const data; len:int; out digest:TMD5_Digest); cdecl; //16 byte
+  end;
+  
+{  TMD5_INTERFACE = record
+    cbSize:int;
     md5_init   : procedure(pms:pmir_md5_state_t);
-    md5_append : procedure(pms:pmir_md5_state_t; const data:pmir_md5_byte_t; nbytes:int);
+    // md5_append : procedure(pms:pmir_md5_state_t; const data:pmir_md5_byte_t; nbytes:int);
+	md5_append : procedure(pms:pmir_md5_state_t; const data:pbyte; nbytes:int);
     md5_finish : procedure(pms:pmir_md5_state_t; digest:array of mir_md5_byte_t);
     md5_hash   : procedure(const data:pmir_md5_byte_t; len:int; digest:array of mir_md5_byte_t); //16 byte
-  end;
+  end;}
 
 const
-  MS_SYSTEM_GET_MD5I = 'Miranda/System/GetMD5I';
+  MS_SYSTEM_GET_MD5I:PAnsiChar = 'Miranda/System/GetMD5I';
 {
 var
   md5i:MD5_INTERFACE;
 }
 
 {
-	SHA1 interface. 0.7.0.12
+  SHA1 interface. 0.7.0.12
 
-	Contains functions for SHA1 handling
+  Contains functions for SHA1 handling
 }
 
 type
@@ -357,7 +386,7 @@ type
   end;
 
   SHA1_INTERFACE = record
-	  cbSize:int;
+    cbSize:int;
     sha1_init   : procedure(ctx:pmir_sha1_ctx);
     sha1_append : procedure(ctx:pmir_sha1_ctx; dataIn:pmir_sha1_byte_t; len:int);
     sha1_finish : procedure(ctx:pmir_sha1_ctx; hashout:array of mir_sha1_byte_t);
@@ -366,7 +395,7 @@ type
   end;
 
 const
-  MS_SYSTEM_GET_SHA1I = 'Miranda/System/GetSHA1I';
+  MS_SYSTEM_GET_SHA1I:PAnsiChar = 'Miranda/System/GetSHA1I';
 
 {
 var

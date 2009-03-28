@@ -3,7 +3,7 @@
 ; Locale: 0419
 ; Authors: LA
 ; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.1.7.2
+; ** VKontakte Protocol 0.1.9.0
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -155,7 +155,7 @@
 [Updating of user details requires status change to Online. Would you like to change status and update details now?]
 Для обновления данных контакта необходимо перейти в режим В сети. Перейти в режим в Сети и обновить данные сейчас?
 [Use VKontakte's page URL instead of contact's homepage]
-Использовать ссылку на страницу ВКонтакте вместо страницы, указанной контактом
+Использовать ссылку на страницу ВКонтакте вместо страницы контакта
 [Display Additional status for offline contacts]
 Отображать Дополнительный статус для контактов Не в сети
 [Use the following group by default for new contacts]
@@ -324,6 +324,8 @@
 Использовать локальное время для входящих сообшений
 [Show popups]
 Показывать всплывающие окна
+[Popups]
+Всплывающие окна
 [Delay]
 Пауза
 [Default]
@@ -332,8 +334,8 @@
 Настроить
 [Permanent]
 Постоянно
-[Colors]
-Цвета
+[Appearance]
+Оформление
 [Back]
 Фон
 [Text]
@@ -354,3 +356,91 @@
 Проверочное информационное сообщение
 [Test error popup]
 Проверочное сообщение об ошибке
+[Use protocol icon]
+Использовать иконку протокола
+[Click here to choose the picture]
+Нажмите здесь для выбора изображения
+[write on the wall]
+написать на стене
+[&Send]
+&Отправить
+[Sending...]
+Отправка...
+[Text]
+Текст
+[Image]
+Изображение
+[Video]
+Видео
+[Audio]
+Аудио
+[W&rite on the wall...]
+&Написать на стене...
+[write on the wall]
+написать на стене
+[Posting of the message started...]
+Отправка начата...
+[Getting contact's hash...]
+Получение хеша контакта...
+[Message posting failed. Unable to get the hash]
+Сообщение не было опубликовано. Невозможно получить хеш контакта 
+[Posting of the message...]
+Отправка...
+[Invisible mode: looks like the message has been posted successfully]
+Невидимый режим: сообщение, видимо, опубликовано
+[Invisible mode: looks like the message posting has failed]
+Невидимый режим: сообщение, видимо, НЕ опубликовано
+[The message has been posted successfully]
+Сообщение успешно опубликовано
+[Security code (captcha) input is required for further processing...]
+Необходим ввод защитного кода для продолжения
+[Please input the captcha in the separate window]
+Пожалуйста, введите защитный код в отдельном окне
+[Message posting failed (incorrect code?)]
+Сообщение не было опубликовано (неверный код?)
+[Message posting failed. Unable to get the captcha]
+Сообщение не было опубликовано. Невозможно загрузить защитный код
+[Captcha]
+Код
+[Contact's &wall on site...]
+Стена контакта на сайте...
+[wall:]
+стена:
+[Kb]
+Кб
+[Uploading of the picture started...]
+Загрузка изображения начата...
+[Uploading of the picture failed. Details are incorrect]
+Загрузка завершилась с ошибкой. Некорректные детали
+[Uploading failed. Original picture file not found]
+Загрузка завершилась с ошибкой. Не найден файл изображения
+[Reading of the original picture file...]
+Чтение файла изображения
+[Uploading failed. Unable to read the original file]
+Загрузка завершилась с ошибкой. Невозможно прочитать файл
+[Generating hash...]
+Создание хеша...
+[Uploading failed. Unable to generate hash]
+Загрузка завершилась с ошибкой. Невозможно создать хеш
+[Generating signature...]
+Создание подписи...
+[Uploading failed. Unable to generate signature]
+Загрузка завершилась с ошибкой. Невозможно создать подпись
+[Uploading picture on the server...]
+Загрузка изображения на сервер...
+[Uploading failed due to uknown reason]
+Загрузка завершилась с ошибкой
+[Uploading failed due to security violation]
+Загрузка завершилась с ошибкой. Нарушение безопасности
+[Picture uploaded]
+Изображение загружено
+[Posting failed. Unable to get picture id]
+Изображение не было опубликовано. Не удалось получить id
+[Posting of the picture...]
+Публикация изображения...
+[Posting failed due to uknown reason]
+Изображение не было опубликовано
+[The picture has been posted successfully]
+Изображение было успешно опубликовано
+[Thank you for usage of VKontakte plugin!\r\n\r\nWould you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?\r\nIf you press Cancel now, the same question will be asked again during next Miranda start.]
+Спасибо за использование плагина ВКонтакте!\r\n\r\nХотите ли Вы вступить в группу ВКонтакте, посвященную плагину (http://vkontakte.ru/club6929403)?\r\nВы можете выбрать Отмена сейчас - тогда этот вопрос будет задан еще раз при следующем запуске Миранды.

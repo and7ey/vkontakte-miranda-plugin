@@ -1,7 +1,7 @@
-(*
+  (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (Ñ) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -47,12 +47,13 @@ uses
   vk_global, // module with global variables and constant used
   vk_http, // module to connect with the site
   vk_common, // module with common functions
+  vk_wall, // module to work with the wall
 
   htmlparse, // module to simplify html parsing
   vk_core, // module with core functions
 
   MSHTML_TLB, // module to parse html
-  uLkJSON, // module to parse data from feed2.php (in JSON format);
+  uLkJSON, // module to parse data from feed2.php (in JSON format)
 
   ComObj,
   ActiveX,
@@ -253,14 +254,14 @@ begin
  for i:=1 to length(HTML)-2 do // don't check first and last symbols
  begin
   if HTML[i]='{' then
-    if (HTML[i+1]<>'"') and (HTML[i-2]=':') then
+    if (HTML[i+1]<>'"') and (HTML[i-1]=':') then
       Insert('"', HTML, i+1);
 
-  if (HTML[i]=',') and (HTML[i+1]=' ') then
-    if HTML[i+2]<>'"' then
-      Insert('"', HTML, i+2);
+  if (HTML[i]=',') then
+    if (HTML[i+1]<>'"') and (HTML[i-1]='"') then
+      Insert('"', HTML, i+1);
 
-  if (HTML[i]=':') and (HTML[i+1]=' ')  then
+  if (HTML[i]=':') and (HTML[i+1]='"') then
     if HTML[i-1]<>'"' then
       Insert('"', HTML, i);
  end;
@@ -481,7 +482,7 @@ begin
   FillChar(dbeo, SizeOf(dbeo), 0);
   With dbeo Do
   Begin
-    cbSize   := SizeOf(dbeo);
+    cbSize   := SizeOf(dbeo);         
     eventType := EVENTTYPE_MESSAGE;        // message
     szModule := piShortName;
     pBlob    := PByte(pre.szMessage);      // data
@@ -527,6 +528,10 @@ var trx_id_temp: Integer;
     hContact_temp: THandle;
     MsgText: String;
     ThreadNameInfo: TThreadNameInfo;
+    ResultTemp: TResultDetailed;
+    bPostingOnTheWall: Boolean;
+    sWord: String;
+    iWordLength: Byte;
 begin
  Netlib_Log(vk_hNetlibUser, PChar('(TThreadSendMsg) Thread started...'));
 
@@ -551,7 +556,36 @@ begin
     Exit;
  End;
 
-  // call function to send the message
+  // verifying if the message should be posted on the wall
+  // (in this case it should be started with 'wall:' (or user defined value) or
+  // with translated equivalent
+  bPostingOnTheWall := False;
+  sWord := DBReadString(0, piShortName, opt_WallMessagesWord, 'wall:');
+  iWordLength := Length(Translate(PChar(sWord))) - 1;
+  if (Copy(MsgText, 0, iWordLength) = Translate(PChar(sWord))) then
+    bPostingOnTheWall := True
+  else
+  begin
+    sWord := String(Translate(PChar(sWord)));
+    iWordLength := Length(sWord);
+	  if (Copy(MsgText, 0, iWordLength) = sWord) then
+		  bPostingOnTheWall := True;
+  end;
+
+  if bPostingOnTheWall then
+  begin // posting message on the wall
+    MsgText := Copy(MsgText, iWordLength + 1, Length(MsgText) - iWordLength);
+    ResultTemp := vk_WallPostMessage(DBGetContactSettingDword(hContact_temp, piShortName, 'ID', 0),
+                                 Trim(MsgText),
+                                 0);
+    case ResultTemp.Code of
+      0: // 0 - successful
+         ProtoBroadcastAck(piShortName, hContact_temp, ACKTYPE_MESSAGE, ACKRESULT_SUCCESS, THandle(trx_id_temp), 0);
+      1: // 1 - failed
+         ProtoBroadcastAck(piShortName, hContact_temp, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id_temp), windows.lParam(ResultTemp.Text));
+    end;  
+  end
+  else // calling function to send normal message
   case vk_SendMessage(DBGetContactSettingDword(hContact_temp, piShortName, 'ID', 0), MsgText) of
      0: // 0 - successful
         // the ACK contains reference (thandle) to the trx number
@@ -668,7 +702,7 @@ begin
       Begin
         HTMLNews := TextBetweenTagsAttrInc(HTMLDay, 'table', 'class', 'feedTable');
         nNType := TextBetween(HTMLNews, 'images/icons/', '_icon.gif"');
-        nIDstr := TextBetween(HTMLNews, 'a href=''id', '''');
+        nIDstr := TextBetween(HTMLNews, 'a href=''/id', '''');
         nText := TextBetweenInc(HTMLNews, '<td class="feedStory', '</td>');
         // remove images
         ImgStart := Pos('<div class=''feedFriendImg''>', nText);
@@ -736,14 +770,14 @@ begin
   if High(NewsAll) > -1 then // received news
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) Verifying '+IntToStr(High(NewsAll))+' received news...'));
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... last news received, date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 0)))));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... last news received, date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600)))));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... current local date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', Now)));
     for CurrNews:=0 to High(NewsAll)-1 do
     begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... checking news '+IntToStr(CurrNews+1)+' (from '+IntToStr(High(NewsAll))+')...'));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
       // validate date & time of message (if never was shown before)
-      if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 0) then
+      if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600) then
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... news ' +IntToStr(CurrNews+1)+' identified as not shown before'));
         ValidNews := True;

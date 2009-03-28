@@ -57,6 +57,7 @@ const
  VK_POPUPS_COLORWIN = 1211;
  VK_POPUPS_COLORCUST = 1212;
  VK_POPUPS_TEST = 1213;
+ VK_POPUPS_PROTO_ICON = 1214;
   
   // Login dialog elements IDs
   VK_LOGIN_EMAIL = 2001;
@@ -92,4 +93,21 @@ const
   VK_AUTH_TEXT = 5001;
   VK_AUTH_OK = 5002;
   VK_AUTH_CANCEL = 5003;
+  
+  // Wall - Add picture dialog elements IDs
+  VK_WALL_PIC_TEXT = 6001;
+  VK_WALL_PIC_IMAGE = 6002;
+  VK_WALL_PIC_VIDEO = 6003;
+  VK_WALL_PIC_AUDIO = 6004;
+  VK_WALL_PIC_SEND = 6005;
+  VK_WALL_PIC = 6006;
+  VK_WALL_PIC_EDIT = 6007;
+  VK_WALL_PIC_PRGBAR = 6008;
+  VK_WALL_STATUS = 6009;
+  
+  // Captcha dialog elements IDs
+  VK_CAPTCHA_PIC = 7001;
+  VK_CAPTCHA_CODE = 7002;
+  VK_CAPTCHA_OK = 7003;
+   
   

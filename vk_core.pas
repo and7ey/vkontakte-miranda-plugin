@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2009 Andrey Lukyanov
+    Copyright (Ñ) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -414,6 +414,48 @@ begin
 end;
 
 // =============================================================================
+// procedure to define contact's status
+// -----------------------------------------------------------------------------
+procedure SetContactStatus(hContact: THandle; Status: Word);
+begin
+	if DBGetContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE) <> Status then
+	  DBWriteContactSettingWord(hContact, piShortName, 'Status', Status);
+end;
+
+// =============================================================================
+// function to get status of non-friend contact
+// -----------------------------------------------------------------------------
+function vk_GetContactStatus(ContactID: Integer): Integer;
+var HTML: String;
+begin
+  Result := ID_STATUS_OFFLINE;
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetContactStatus) Getting status of non-friend contact ' + IntToStr(ContactID) + '...'));
+  if vk_Status = ID_STATUS_ONLINE then
+  begin
+    HTML := HTTP_NL_Get(Format(vk_url_pda_friend, [ContactID])); // 1,5 Kb
+    if Trim(HTML) <> '' then
+    begin
+	    if Pos('<span class="online">Online</span>', HTML) > 0 then
+	      Result := ID_STATUS_ONLINE
+	    else
+	      Result := ID_STATUS_OFFLINE;
+    end;
+  end
+  else // ID_STATUS_INVISIBLE
+  begin
+    HTML := HTTP_NL_Get(Format(vk_url_searchbyid, [ContactID]));  // 3 Kb
+    if Trim(HTML) <> '' then
+    begin
+	    if Pos('<span class=''bbb''>Online</span>', HTML) > 0 then
+	      Result := ID_STATUS_ONLINE
+	    else
+	      Result := ID_STATUS_OFFLINE;
+    end;
+  end;
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetContactStatus) ... status of non-friend contact ' + IntToStr(ContactID) + ' is identified as ' + IntToStr(Result)));
+end;
+
+// =============================================================================
 // function to get list of friends, their statuses and additional statuses
 // -----------------------------------------------------------------------------
 function vk_GetFriends(): integer;
@@ -423,138 +465,132 @@ type
     Name: String;
     InList: Boolean;  // friend exists in Miranda's list
     Online: Boolean;  // friend is online
+    Deleted: Boolean; // friend is deleted from Miranda's list
+    AvatarURL: String;
+    Rating: Integer;
+    Group: Integer;
   end;
 
-var i, i1: Integer;  // temp variable
-    str1, str2: String; // temp variables
-    Friends: Array of TFriends;
-    FriendsOnline: Array of Integer;
-    TempList: TStringList;
+var
+  hContact: THandle;
+  HTML: String; // html content of the page received
 
-    hContact: THandle;
-
-    HTML: String; // html content of the page received
-    PadsList: String;
-
-    iHTTP: IHTMLDocument2; // these 2 variables required for
-    v: Variant;            // String -> IHTMLDocument2 conversions
+  FriendsOnline: Array of Integer;
+  FriendsDeleted: Array of Integer;
+  Friends: Array of TFriends;
+  TempList: TStringList;
+  i: Integer;
+  StrTemp1, StrTemp2: String;
 
 begin
 
-  // *** get friends online
-  // they can be on several pages, so retrieve all
-  // GAP: status of friends is read only
+  // get friends online
+  // status of friends is read only
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends from the server...'));
-  i:=1;
-  HTML := HTTP_NL_Get(Format(vk_url_pda_friendsonline,[i]));
-  If Trim(HTML) <> '' Then
-  Begin
-    PadsList := TextBetween(HTML, '<div class="pad">','</div>');
-    While Pos('a href="/friendsonline', PadsList)<>0 Do
-    Begin
-      Delete(PadsList, 1, Pos('</a>', PadsList)+3);
-      i:=i+1;
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... page '+IntToStr(i)+' with online friends found, getting it'));
-      HTML := HTML + HTTP_NL_Get(Format(vk_url_pda_friendsonline,[i]));
-    End;
-
-    CoInitialize(nil);  // since this function is called in a separate thread,
-                      // this code is mandatory for CreateComObject function
-
-    // the code below converts String value received with Get function to
-    // iHTMLDocument2, which is required for parsing
-    try
-     iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
-      v := VarArrayCreate([0,0], VarVariant);
-      v[0] := HTML;
-      iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
-    except
-      iHTTP:=nil;
-    end;
-
-    TempList := TStringList.Create();
-    TempList.Sorted := True; // list should be sorted and
-    TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
-
+  HTML := HTTP_NL_Get(vk_url_feed_friendsonline);
+  if Trim(HTML) <> '' then
+  begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
-    // parsing list of friends
-    If Assigned(iHTTP) Then
-    Begin
-      TempList := getElementsByAttrPart(iHTTP, 'a','href','/id');
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... '+IntToStr(TempList.Count-1)+' friend(s) online found'));
-      for i:=0 to TempList.Count-1 do
-        Begin
-          str1 := Trim(TextBetween(TempList.Strings[i], '/id', '">'));
-          str2 := Trim(TextBetween(TempList.Strings[i], '>', '</A>'));
-          if (str1 <> '0') and (str1 <> '') and (str2 <> '') Then
-          Begin
-            SetLength(FriendsOnline, Length(FriendsOnline)+1);
-            FriendsOnline[High(FriendsOnline)] := StrToInt(str1);
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found online friend with id: '+str1));
-          End;
-       End;
-    End;
-
-    TempList.Clear;
-    iHTTP := nil;
-  End;
-
-  // *** get full list of friends
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
-  i:=1;
-  HTML := HTTP_NL_Get(Format(vk_url_pda_friends,[i]));
-  If Trim(HTML) <> '' Then
-  Begin
-    PadsList := TextBetween(HTML, '<div class="pad">','</div>');
-    While Pos('a href="/friends', PadsList)<>0 Do
-    Begin
-      Delete(PadsList, 1, Pos('</a>', PadsList)+3);
-      i:=i+1;
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... page '+IntToStr(i)+' with friends found, getting it'));
-      HTML := HTML + HTTP_NL_Get(Format(vk_url_pda_friends,[i]));
-    End;
-
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
-    try
-      iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
-      v := VarArrayCreate([0,0], VarVariant);
-      v[0] := HTML;
-      iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
-    except
-      iHTTP:=nil;
+	  HTML := TextBetween(HTML, 'list:[',']');
+    if Trim(HTML) <> '' then
+    begin
+		  TempList := TStringList.Create();
+		  TempList.Sorted := True; // list should be sorted and
+		  TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
+		  TempList.Delimiter := ',';
+		  TempList.DelimitedText := HTML;
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... ' + IntToStr(TempList.Count) + ' friend(s) online found'));
+		  For i:=0 to TempList.Count-1 Do
+		  Begin
+			  SetLength(FriendsOnline, Length(FriendsOnline)+1);
+			  TryStrToInt(TempList.Strings[i], FriendsOnline[High(FriendsOnline)]);
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found online friend with id: ' + TempList.Strings[i]));
+		  End;
+		  TempList.Free;
     end;
+  end;
 
-    If Assigned(iHTTP) Then
-      TempList := getElementsByAttrPart(iHTTP, 'a','href','/id');
-
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... '+IntToStr(TempList.Count-1)+' friend(s) found'));
-
+  // identify deleted friends
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Find friends deleted from miranda''s contact list...'));
+  StrTemp1 := DBReadString(0, piShortName, opt_UserFriendsDeleted, ''); // read list of deleted friends
+  if Trim(StrTemp1) <> '' then
+  begin
+    TempList := TStringList.Create();
+		TempList.Sorted := True; // list should be sorted and
+    TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
+		TempList.Delimiter := ',';
+    TempList.DelimitedText := StrTemp1;
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... ' + IntToStr(TempList.Count) + ' deleted friend(s) found'));
     For i:=0 to TempList.Count-1 Do
-      Begin
-      str1 := Trim(TextBetween(TempList.Strings[i], '/id', '">'));
-      str2 := Trim(TextBetween(TempList.Strings[i], '>', '</A>'));
-      if (str1 <> '0') and (str1 <> '') and (str2 <> '') Then
-      Begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found friend with id: '+str1));
-        // if friend is found, add him/her into our Friends array
-        SetLength(Friends, Length(Friends)+1);
-        Friends[High(Friends)].ID := StrToInt(str1); // High(Friends) = Length(Friends) - 1
-        Friends[High(Friends)].Name := HTMLDecode(str2);
-        Friends[High(Friends)].InList := False;
-        Friends[High(Friends)].Online := False;
-        for i1:=Low(FriendsOnline) to High(FriendsOnline) do // mark online Friends
-          if StrToInt(str1) = FriendsOnline[i1] Then
-            begin
-              Friends[High(Friends)].Online := True;
-              break;
-            end;
-      End;
+    Begin
+      SetLength(FriendsDeleted, Length(FriendsDeleted)+1);
+      TryStrToInt(TempList.Strings[i], FriendsDeleted[High(FriendsDeleted)]);
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found deleted friend with id: ' + TempList.Strings[i]));
     End;
-
     TempList.Free;
-    SetLength(FriendsOnline, 0);
-    iHTTP := nil;
-  End;
+  end;
+
+  // get full list of friends
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
+  HTML := HTTP_NL_Get(vk_url_feed_friends);
+  if Trim(HTML) <> '' then
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
+    HTML := TextBetween(HTML, 'list:[',']]');
+    if Trim(HTML) <> '' then
+    begin
+      HTML := HTML + ']';
+      while Pos('[', HTML) > 0 do
+      begin
+        // 1234567, {f:'Name', l:'Surname'},{p:'http://cs1264.vkontakte.ru/u5545710/b_1234567.jpg',uy:'05',uf:12345,fg:5,to:'Name',r:63,f:0,u:123,ds:0}
+        StrTemp1 := TextBetween(HTML, '[', ']');
+        if Trim(StrTemp1) <> '' then
+        begin
+          StrTemp2 := Trim(Copy(StrTemp1, 1, Pos(',', StrTemp1)-1));
+          SetLength(Friends, Length(Friends)+1);
+          if TryStrToInt(StrTemp2, Friends[High(Friends)].ID) then
+          begin
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found friend with id: ' + StrTemp2));
+            StrTemp2 := TextBetween(StrTemp1, 'f:''', '''') + ' ' +TextBetween(StrTemp1, 'l:''', '''');
+            Friends[High(Friends)].Name := StrTemp2;
+            Friends[High(Friends)].AvatarURL := TextBetween(StrTemp1, 'p:''', '''');
+            TryStrToInt(Trim(TextBetween(StrTemp1, 'r:', ',')), Friends[High(Friends)].Rating);
+            TryStrToInt(Trim(TextBetween(StrTemp1, 'fg:', ',')), Friends[High(Friends)].Group);
+
+            Friends[High(Friends)].InList := False;
+            // mark online friends
+            Friends[High(Friends)].Online := False;
+            for i := Low(FriendsOnline) to High(FriendsOnline) do
+            begin
+              if FriendsOnline[i] = Friends[High(Friends)].ID then
+              begin
+                Friends[High(Friends)].Online := True;
+                break;
+              end;
+            end;
+            // mark deleted friends
+            Friends[High(Friends)].Deleted := False;
+            for i := Low(FriendsDeleted) to High(FriendsDeleted) do
+            begin
+              if FriendsDeleted[i] = Friends[High(Friends)].ID then
+              begin
+                Friends[High(Friends)].Deleted := True;
+                break;
+              end;
+            end;
+          end
+          else
+            SetLength(Friends, Length(Friends)-1);
+        end;
+
+        Delete(HTML, 1, Pos(']', HTML));
+      end;
+    end;
+  end;
+
+  SetLength(FriendsOnline, 0);
+  SetLength(FriendsDeleted, 0);
+
   // at this moment array Friends contains our list of friends at the server
 
   // checking each contact in our Miranda's list
@@ -570,39 +606,43 @@ begin
 
       // updating status & nick of existing contacts
       for i:=Low(Friends) to High(Friends) do
-        if (Friends[i].ID = DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)) and (Friends[i].ID<>0) Then
-        Begin
+        if (Friends[i].ID = DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)) and (Friends[i].ID <> 0) Then
+        begin
           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Updating data of existing contact, id: '+IntToStr(Friends[i].ID)+', nick: '+Friends[i].Name));
           Friends[i].InList := True;
           DBWriteContactSettingString(hContact, piShortName, 'Nick', PChar(Friends[i].Name));
       		DBWriteContactSettingByte(hContact, piShortName, 'Friend', 1); // found on server list - making friend
-          if Friends[i].Online Then
-          begin
-            if DBGetContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_ONLINE then
-       	      DBWriteContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_ONLINE);
-          end
-          Else
-          begin
-            if DBGetContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_OFFLINE then
-              DBWriteContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE);
-          end;
+          if Friends[i].Deleted Then
+            DBWriteContactSettingByte(hContact, 'CList', 'Hidden', 1);
+          if Friends[i].Online then
+            SetContactStatus(hContact, ID_STATUS_ONLINE)
+          else
+            SetContactStatus(hContact, ID_STATUS_OFFLINE);
           Break;
-        End;
+        end;
+      // if contact is not found in the server's list
+      if DBGetContactSettingByte(hContact, piShortName, 'Friend', 1) = 0 then
+        if DBGetContactSettingByte(0, piShortName, opt_UserNonFriendsStatusSupport, 0) = 1 then // check status of non-friends?
+        begin
+          SetContactStatus(hContact,
+                           vk_GetContactStatus(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)));
+        end;
+
     end;
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
 	end;
 
   // probably, new Friends appeared on the server - should add them to contact list
   for i:=0 to High(Friends) do
-  if Not Friends[i].InList Then
-  Begin
-    if Friends[i].Online Then
-        vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_ONLINE, 1)
-    Else
-        vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_OFFLINE, 1);
-  End;
+    if Not Friends[i].InList Then
+    Begin
+      if Friends[i].Online Then
+          vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_ONLINE, 1)
+      Else
+          vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_OFFLINE, 1);
+    End;
 
-  CoUninitialize();
+  SetLength(Friends, 0);
 
   vk_StatusAdditionalGet(); // get additional statuses of friends
 
@@ -616,8 +656,7 @@ end;
 // -----------------------------------------------------------------------------
 procedure vk_DeleteFriend(FriendID: Integer);
 begin
-  // GAP (?): result is not validated
-  HTTP_NL_Get(Format(vk_url_frienddelete, [FriendID]), REQUEST_HEAD);
+  HTTP_NL_Get(Format(vk_url_frienddelete, [FriendID]), REQUEST_HEAD)   // GAP (?): result is not validated
 end;
 
 // =============================================================================
@@ -645,9 +684,19 @@ begin
   if UserName <> '' Then
     DBWriteContactSettingString (0, piShortName, 'Nick', PChar(UserName));
   if UserID <> '' Then
-    DBWriteContactSettingString (0, piShortName, 'ID', PChar(UserID));
+    DBWriteContactSettingDWord (0, piShortName, 'ID', StrToInt(UserID));
 end;
 
+// =============================================================================
+// procedure to join given group
+// -----------------------------------------------------------------------------
+procedure vk_JoinGroup(GroupID: Integer);
+begin
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_JoinGroup) Joining of the group ' + IntToStr(GroupID) + '...'));
+  // GAP (?): result is not validated
+  HTTP_NL_Get(Format(vk_url_pda_group_join, [GroupID]), REQUEST_HEAD);
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_JoinGroup) ... finished joining of the group ' + IntToStr(GroupID)));
+end;
 
 // =============================================================================
 // procedure to change the status of all contacts to offline
@@ -671,10 +720,22 @@ end;
 // this function deletes it from the server
 // -----------------------------------------------------------------------------
 function ContactDeleted(wParam: wParam; lParam: lParam): Integer; cdecl;
+var StrTemp: String;
 begin
-  if DBGetContactSettingByte(wParam, piShortName, 'Friend', 0) = 1 Then // delete from the server only contacts marked as Friend
-    vk_DeleteFriend(DBGetContactSettingDword(wParam, piShortName, 'ID', 0));
   Result := 0;
+  if DBGetContactSettingByte(wParam, piShortName, 'Friend', 0) = 1 Then // delete from the server only contacts marked as Friend
+  begin
+    if DBGetContactSettingByte(0, piShortName, opt_UserDontDeleteFriendsFromTheServer, 0) = 0 Then
+      vk_DeleteFriend(DBGetContactSettingDWord(wParam, piShortName, 'ID', 0))
+    else
+    begin
+      StrTemp := DBReadString(0, piShortName, opt_UserFriendsDeleted, '');
+      if StrTemp <> '' then
+        StrTemp := StrTemp + ',';
+      StrTemp := StrTemp + IntToStr(DBGetContactSettingDWord(wParam, piShortName, 'ID', 0));
+      DBWriteContactSettingString(0, piShortName, opt_UserFriendsDeleted, PChar(StrTemp)); // add contact to plugins list of deleted contacts
+    end;
+  end;
 end;
 
 
@@ -773,6 +834,12 @@ begin
   if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
   begin
     vk_GetUserNameID(); // update OUR name and id
+    // user agreed to join plugin's group (see OnModulesLoad)
+    if DBGetContactSettingByte(0, piShortName, opt_GroupPluginJoined, 0) = 2 then
+    begin
+      DBWriteContactSettingByte (0, piShortName, opt_GroupPluginJoined, 3);
+      vk_JoinGroup(6929403); // id of plugins group
+    end;
     // write default value of last date & time of contacts' status update
     // so they will be updated again immediately in DataUpdate thread
     DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeFriendsStatus, 539033600);
