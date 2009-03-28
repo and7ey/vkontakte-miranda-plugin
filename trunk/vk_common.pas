@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (Ñ) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -57,6 +57,8 @@ type
   function GetDlgComboBoxItem(hDlg: HWnd; idCtrl: Integer): Integer;
   procedure InitComboBox(hwndCombo: HWnd; const Names: Array of TComboBoxItem);
 
+  function GetFileSize_(sFileName: string): cardinal;
+
 implementation
 
 uses
@@ -87,7 +89,7 @@ begin
           Result := hContact;
           Exit;
         end;
-      Netlib_Log(vk_hNetlibUser, PChar('(GetContactByID) ... found id: '+IntToStr(DBGetContactSettingDword(hContact, piShortName, 'ID', 0))+' - no match'));
+      // Netlib_Log(vk_hNetlibUser, PChar('(GetContactByID) ... found id: '+IntToStr(DBGetContactSettingDword(hContact, piShortName, 'ID', 0))+' - no match'));
     end;
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
 	end;
@@ -184,6 +186,27 @@ begin
   	iItem := SendMessage(hwndCombo, CB_ADDSTRING, 0, LongInt(Translate(PChar(Names[i].Name))));
   	SendMessage(hwndCombo, CB_SETITEMDATA, iItem, Names[i].Index);
 	end;
+end;
+
+
+// =============================================================================
+// function to get file size
+// -----------------------------------------------------------------------------
+function GetFileSize_(sFileName: string): cardinal;
+var
+  hFile: THandle;
+  FileSize: LongWord;
+begin
+  hFile := CreateFile(PChar(sFileName),
+    GENERIC_READ,
+    0,
+    nil,
+    OPEN_EXISTING,
+    FILE_ATTRIBUTE_NORMAL,
+    0);
+  FileSize := Windows.GetFileSize(hFile, nil);
+  Result := FileSize;
+  CloseHandle(hFile);
 end;
 
 begin

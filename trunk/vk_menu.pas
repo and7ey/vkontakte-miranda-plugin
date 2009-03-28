@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (Ñ) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ interface
   procedure MenuDestroy();
 
 var
-  vk_hMenuContactPages: Array [1..9] of THandle;
+  vk_hMenuContactPages: Array [1..10] of THandle;
 
 implementation
 
@@ -51,6 +51,8 @@ uses
   htmlparse, // module to simplify html parsing
   vk_opts, // unit to work with options
   vk_auth, // module to support authorization process
+  vk_wall, // module to work with VKontakte's wall
+  vk_xstatus, // module to support additional status
 
   Messages,
   ShellAPI,
@@ -68,20 +70,15 @@ type
     flags: DWord;
   end;
 
-type
-  TAuthRequest = record
-    ID: Integer;
-    MessageText: String;
-  end;
-
+function MenuMainPages(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
 function MenuContactPages(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
 function MenuMainUpdateDetailsAllUsers(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
 function MenuContactAddPermanently(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl; forward;
-function DlgAuthAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall; forward;
+function MenuContactWall(wParam: WPARAM; lParam: LPARAM; lParam1: Integer): Integer; cdecl; forward;
 
 const
   // list of contact menu items
-  MenuContactPagesItems: Array [1..9] of TMenuItem = (
+  MenuContactPagesItems: Array [1..10] of TMenuItem = (
     (Name:'Request authorization'; URL:''; Icon:'ICON_PLUS'; Position:-2000003999; Proc: MenuContactAddPermanently; flags: CMIF_HIDDEN), // don't change id of this item! it is used in vk_xstatus
     (Name:'&Main page VKontakte...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:400000; Proc: MenuContactPages),
     (Name:'&Photos VKontakte...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:500000; Proc: MenuContactPages),
@@ -90,29 +87,29 @@ const
     (Name:'&Groups VKontakte...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:500003; Proc: MenuContactPages),
     (Name:'&Audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:500004; Proc: MenuContactPages),
     (Name:'&Notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:500005; Proc: MenuContactPages),
-    (Name:'&Questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:500006; Proc: MenuContactPages)
+    (Name:'&Questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:500006; Proc: MenuContactPages),
+    (Name:'W&rite on the wall...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:600000; Proc: MenuContactWall) // don't change id of this item! it is used in vk_xstatus
     );
 
   // list of main menu items
   MenuMainItems: Array [1..9] of TMenuItem = (
-    (Name:'My &main page VKontakte...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:000000; Proc: MenuContactPages),
-    (Name:'My &photos VKontakte...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:100000; Proc: MenuContactPages),
-    (Name:'My &friends VKontakte...'; URL:vk_url_friends; Icon:'ICON_FRIENDS'; Position:100001; Proc: MenuContactPages),
-    (Name:'My &wall VKontakte...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:100002; Proc: MenuContactPages),
-    (Name:'My &groups VKontakte...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:100003; Proc: MenuContactPages),
-    (Name:'My &audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:100004; Proc: MenuContactPages),
-    (Name:'My &notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:100005; Proc: MenuContactPages),
-    (Name:'My &questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:100006; Proc: MenuContactPages),
+    (Name:'My &main page VKontakte...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:000000; Proc: MenuMainPages),
+    (Name:'My &photos VKontakte...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:100000; Proc: MenuMainPages),
+    (Name:'My &friends VKontakte...'; URL:vk_url_friends; Icon:'ICON_FRIENDS'; Position:100001; Proc: MenuMainPages),
+    (Name:'My &wall VKontakte...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:100002; Proc: MenuMainPages),
+    (Name:'My &groups VKontakte...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:100003; Proc: MenuMainPages),
+    (Name:'My &audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:100004; Proc: MenuMainPages),
+    (Name:'My &notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:100005; Proc: MenuMainPages),
+    (Name:'My &questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:100006; Proc: MenuMainPages),
     (Name:'&Update Details for all users'; URL:''; Icon:'ICON_INFO'; Position:200000; Proc: MenuMainUpdateDetailsAllUsers)
     );
 
 var
+  vk_hkMenuStatusPrebuild: THandle;
   vk_hMenuMain: Array [1..9] of THandle;
   vk_hMenuMainSF: Array [1..9] of THandle;
 
   vk_hMenuContactPagesSF: Array [1..9] of THandle;
-
-  AuthRequestID: Integer; // temp variable to keep ID of contact, whom we are trying to get authorization from
 
 
 // =============================================================================
@@ -141,6 +138,15 @@ begin
 end;
 
 // =============================================================================
+// function to react on the plugin's main menu items to open our pages
+// -----------------------------------------------------------------------------
+function MenuMainPages(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl;
+begin
+  ShellAPI.ShellExecute(0, 'open', PChar(Format(MenuMainItems[lParam1].URL, [DBGetContactSettingDword(wParam, piShortName, 'ID', 0)])), nil, nil, 0);
+  Result := 0;
+end;
+
+// =============================================================================
 // function to react on the plugin's contact menu item to add non-Friend
 // contact to our list permanently (=request authorization)
 // -----------------------------------------------------------------------------
@@ -162,67 +168,12 @@ begin
 end;
 
 // =============================================================================
-// procedure to request authorization - run in a separate thread
+// function to react on the plugin's contact menu items to write on the wall
 // -----------------------------------------------------------------------------
-procedure AuthAsk(AuthRequest: TAuthRequest);
-var SecureID: String;
+function MenuContactWall(wParam: WPARAM; lParam: LPARAM; lParam1: Integer): Integer; cdecl;
 begin
-  SecureID := vk_GetSecureIDAuthRequest(AuthRequest.ID);
-  if Trim(SecureID) <> '' then
-    vk_AuthRequestSend(AuthRequest.ID, SecureID, AuthRequest.MessageText);
+  Result := DialogBoxParam(hInstance, MAKEINTRESOURCE('VK_WALL_PICTURE'), 0, @DlgWallPic, Windows.lParam(wParam));
 end;
-
-// =============================================================================
-// Dialog function to ask Auth request text
-// -----------------------------------------------------------------------------
-function DlgAuthAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
-var
-  str: String;  // temp variable for types conversion
-  pc: PChar;    // temp variable for types conversion
-  res: LongWord;
-  AuthRequest: TAuthRequest;
-begin
-  Result := False;
-  case Msg of
-     WM_INITDIALOG:
-       begin
-         // translate all dialog texts
-         TranslateDialogDefault(Dialog);
-         AuthRequestID := DBGetContactSettingDWord(lParam, piShortName, 'ID', 0);
-         SetFocus(GetDlgItem(Dialog, VK_AUTH_TEXT));
-       end;
-     WM_CLOSE:
-       begin
-         EndDialog(Dialog, 0);
-         Result := True;
-       end;
-     WM_COMMAND:
-       begin
-         case wParam of
-           VK_AUTH_OK:
-             begin
-               SetLength(Str, 2048);
-               pc := PChar(Str);
-               GetDlgItemText(Dialog, VK_AUTH_TEXT, pc, 2048);
-               AuthRequest.MessageText := pc;
-               AuthRequest.ID := AuthRequestID;
-               // request authorization in a separate thread
-               if AuthRequest.ID <> 0 then
-                 CloseHandle(BeginThread(nil, 0, @AuthAsk, @AuthRequest, 0, res));
-               EndDialog(Dialog, 0);
-               Result := True;
-             end;
-           VK_AUTH_CANCEL:
-             begin
-               EndDialog(Dialog, 0);
-               Result := True;
-             end;
-         end;
-       end;
-  end;
-end;
-
-
 
 // =============================================================================
 // TEST FUNCTION
@@ -231,8 +182,12 @@ function MenuContactTest(wParam: WPARAM; lParam: LPARAM): Integer; cdecl;
 {var hContact: THandle;
     MsgB: TMsgBox;
 var ppd: TPOPUPDATAEX; }
+
 begin
-  pluginLink^.CallService(MS_POPUP_SHOWMESSAGE, Windows.wParam(PChar('text message')), SM_WARNING);
+
+  Result := DialogBoxParam(hInstance, MAKEINTRESOURCE('VK_WALL_PICTURE'), 0, @DlgWallPic, Windows.lParam(wParam));
+
+  // pluginLink^.CallService(MS_POPUP_SHOWMESSAGE, Windows.wParam(PChar('text message')), SM_WARNING);
 
   {hContact := 0;
   FillChar(MsgB, SizeOf(MsgB), 0);
@@ -245,7 +200,17 @@ begin
   MsgB.szMsg := 'Message';
   // MsgB.hParent := ;
 
-  pluginLink^.CallService(MS_MSGBOX, wParam, Windows.lParam(@MsgB));    }
+  pluginLink^.CallService(MS_MSGBOX, wParam, Windows.lParam(@MsgB));   }
+
+  Result := 0;
+end;
+
+// =============================================================================
+// function to update list of Status menu items
+// -----------------------------------------------------------------------------
+function MenuStatusPrebuild(wParam: wParam; lParam: lParam): Integer; cdecl;
+begin
+  MenuStatusAdditionalPrebuild(wParam, lParam); // update Additional Statuses
 
   Result := 0;
 end;
@@ -280,7 +245,6 @@ begin
     else
       mi.hIcon := 0;
     srvFce := PChar(Format('%s/MenuMain%d', [piShortName, i]));
-    // vk_hMenuMainSF[i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuContactPages, i);
     vk_hMenuMainSF[i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuMainItems[i].Proc, i);
     mi.pszService := srvFce;
     // WARNING: do not use Translate(TS) for p(t)szName or p(t)szPopupName as they
@@ -288,7 +252,7 @@ begin
     mi.szName.a := PChar(MenuMainItems[i].Name);
     vk_hMenuMain[i] := pluginLink^.CallService(MS_CLIST_ADDMAINMENUITEM, 0,  Windows.lparam(@mi));
   end;
-
+  
   // creation of contact menu items
   FillChar(cmi, sizeof(cmi), 0);
   cmi.cbSize := sizeof(cmi);
@@ -321,6 +285,10 @@ begin
   cmi.pszContactOwner := piShortName;
   // pluginLink^.CallService(MS_CLIST_ADDCONTACTMENUITEM, 0,  Windows.lparam(@cmi));
 
+  // creation of status menu items
+  vk_hkMenuStatusPrebuild := pluginLink^.HookEvent(ME_CLIST_PREBUILDSTATUSMENU, @MenuStatusPrebuild);
+  MenuStatusPrebuild(0,0);
+
 end;
 
 procedure MenuDestroy();
@@ -337,6 +305,8 @@ begin
     pluginLink^.DestroyServiceFunction(vk_hMenuMain[i]);
     pluginLink^.DestroyServiceFunction(vk_hMenuMainSF[i]);
   end;
+
+  pluginLink^.UnhookEvent(vk_hkMenuStatusPrebuild);
 
 end;
 

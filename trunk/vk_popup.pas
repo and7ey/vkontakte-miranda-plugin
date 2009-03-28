@@ -35,8 +35,8 @@ interface
 
   procedure PopupInit();
   procedure PopupDestroy();
-  function Popup(hContact: THandle; MsgText: String; MsgType: Byte; DelayOption: Byte; DelaySecs: Integer; ColorOption: Byte; ColorInfBack, ColorInfFore, ColorErrorBack, ColorErrorFore: Longword): Integer;
-  procedure ShowPopupMsg(hContact: THandle; MsgText: String; MsgType: Byte);
+  function Popup(hContact: THandle; MsgText: String; MsgType: Byte; ProtoIcon: Boolean; DelayOption: Byte; DelaySecs: Integer; ColorOption: Byte; ColorInfBack, ColorInfFore, ColorErrorBack, ColorErrorFore: Longword): Integer;
+  procedure ShowPopupMsg(hContact: THandle; MsgText: String; MsgType: Byte; ShowMsgBox: Boolean = True);
 
 implementation
 
@@ -53,15 +53,22 @@ uses
 // function to display popup
 // all settings should be provided
 // -----------------------------------------------------------------------------
-function Popup(hContact: THandle; MsgText: String; MsgType: Byte; DelayOption: Byte; DelaySecs: Integer; ColorOption: Byte; ColorInfBack, ColorInfFore, ColorErrorBack, ColorErrorFore: Longword): Integer;
+function Popup(hContact: THandle; MsgText: String; MsgType: Byte; ProtoIcon: Boolean; DelayOption: Byte; DelaySecs: Integer; ColorOption: Byte; ColorInfBack, ColorInfFore, ColorErrorBack, ColorErrorFore: Longword): Integer;
 var
   ppd: TPOPUPDATAEX;
-  TempInt: Integer;
 begin
   FillChar(ppd, SizeOf(ppd), 0);
   ppd.icbSize := sizeof(ppd);
   ppd.lchContact := hContact;
-  ppd.lchIcon := LoadImage(hInstance, MAKEINTRESOURCE('ICON_PROTO'), IMAGE_ICON, 16, 16, 0);
+  if ProtoIcon then
+    ppd.lchIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar(piShortName + '_popups')))
+  else
+    case MsgType of
+      1: // info
+        ppd.lchIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('popup_notify')));
+      2: // error
+        ppd.lchIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('popup_error')));
+    end;
   if CallService(MS_POPUP_ISSECONDLINESHOWN, 0, 0) = 1 then // second line is shown
   begin
     StrPLCopy(ppd.lpszContactName, Translate(piShortName), MAX_CONTACTNAME-1);
@@ -110,7 +117,7 @@ end;
 // simplified function to display popup
 //  types: 1 - info; 2 - error
 // -----------------------------------------------------------------------------
-procedure ShowPopupMsg(hContact: THandle; MsgText: String; MsgType: Byte);
+procedure ShowPopupMsg(hContact: THandle; MsgText: String; MsgType: Byte; ShowMsgBox: Boolean = True);
 begin
   // if plugin is installed and Popups option is enabled
   if (bPopupSupported) and (DBGetContactSettingByte(0, piShortName, opt_PopupsEnabled, 1) = 1) then
@@ -119,6 +126,7 @@ begin
               hContact, // hContact
               MsgText, // MsgText
               MsgType, // MsgType
+              Boolean(DBGetContactSettingByte(0, piShortName, opt_PopupsProtoIcon, 0)), // ProtoIcon
               DBGetContactSettingByte(0, piShortName, opt_PopupsDelayOption, 0), // DelayOption
               DBGetContactSettingDWord(0, piShortName, opt_PopupsDelaySecs, 0), // DelaySecs
               DBGetContactSettingByte(0, piShortName, opt_PopupsColorOption, 0), // ColorOption
@@ -130,11 +138,12 @@ begin
                Exit;
   end;
   // else display standard error
-  case MsgType of
-    // info
-    1: MessageBox(0, Translate(PChar(MsgText)), Translate(piShortName), MB_OK + MB_ICONINFORMATION);
-    // error
-    2: MessageBox(0, Translate(PChar(MsgText)), Translate(piShortName), MB_OK + MB_ICONSTOP);
+  if ShowMsgBox then
+    case MsgType of
+      // info
+      1: MessageBox(0, Translate(PChar(MsgText)), Translate(piShortName), MB_OK + MB_ICONINFORMATION);
+      // error
+      2: MessageBox(0, Translate(PChar(MsgText)), Translate(piShortName), MB_OK + MB_ICONSTOP);
   end;
 
 end;
@@ -143,11 +152,23 @@ end;
 // function to initiate popups support
 // -----------------------------------------------------------------------------
 procedure PopupInit();
+var sid: TSKINICONDESC;
 begin
   if (PluginLink^.ServiceExists(MS_POPUP_ADDPOPUP) <> 0) or (PluginLink^.ServiceExists(MS_POPUP_ADDPOPUPW) <> 0) then
     bPopupSupported := True;
 
-    pluginLink^.CallService(MS_POPUP_ADDCLASS, 0, Windows.lParam(PChar('VKontakte')));
+  //  pluginLink^.CallService(MS_POPUP_ADDCLASS, 0, Windows.lParam(PChar('VKontakte')));
+
+  // register icon to be used in popups
+  FillChar(sid, SizeOf(TSKINICONDESC), 0);
+  sid.cbSize := SizeOf(TSKINICONDESC);
+  sid.cx := 16;
+  sid.cy := 16;
+  sid.hDefaultIcon := LoadImage(hInstance, MAKEINTRESOURCE('ICON_PROTO'), IMAGE_ICON, 16, 16, 0);
+  sid.szSection.a := PChar(piShortName);   // identifies group of icons - protocol specific
+  sid.pszName := PChar(piShortName + '_popups');
+  sid.szDescription.a := Translate('Popups');
+  PluginLink^.CallService(MS_SKIN2_ADDICON, 0, dword(@sid));
 end;
 
 // =============================================================================

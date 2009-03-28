@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2009 Andrey Lukyanov
+    Copyright (Ñ) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -44,20 +44,22 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 1 shl 16 + 8 shl 8 + 0;
+  piVersion = 0 shl 24 + 1 shl 16 + 9 shl 8 + 4;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
   piCopyright = '(c) 2008-2009 Andrey Lukyanov';
-  piHomepage = 'http://forum.miranda.im/showthread.php?p=28497';
+  piHomepage = 'http://forum.miranda.im/showthread.php?t=2035';
 
 const
   // URLs
   vk_url = 'http://vkontakte.ru';
   // vk_url_pda = 'http://pda.vkontakte.ru';
-  vk_url_pda_login = 'http://vkontakte.ru/login.php?pda=index&email=%s&pass=%s&expire=0';
-  vk_url_pda_friendsonline = 'http://pda.vkontakte.ru/friendsonline%d?nr=1';
-  vk_url_pda_friends = 'http://pda.vkontakte.ru/friends%d?nr=1';
+  vk_url_pda_login = vk_url + '/login.php?pda=index&email=%s&pass=%s&expire=0';
+  vk_url_feed_friendsonline = vk_url + '/friendJS.php?act=online';
+  vk_url_feed_friends = vk_url + '/friendJS.php';
+  // vk_url_pda_friendsonline = 'http://pda.vkontakte.ru/friendsonline%d?nr=1';
+  // vk_url_pda_friends = 'http://pda.vkontakte.ru/friends%d?nr=1';
   vk_url_pda_logout = 'http://pda.vkontakte.ru/logout';
   vk_url_pda_forgot = 'http://pda.vkontakte.ru/forgot';
   vk_url_friends_all = 'http://vkontakte.ru/friend.php';
@@ -84,6 +86,7 @@ const
   vk_url_feed2 = 'http://vkontakte.ru/feed2.php?mask=mf';
   vk_url_pda_msg = 'http://pda.vkontakte.ru/letter%d?';
   vk_url_username = 'http://vkontakte.ru/feed2.php?mask=u';  // http://vkontakte.ru/feed2.php?mask=ufpvmge
+  vk_url_auth_securityid = 'http://vkontakte.ru/friend.php?act=a_add_form&fid=%d';
   vk_url_authrequestsend = 'http://vkontakte.ru/friend.php?act=addFriend&fid=%d&h=%s&message=%s';  // http://vkontakte.ru/friend.php?act=add&id=123456&h=8e30f2fe
   vk_url_authrequestreceivedallow = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=1';
   vk_url_authrequestreceiveddeny = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=0';
@@ -95,15 +98,22 @@ const
   vk_url_news = 'http://vkontakte.ru/news.php?act=friends';
   vk_url_photo_my = 'http://vkontakte.ru/profileEdit.php?page=photo';
   vk_url_photo_my_delete = 'http://vkontakte.ru/profileEdit.php?page=photo2&subm=%s&hash=%s';
+  vk_url_wall_id = 'http://vkontakte.ru/wall.php?id=%d';
+  vk_url_wall_hash = 'http://vkontakte.ru/wall.php?act=write&id=%d';
+  vk_url_wall_postmsg = 'http://vkontakte.ru/wall.php?to_id=%d&act=sent&wall_hash=%s&message=%s';
+  vk_url_wall_postmsg_captcha = 'http://vkontakte.ru/wall.php?to_id=%d&act=sent&wall_hash=%s&message=%s&sid=%s&code_captcha=%s';
+  vk_url_wall_postpic_upload = 'http://vkontakte.ru/graffiti.php?to_id=%d';
+  vk_url_wall_postpic_getlast = 'http://vkontakte.ru/graffiti.php?act=last';
+  vk_url_wall_postpic = 'http://vkontakte.ru/wall.php?act=sent&grid=%s&to_id=%d&wall_hash=%s&message=%s';
+  vk_url_pda_group_join = 'http://pda.vkontakte.ru/groupenter?pda=1&gid=%d';
 
 const
   // error messages
-  // err_search_noconnection = 'Could not start a search on ''%s'', there was a problem - is %s connected?';
-  // err_search_title = 'Problem with search';
   err_sendmgs_offline = 'You cannot send messages when you are offline.';
   err_sendmgs_freq = 'You cannot send messages more often than once in 1 second. Please try again later.';
 
   // questions
+  qst_join_vk_group = 'Thank you for usage of VKontakte plugin!'#13#10#13#10'Would you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?'#13#10'If you press Cancel now, the same question will be asked again during next Miranda start.';
   qst_read_info = 'Updating of user details requires status change to Online. Would you like to change status and update details now?';
 
   // confirmations
@@ -111,21 +121,24 @@ const
 
 const
   // List of settings in DB
-  opt_UserName: PChar = 'user/email';
-  opt_UserPass: PChar = 'user/pass';
-  opt_UserKeepOnline: PChar = 'user/keeponlinesecs';
-  opt_UserCheckNewMessages: PChar = 'user/newmessagessecs';
-  opt_UserUpdateFriendsStatus: PChar = 'user/friendsstatussecs';
-  opt_UserGetMinInfo: PChar = 'user/getmininfo';
-  opt_UserRemoveEmptySubj: PChar = 'user/removeemptysubject';
-  opt_UserDefaultGroup: PChar = 'User/DefaultGroup';
-  opt_UserUpdateAddlStatus: PChar = 'user/updateadditionalstatus';
-  opt_UserAvatarsSupport: PChar = 'user/avssupport';
-  opt_UserAvatarsUpdateFreq: PChar = 'user/avsupdatefreq';
-  opt_UserAvatarsUpdateWhenGetInfo: PChar = 'user/avsupdatewhengetinfo';
-  opt_UserVKontakteURL: PChar = 'User/VKontakteURL';
-  opt_UserAddlStatusForOffline: PChar = 'User/AddlStatusForOffline';
-  opt_UserUseLocalTimeForIncomingMessages: PChar = 'User/UseLocalTimeForIncomingMessages';
+  opt_UserName: PChar = 'UserEmail';
+  opt_UserPass: PChar = 'UserPass';
+  opt_UserKeepOnline: PChar = 'UserKeepOnlineFreqSecs';
+  opt_UserCheckNewMessages: PChar = 'UserNewMessagesFreqSecs';
+  opt_UserUpdateFriendsStatus: PChar = 'UserFriendsStatusFreqSecs';
+  opt_UserFriendsDeleted: PChar = 'UserFriendsDeleted';
+  opt_UserGetMinInfo: PChar = 'UserInfoMinimal';
+  opt_UserRemoveEmptySubj: PChar = 'UserMsgIncRemoveEmptySubject';
+  opt_UserDefaultGroup: PChar = 'UserDefaultGroup';
+  opt_UserUpdateAddlStatus: PChar = 'UserAddlStatusUpdate';
+  opt_UserAvatarsSupport: PChar = 'UserAvatarsSupport';
+  opt_UserAvatarsUpdateFreq: PChar = 'UserAvatarsUpdateFreqSecs';
+  opt_UserAvatarsUpdateWhenGetInfo: PChar = 'UserAvatarsUpdateWhenGetInfo';
+  opt_UserVKontakteURL: PChar = 'UserInfoVKontaktePageURL';
+  opt_UserAddlStatusForOffline: PChar = 'UserAddlStatusForOfflineContacts';
+  opt_UserUseLocalTimeForIncomingMessages: PChar = 'UserMsgIncUseLocalTime';
+  opt_UserDontDeleteFriendsFromTheServer: PChar = 'UserDontDeleteFriendsFromTheServer';
+  opt_UserNonFriendsStatusSupport: PChar = 'UserNonFriendsStatusSupport';
   opt_NewsSupport: PChar = 'NewsEnabled';
   opt_NewsSecs: PChar = 'NewsUpdateFrequencySecs';
   opt_NewsMin: PChar = 'NewsMinimalOnly';
@@ -159,8 +172,10 @@ const
   opt_PopupsColorInfBackground: PChar = 'PopupsColorInfBackground';
   opt_PopupsColorInfForeground: PChar = 'PopupsColorInfForeground';
   opt_PopupsColorOption: PChar = 'PopupsColorOption';
-
-
+  opt_PopupsProtoIcon: PChar = 'PopupsProtoIcon';
+  opt_PopupsWallShowStatus: PChar = 'PopupsWallShowStatus';
+  opt_WallMessagesWord: PChar = 'WallMessagesWord';
+  opt_GroupPluginJoined: PChar = 'GroupPluginJoined';
 
 type
   TAdditionalStatusIcon = record
@@ -176,6 +191,12 @@ type
   TComboBoxItem = record
     Index: Integer;
     Name: String;
+  end;
+
+type
+  TResultDetailed = record
+    Code: Byte;
+    Text: String;
   end;
 
 const
