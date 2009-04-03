@@ -391,8 +391,8 @@ begin
   end;
   if DBGetContactSettingByte(0, piShortName, 'user/avsupdatewhengetinfo', 255) <> 255 then
   begin
-  DBWriteContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, DBGetContactSettingByte(0, piShortName, 'user/avsupdatewhengetinfo', 1));
-  DBDeleteContactSetting(0, piShortName, 'user/avsupdatewhengetinfo');
+    DBWriteContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, DBGetContactSettingByte(0, piShortName, 'user/avsupdatewhengetinfo', 1));
+    DBDeleteContactSetting(0, piShortName, 'user/avsupdatewhengetinfo');
   end;
   if DBGetContactSettingByte(0, piShortName, 'User/VKontakteURL', 255) <> 255 then
   begin
@@ -409,6 +409,15 @@ begin
     DBWriteContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, DBGetContactSettingByte(0, piShortName, 'User/UseLocalTimeForIncomingMessages', 0));
     DBDeleteContactSetting(0, piShortName, 'User/UseLocalTimeForIncomingMessages');
   end;
+  if DBGetContactSettingByte(0, piShortName, 'User/UseLocalTimeForIncomingMessages', 255) <> 255 then
+  begin
+    DBWriteContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, DBGetContactSettingByte(0, piShortName, 'User/UseLocalTimeForIncomingMessages', 0));
+    DBDeleteContactSetting(0, piShortName, 'User/UseLocalTimeForIncomingMessages');
+  end;
+  DBDeleteContactSetting(0, piShortName, 'LastUpdateDateTimeMsgs');
+  DBDeleteContactSetting(0, piShortName, 'LastUpdateDateTimeFriendsStatus');
+  DBDeleteContactSetting(0, piShortName, 'LastUpdateDateTimeKeepOnline');
+  DBDeleteContactSetting(0, piShortName, 'LastUpdateDateTimeAvatars');
 
   // ask to join plugin's group
   if DBGetContactSettingByte(0, piShortName, opt_GroupPluginJoined, 0) = 0 then // never asked before

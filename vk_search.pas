@@ -72,13 +72,9 @@ uses
   vk_common, // module with common functions
   vk_http, // module to connect with the site
 
-  MSHTML_TLB, // module to parse html
   htmlparse, // module to simplify html parsing
 
   Messages,
-  ComObj,
-  ActiveX,
-  Variants,
   Windows,
   SysUtils;
 
@@ -264,8 +260,6 @@ end;
 procedure vk_SearchFriends(SearchURL: String; SearchID: Integer; SearchPages: Integer);
 var
     HTML: String;
-    iHTTP: IHTMLDocument2; // these 2 variables required for
-    v: Variant;            // String -> IHTMLDocument2 conversions
     FoundTemp: TStringList;
     i: Byte;
     TempInteger: Integer;
@@ -298,99 +292,82 @@ begin
   end;
 
 
-  CoInitialize(nil);  // since this function is called in a separate function,
-                      // this code is mandatory for CreateComObject function
-  If Trim(HTML) <> '' Then
-  Begin
-    try
-      iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
-      v := VarArrayCreate([0,0], VarVariant);
-      v[0] := HTML;
-      iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
-    except
-      iHTTP:=nil;
+  if Trim(HTML) <> '' then
+  begin
+	  // for unicode should use columns[0].W, see mRadio Mod for example
+	  columns[0].a := 'ID';               // id
+	  columns[1].a := 'Nick';             // имя
+	  columns[2].a := 'Graduated';        // выпуск
+	  columns[3].a := 'Faculty';          // факультет
+	  columns[0].w := 'ID';
+	  columns[1].w := 'Nick';
+	  columns[2].w := 'Graduated';
+	  columns[3].w := 'Faculty';
+	  csr.nSize       := SizeOf(csr);
+	  csr.nFieldCount := 4;
+	  csr.szFields    := @columns;
+	  csr.psr.cbSize  := 0; // sending just column names
+	  ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SEARCHRESULT, SearchID, DWord(@csr));
+
+    while Pos('<div class="result clearFix">', HTML) > 0 do
+    begin
+      FriendDetails_temp := TextBetweenTagsAttrInc(HTML, 'div', 'class', 'result clearFix');
+      Delete(HTML, 1, Pos('<div class="result clearFix">', HTML) + 10);
+		  FriendID := TextBetween(FriendDetails_temp, 'friend.php?id=', '">');
+		  FriendDetails_temp := TextBetweenInc(FriendDetails_temp,'div class="info"','</li>');
+
+		  FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<dt>Имя:', '<dt>')));
+		  if FriendFullName = '' Then
+			  FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<dt>Имя:', '</dd>')));
+		  FriendFullName := HTMLDecode(Trim(FriendFullName));
+		  FriendGraduated := TextBetween(FriendDetails_temp, '<dt>Выпуск:', '<dt>');
+		  FriendGraduated := Trim(HTMLRemoveTags(HTMLDecode(FriendGraduated)));
+		  if Pos('&nbsp', FriendDetails_temp) > 0 then
+			  FriendFaculty := TextBetween(FriendDetails_temp, '<dt>Факультет:', '&nbsp')
+		  else
+			  FriendFaculty := TextBetween(FriendDetails_temp, '<dt>Факультет:', '</dd>');
+		  FriendFaculty := Trim(HTMLRemoveTags(HTMLDecode(FriendFaculty)));
+		  // FriendSecID := TextBetween(FoundTemp.Strings[i], '&amp;h=', '">Добавить в друзья');
+		  FriendStatus := TextBetween(FriendDetails_temp, '<span class=''bbb''>', '</span>');
+
+		  if TryStrToInt(FriendID, TempInteger) and (FriendID<>'') and (FriendFullName<>'') then
+		  begin
+			  FillChar(csr, sizeof(csr), 0);
+			  csr.psr.cbSize := sizeOf(csr.psr);
+			  csr.psr.nick := StrNew(PChar(FriendID));
+			  csr.psr.firstName := StrNew(PChar(FriendFullName));
+			  csr.psr.lastName := StrNew(PChar(FriendGraduated));
+			  csr.psr.email := StrNew(PChar(FriendFaculty));
+			  csr.psr.id := TempInteger;
+			  // csr.psr.SecureID := StrNew(PChar(FriendSecID));
+			  if FriendStatus = 'Online' then
+			    csr.psr.Status := ID_STATUS_ONLINE
+			  else
+			    csr.psr.Status := ID_STATUS_OFFLINE;
+
+			  columns[0].a := PChar(FriendID);
+			  columns[1].a := PChar(FriendFullName);
+			  columns[2].a := PChar(FriendGraduated);
+			  columns[3].a := PChar(FriendFaculty);
+			  columns[0].w := PWideChar(WideString(FriendID));
+			  columns[1].w := PWideChar(WideString(FriendFullName));
+			  columns[2].w := PWideChar(WideString(FriendGraduated));
+			  columns[3].w := PWideChar(WideString(FriendFaculty));
+
+			  csr.nSize       := SizeOf(csr);
+			  csr.nFieldCount := 4;
+			  csr.szFields    := @columns;
+
+			  // add contacts to search results
+			  // ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_DATA, SearchID, lParam(@csr.hdr.psr));  // this line is for miranda older than 0.7.0.0
+			  ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SEARCHRESULT, SearchID, DWord(@csr));
+      end;
     end;
-
-    if Assigned(iHTTP) Then
-    Begin
-      // for unicode should use columns[0].W, see mRadio Mod for example
-      columns[0].a := 'ID';               // id
-      columns[1].a := 'Nick';             // имя
-      columns[2].a := 'Graduated';        // выпуск
-      columns[3].a := 'Faculty';          // факультет
-      columns[0].w := 'ID';
-      columns[1].w := 'Nick';
-      columns[2].w := 'Graduated';
-      columns[3].w := 'Faculty';
-      csr.nSize       := SizeOf(csr);
-      csr.nFieldCount := 4;
-      csr.szFields    := @columns;
-      csr.psr.cbSize  := 0; // sending just column names
-      ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SEARCHRESULT, SearchID, DWord(@csr));
-
-      FoundTemp := getElementsByAttr(iHTTP, 'div', 'classname', 'result clearFix');
-      if FoundTemp.Count > 0 then
-        for i := 0 to FoundTemp.Count - 1 do
-        Begin
-
-          FriendDetails_temp := TextBetweenInc(FoundTemp.Strings[i],'<DIV class=info','</LI>');
-
-          FriendID := TextBetween(FriendDetails_temp, 'friend.php?id=', '">');
-          FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<DT>Имя:', '<DT>')));
-          if FriendFullName = '' Then
-            FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<DT>Имя:', '</DD>')));
-          FriendFullName := HTMLDecode(Trim(FriendFullName));
-          FriendGraduated := TextBetween(FriendDetails_temp, '<DT>Выпуск:', '<DT>');
-          FriendGraduated := Trim(HTMLRemoveTags(HTMLDecode(FriendGraduated)));
-          if Pos('&nbsp', FriendDetails_temp) > 0 then
-            FriendFaculty := TextBetween(FriendDetails_temp, '<DT>Факультет:', '&nbsp')
-          else
-            FriendFaculty := TextBetween(FriendDetails_temp, '<DT>Факультет:', '</DD>');
-          FriendFaculty := Trim(HTMLRemoveTags(HTMLDecode(FriendFaculty)));
-          // FriendSecID := TextBetween(FoundTemp.Strings[i], '&amp;h=', '">Добавить в друзья');
-          FriendStatus := TextBetween(FriendDetails_temp, '<span class=''bbb''>', '</span>');
-
-          if TryStrToInt(FriendID, TempInteger) and (FriendID<>'') and (FriendFullName<>'') then
-          begin
-            FillChar(csr, sizeof(csr), 0);
-            csr.psr.cbSize := sizeOf(csr.psr);
-            csr.psr.nick := StrNew(PChar(FriendID));
-            csr.psr.firstName := StrNew(PChar(FriendFullName));
-            csr.psr.lastName := StrNew(PChar(FriendGraduated));
-            csr.psr.email := StrNew(PChar(FriendFaculty));
-            csr.psr.id := TempInteger;
-            // csr.psr.SecureID := StrNew(PChar(FriendSecID));
-            if FriendStatus = 'Online' then
-              csr.psr.Status := ID_STATUS_ONLINE
-            else
-              csr.psr.Status := ID_STATUS_OFFLINE;
-
-            columns[0].a := PChar(FriendID);
-            columns[1].a := PChar(FriendFullName);
-            columns[2].a := PChar(FriendGraduated);
-            columns[3].a := PChar(FriendFaculty);
-            columns[0].w := PWideChar(WideString(FriendID));
-            columns[1].w := PWideChar(WideString(FriendFullName));
-            columns[2].w := PWideChar(WideString(FriendGraduated));
-            columns[3].w := PWideChar(WideString(FriendFaculty));
-
-            csr.nSize       := SizeOf(csr);
-            csr.nFieldCount := 4;
-            csr.szFields    := @columns;
-
-            // add contacts to search results
-            // ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_DATA, SearchID, lParam(@csr.hdr.psr));  // this line is for miranda older than 0.7.0.0
-            ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SEARCHRESULT, SearchID, DWord(@csr));
-          End;
-        End;
       // search finished successfully
-      ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SUCCESS, SearchID, 0);
-    End
-    Else // search failed, but we say that it is OK, since miranda doesn't support search failure - ACKRESULT_FAILED
-      ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SUCCESS, SearchID, 0);
-
-  End;
-  CoUninitialize();
+    ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SUCCESS, SearchID, 0);
+  end
+  else // search failed, but we say that it is OK, since miranda doesn't support search failure - ACKRESULT_FAILED
+    ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SUCCESS, SearchID, 0);
 end;
 
 // =============================================================================
