@@ -3,13 +3,8 @@ unit htmlparse;
 interface
 
 uses
-  SysUtils, Variants,
-  MSHTML_TLB,
+  SysUtils,
   Classes;
-
-  function getElementsByAttr(iDoc: IHTMLDocument2; iTagName, iAttribute, iValue: String): TStringList;
-  function getElementsByTagName(iDoc: IHTMLDocument2; iTagName: String): TStringList;
-  function getElementsByAttrPart(iDoc: IHTMLDocument2; iTagName, iAttribute, iValuePart: String): TStringList;
 
   function TextBetweenInc(WholeText: string; BeforeText: string; AfterText: string): string;
   function TextBetween(WholeText: string; BeforeText: string; AfterText: string): string;
@@ -17,6 +12,7 @@ uses
   function FindFullLine(Line: string; List: TStringList; StartAt: Integer): Integer;
   function LastPos(ASearch: string; AText: string): Integer;
   function URLEncode(const AStr: string): string;
+  function URLDecode(const AStr: string): string;  
   function HTMLRemoveTags(const Value: string): string;
   function HTMLDecode(const Value: string): string;
   function TextBetweenTagsInc(WholeText, Tag: string): string;
@@ -30,91 +26,6 @@ var
   RemainingText: string;
 
 implementation
-
-function getElementsByAttr(iDoc: IHTMLDocument2; iTagName, iAttribute, iValue: String): TStringList;
-var
-    iDisp: IDispatch;
-    iElement:IHTMLElement;
-    i:integer;
-
-begin
-  getElementsByAttr := TStringList.Create();
-  if not Assigned(iDoc) then begin
-    getElementsByAttr.Clear;
-    Exit;
-  end;
-
-  for i:=1 to iDoc.All.Get_length do
-  begin
-    iDisp := iDoc.Get_all.item(pred(i), 0);
-    iDisp.QueryInterface(IHTMLElement, iElement);
-     if Assigned(iElement) then
-     begin
-         If UpperCase(iElement.Get_tagName) = UpperCase(iTagName) Then
-           If iElement.getAttribute(iAttribute, 0) <> null then
-              If UpperCase(iElement.getAttribute(iAttribute, 0)) = UpperCase(iValue) Then
-                 getElementsByAttr.Add(iElement.outerHTML);
-    end;
-  end;
-
-end;
-
-
-function getElementsByAttrPart(iDoc: IHTMLDocument2; iTagName, iAttribute, iValuePart: String): TStringList;
-var
-    iDisp: IDispatch;
-    iElement:IHTMLElement;
-    i:integer;
-
-begin
-  getElementsByAttrPart := TStringList.Create();
-  if not Assigned(iDoc) then begin
-    getElementsByAttrPart.Clear;
-    Exit;
-  end;
-
-  for i:=1 to iDoc.All.Get_length do
-  begin
-    iDisp := iDoc.Get_all.item(pred(i), 0);
-    iDisp.QueryInterface(IHTMLElement, iElement);
-     if Assigned(iElement) then
-     begin
-         If UpperCase(iElement.Get_tagName) = UpperCase(iTagName) Then
-           If iElement.getAttribute(iAttribute, 0) <> null then
-              If Pos(UpperCase(iValuePart), UpperCase(iElement.getAttribute(iAttribute, 0))) > 0 Then
-                 getElementsByAttrPart.Add(iElement.outerHTML);
-    end;
-  end;
-
-end;
-
-
-function getElementsByTagName(iDoc: IHTMLDocument2; iTagName: String): TStringList;
-var
-    iDisp: IDispatch;
-    iElement:IHTMLElement;
-    i:integer;
-
-begin
-  getElementsByTagName := TStringList.Create();
-  if not Assigned(iDoc) then begin
-    getElementsByTagName.Clear;
-    Exit;
-  end;
-
-  for i:=1 to iDoc.All.Get_length do
-  begin
-    iDisp := iDoc.Get_all.item(pred(i), 0);
-    iDisp.QueryInterface(IHTMLElement, iElement);
-     if Assigned(iElement) then
-     begin
-         If UpperCase(iElement.Get_tagName) = UpperCase(iTagName) Then
-            getElementsByTagName.Add(iElement.innerHTML);
-     end;
-  end;
-
-end;
-
 
 // ****************************************************************************
 // String functions
@@ -498,27 +409,29 @@ begin
 end;
 
 // ****************************************************************************
-// Test functions
+// URL decode function
 // ****************************************************************************
-
-function Test():boolean;
-// var
-  // stm: TMemoryStream;
-  // sa: TStreamAdapter;
-  // psi:
+function URLDecode(const AStr: string): string;
+const HexChar = '0123456789ABCDEF';
+var I,J: integer;
 begin
-  Result := True;
-{  stm := TMemoryStream.Create();
-//   CComPtr<IPersistStreamInit> psi;
-  stm.Seek(0, soFromBeginning);
-   sa := TStreamAdapter.Create(stm);
-   WB.Document.QueryInterface(IID_IPersistStreamInit,(LPVOID*)&psi);
-     if (psi)
-            psi.Save(sa^, true);
-        stm.Seek(0, soFromBeginning);
-        Memo1.Lines.LoadFromStream(stm);
-        stm.free;
-        }
+  SetLength(Result, Length(AStr));
+  I:=1;
+  J:=1;
+  while (I <= Length(AStr)) do
+  begin
+    if (AStr[I] = '%') and (I+2 < Length(AStr)) then
+    begin
+      Result[J] := chr(((pred(Pos(AStr[I+1],HexChar)))shl 4) or (pred(Pos(AStr[I+2],HexChar))));
+      Inc(I, 2);
+    end
+    else
+      Result[J] := AStr[I];
+    Inc(I);
+    Inc(J);
+  end;
+  SetLength(Result, pred(J));
 end;
+
 
 end.

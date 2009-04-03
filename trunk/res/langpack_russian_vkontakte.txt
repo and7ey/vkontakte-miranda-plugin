@@ -159,7 +159,7 @@
 [Display Additional status for offline contacts]
 Отображать Дополнительный статус для контактов Не в сети
 [Use the following group by default for new contacts]
-Помещать новые контакты в следующую группу
+Помещать новые контакты в группу
 [Advanced (continued)]
 Дополнительно (продолжение)
 [Create new VKontakte account]
@@ -320,8 +320,8 @@
 Запросить авторизацию
 [Enter an authorization request]
 Текст запроса авторизации
-[Use local time for incoming messages]
-Использовать локальное время для входящих сообшений
+[Use local time for incoming messages and wall posts]
+Использовать локальное время для входящих сообшений и стены 
 [Show popups]
 Показывать всплывающие окна
 [Popups]
@@ -444,3 +444,16 @@
 Изображение было успешно опубликовано
 [Thank you for usage of VKontakte plugin!\r\n\r\nWould you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?\r\nIf you press Cancel now, the same question will be asked again during next Miranda start.]
 Спасибо за использование плагина ВКонтакте!\r\n\r\nХотите ли Вы вступить в группу ВКонтакте, посвященную плагину (http://vkontakte.ru/club6929403)?\r\nВы можете выбрать Отмена сейчас - тогда этот вопрос будет задан еще раз при следующем запуске Миранды.
+[The wall]
+Стена
+[Read messages from the wall]
+Считывать новые сообщения со стены
+[Read messages each]
+Считывать сообщение каждые
+[Graffiti]
+Граффити
+[Don't delete contacts from the server]
+Не удалять контакты с сервера при удалении из списка
+[Update status for non-friend contacts]
+Обновлять статус контактов не-друзей
+

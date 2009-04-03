@@ -295,6 +295,17 @@ begin
         val := DBGetContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, 0);
         CheckDlgButton(dialog, VK_OPT_LOCALTIME_FOR_INC_MSGS, val);
 
+        val := DBGetContactSettingByte(0, piShortName, opt_UserDontDeleteFriendsFromTheServer, 0);
+        CheckDlgButton(dialog, VK_OPT_DONT_DELETE_CONTACTS, val);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_UserNonFriendsStatusSupport, 0);
+        CheckDlgButton(dialog, VK_OPT_UPDATE_STATUS_NONFRIENDS, val);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_UserWallReadSupport, 1);
+        CheckDlgButton(dialog, VK_OPT_WALLSUPPORT, val);
+
+        SetDlgItemInt(dialog, VK_OPT_WALLUPD_SEC, DBGetContactSettingDWord(0, piShortName, opt_WallUpdateFreq, 7200), true);
+
         // send Changed message - make sure we can save the dialog
         SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
 
@@ -321,6 +332,15 @@ begin
             DBWriteContactSettingByte (0, piShortName, opt_UserAddlStatusForOffline, Byte(IsDlgButtonChecked(dialog, VK_OPT_ADDLSTATUS_FOR_OFFLINE)));
 
             DBWriteContactSettingByte (0, piShortName, opt_UserUseLocalTimeForIncomingMessages, Byte(IsDlgButtonChecked(dialog, VK_OPT_LOCALTIME_FOR_INC_MSGS)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_UserDontDeleteFriendsFromTheServer, Byte(IsDlgButtonChecked(dialog, VK_OPT_DONT_DELETE_CONTACTS)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_UserNonFriendsStatusSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_UPDATE_STATUS_NONFRIENDS)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_UserWallReadSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_WALLSUPPORT)));
+
+            val := GetDlgInt(dialog, VK_OPT_WALLUPD_SEC);
+            DBWriteContactSettingDWord (0, piShortName, opt_WallUpdateFreq, val);
 
             Result:=True;
           end;

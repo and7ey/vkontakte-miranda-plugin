@@ -48,17 +48,14 @@ uses
   vk_xstatus, // module to support additional status
   vk_opts, // my unit to work with options
   vk_popup, // module to support popups
+  vk_wall, // module to work with the wall
 
-  MSHTML_TLB, // module to parse html
   htmlparse, // module to simplify html parsing
 
   Windows,
   Messages,
   SysUtils,
   Classes,
-  ComObj,
-  ActiveX,
-  Variants,
   ShellAPI,
   StrUtils,
   Commctrl;
@@ -397,7 +394,18 @@ begin
     // assign group for contact, if given in settings
     DefaultGroup := DBReadString(0, piShortName, opt_UserDefaultGroup, nil);
     if DefaultGroup<>'' then
-      DBWriteContactSettingUnicode(hContactNew, 'CList', 'Group', PWideChar(DefaultGroup));
+    begin
+      if bMirandaUnicode then
+      begin
+        PluginLink^.CallService(MS_CLIST_GROUPCREATE, 0, Windows.lParam(DefaultGroup));
+        DBWriteContactSettingUnicode(hContactNew, 'CList', 'Group', PWideChar(DefaultGroup));
+      end
+      else
+      begin
+        PluginLink^.CallService(MS_CLIST_GROUPCREATE, 0, Windows.lParam(DefaultGroup)); // should we apply UTF8Decode to DefaultGroup?
+        DBWriteContactSettingString(hContactNew, 'CList', 'Group', PChar(DefaultGroup));
+      end;
+    end;
   End;
   CallService(MS_PROTO_ADDTOCONTACT, hContactNew, lParam(PChar(piShortName)));
 
@@ -963,6 +971,21 @@ begin
         if Terminated = True or // one more time...
           Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
             break;
+
+        // checking for new posts on the wall
+        if DBGetContactSettingByte(0, piShortName, opt_UserWallReadSupport, 1) = 1 then
+        begin
+          if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_WallLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_WallUpdateFreq, 60)) / SecsPerDay then
+          begin
+            // write new value of last date & time of posts received
+            DBWriteContactSettingDWord (0, piShortName, opt_WallLastUpdateDateTime, DateTimeToFileDate(Now));
+            vk_WallGetMessages(0);
+          end;
+        end;
+        if Terminated = True or // one more time...
+          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+            break;
+
       end;
 
       // keep status online, if required

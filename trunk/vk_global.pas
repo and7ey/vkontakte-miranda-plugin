@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 1 shl 16 + 9 shl 8 + 4;
+  piVersion = 0 shl 24 + 2 shl 16 + 0 shl 8 + 0;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -53,7 +53,8 @@ const
 
 const
   // URLs
-  vk_url = 'http://vkontakte.ru';
+  vk_url_host = 'vkontakte.ru';
+  vk_url = 'http://' + vk_url_host;
   // vk_url_pda = 'http://pda.vkontakte.ru';
   vk_url_pda_login = vk_url + '/login.php?pda=index&email=%s&pass=%s&expire=0';
   vk_url_feed_friendsonline = vk_url + '/friendJS.php?act=online';
@@ -160,10 +161,10 @@ const
   opt_NewsLastNewsDateTime: PChar = 'NewsLastNewsDateTime';
   opt_NewsSeparateContactID: PChar = 'NewsSeparateContactID';
   opt_NewsSeparateContactName: PChar = 'NewsSeparateContactName';
-  opt_LastUpdateDateTimeMsgs: PChar = 'LastUpdateDateTimeMsgs';
-  opt_LastUpdateDateTimeFriendsStatus: PChar = 'LastUpdateDateTimeFriendsStatus';
-  opt_LastUpdateDateTimeKeepOnline: PChar = 'LastUpdateDateTimeKeepOnline';
-  opt_LastUpdateDateTimeAvatars: PChar = 'LastUpdateDateTimeAvatars';
+  opt_LastUpdateDateTimeMsgs: PChar = 'MsgIncLastUpdateDateTime';
+  opt_LastUpdateDateTimeFriendsStatus: PChar = 'FriendsStatusLastUpdateDateTime';
+  opt_LastUpdateDateTimeKeepOnline: PChar = 'KeepOnlineLastUpdateDateTime';
+  opt_LastUpdateDateTimeAvatars: PChar = 'AvatarsLastUpdateDateTime';
   opt_PopupsEnabled: PChar = 'PopupsEnabled';
   opt_PopupsDelaySecs: PChar = 'PopupsDelaySecs';
   opt_PopupsDelayOption: PChar = 'PopupsDelayOption';
@@ -175,6 +176,10 @@ const
   opt_PopupsProtoIcon: PChar = 'PopupsProtoIcon';
   opt_PopupsWallShowStatus: PChar = 'PopupsWallShowStatus';
   opt_WallMessagesWord: PChar = 'WallMessagesWord';
+  opt_WallLastUpdateDateTime: PChar = 'WallLastUpdateDateTime';
+  opt_WallLastPostID: PChar = 'WallLastPostID';
+  opt_WallUpdateFreq: PChar = 'WallUpdateFreqSecs';
+  opt_UserWallReadSupport: PChar = 'WallReadSupport';
   opt_GroupPluginJoined: PChar = 'GroupPluginJoined';
 
 type

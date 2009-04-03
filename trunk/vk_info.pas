@@ -452,6 +452,7 @@ begin
      end;
 
      // ICQ
+     DBDeleteContactSetting(hContact, piShortName, 'About');
      StrTemp := TextBetween(ContactInfo,'<td class="label">ICQ:</td>', '</td>');
      if StrTemp <> '' then
      begin
@@ -459,7 +460,7 @@ begin
        StrTemp := Trim(HTMLRemoveTags(StrTemp));
        if Trim(StrTemp) <> '' Then
        begin
-         StrTemp := 'ICQ ' + StrTemp;
+         StrTemp := 'ICQ ' + StrTemp + #13#10;
          DBWriteContactSettingString(hContact, piShortName, 'About', PChar(StrTemp));
        end;
      end;
@@ -473,7 +474,7 @@ begin
        StrTemp := Trim(HTMLDecode(StrTemp));
        if StrTemp <> '' then
        begin
-         StrTemp := DBReadString(hContact, piShortName, 'About', '') + #13#10 + StrTemp;
+         StrTemp := DBReadString(hContact, piShortName, 'About', '') + StrTemp;
          DBWriteContactSettingString(hContact, piShortName, 'About', PChar(StrTemp));
        end;
      end;

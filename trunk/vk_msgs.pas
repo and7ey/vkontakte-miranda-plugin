@@ -37,6 +37,7 @@ interface
   procedure MsgsDestroy();
   procedure vk_GetMsgsFriendsEtc();
   procedure vk_GetNews();
+  function vk_ReceiveMessage(FromID: THandle; MsgText: String; MsgDate: TDateTime): Boolean;  
 
 implementation
 
@@ -52,12 +53,8 @@ uses
   htmlparse, // module to simplify html parsing
   vk_core, // module with core functions
 
-  MSHTML_TLB, // module to parse html
   uLkJSON, // module to parse data from feed2.php (in JSON format)
 
-  ComObj,
-  ActiveX,
-  Variants,
   Windows,
   SysUtils,
   Classes;
@@ -115,31 +112,16 @@ function vk_SendMessage(ToID: Integer; Text: String): Byte;
 // 2 - msgs sent two often
 var SecureId: String; // temp variable to keep secure id needed for msg sending
     HTML: String; // html content of the page received
-
-    iHTTP: IHTMLDocument2; // these 2 variables required for
-    v: Variant;            // String -> IHTMLDocument2 conversions
-
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) Sending new message to id '+ IntToStr(ToID) +', message text: '+Text));
   Result := 1;
   if ToID > 0 Then
   Begin
-    CoInitialize(nil);  // since this function is called in a separate thread,
-                        // this code is mandatory for CreateComObject function
-
     // we need to get secure id first, otherwise it is not possible to send msg
     Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... getting secure id'));
     HTML := HTTP_NL_Get(Format(vk_url_pda_sendmsg_secureid, [ToID]));
-    try
-      iHTTP := CreateComObject(Class_HTMLDocument) as IHTMLDocument2;
-      v := VarArrayCreate([0,0], VarVariant);
-      v[0] := HTML;
-      iHTTP.Write(PSafeArray(System.TVarData(v).VArray));
-    except
-      iHTTP := nil;
-    end;
 
-    If Assigned(iHTTP) Then
+    If Trim(HTML) <> '' Then
     Begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... page with secure id downloaded successfully'));
       // SecureId := TextBetween(getElementsByAttr(iHTTP, 'input', 'name', 'chas')[0], 'value=', ' '); // <input type="hidden" name="secure" value="272c812340fd0d5aaa4e"/>
@@ -178,7 +160,6 @@ begin
       End;
     End;
 
-    CoUninitialize();
   End;
 end;
 
@@ -243,9 +224,6 @@ var HTML: AnsiString; // html content of the pages received
 
 begin
  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Checking for new incoming messages, new authorization requests (friends) etc...'));
-
- CoInitialize(nil);  // since this function is called in a separate thread,
-                      // this code is mandatory for CreateComObject function
 
   // check for presence of new messages, friends etc. via the feed
  HTML := HTTP_NL_Get(vk_url_feed2);
@@ -429,7 +407,6 @@ begin
    End;
  End;
 
- CoUninitialize();
  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking for new authorization requests finished'));
 
 end;
