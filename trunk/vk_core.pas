@@ -230,42 +230,27 @@ begin
   end;
 end;
 
-// =============================================================================
-// function to inform user about something
-// the following values of uType are possible:
-//  MB_ICONWARNING
-//    An exclamation-point icon appears in the message box.
-//  MB_ICONINFORMATION
-//    An icon consisting of a lowercase letter i in a circle appears in the message box.
-//  MB_ICONASTERISK
-//    An icon consisting of a lowercase letter i in a circle appears in the message box.
-//  MB_ICONSTOP
-//     A stop-sign icon appears in the message box.
-// -----------------------------------------------------------------------------
-{procedure MessageUser(lpText: String; uType: Integer);
-begin
-    // for future popup purposes
-    //  if (!ShowPopUpMsg(NULL, szLevelDescr[level], szMsg, (BYTE)level))
-    //    return; // Popup showed successfuly
-    //
-   MessageBox(0, Translate(PChar(lpText)), Translate(piShortName), MB_OK + uType);
-end;}
 
 // =============================================================================
 // function to change the status
 // -----------------------------------------------------------------------------
 function vk_SetStatus(NewStatus: Integer): Integer;
 begin
-  if NewStatus = vk_Status then // if new status is equal to current status
+  if Assigned(ThrIDConnect) then
   begin
-     result := 0;
+    Result := 1; // failed, since status change is already in progress
+    exit;
+  end;
+  if (NewStatus = vk_Status) then // if new status is equal to current status
+  begin
+     Result := 0; // ok, but has nothing to do
      exit;
   end;
   vk_StatusPrevious := vk_Status;
   vk_Status := NewStatus;
   // plugin doesn't support all statuses, but Miranda may try to
   // setup unsupported status (for ex., when user presses Ctrl+0..9)
-  // so, we should have the following line
+  // so, we should have the following lines
   if (vk_Status = ID_STATUS_AWAY) or
      (vk_Status = ID_STATUS_DND) or
      (vk_Status = ID_STATUS_NA) or
@@ -278,7 +263,12 @@ begin
    end;
 
   if not Assigned(ThrIDConnect) then
-    ThrIDConnect := TThreadConnect.Create(False); // initiate new thread for connection & status update
+  begin
+    // initiate new thread for connection & status update
+    ThrIDConnect := TThreadConnect.Create(True);
+    ThrIDConnect.FreeOnTerminate := True; // we can automatically terminate the thread
+    ThrIDConnect.Resume;          // since result is not so important
+  end;
 
   Result := 0;
 end;
@@ -601,55 +591,68 @@ begin
 
   // at this moment array Friends contains our list of friends at the server
 
+
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... updating contacts status in miranda list...'));
+
   // checking each contact in our Miranda's list
   hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
 	while hContact <> 0 do
   begin
+    if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or
+       (ThrIDDataUpdate.Terminated) then
+    begin
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... miranda is being terminated, status update finished'));
+      break;
+    end;
     // by default MS_DB_CONTACT_FINDFIRST returns all contacts found
     // next line verifies that found contact belongs to our protocol
     if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PChar(piShortName))) <> 0 Then
     begin
-      // make all our contacts in Miranda by default not Friends
-  		DBWriteContactSettingByte(hContact, piShortName, 'Friend', 0);
+      // if it is not our separate News contact or The wall contact
+      if (DBGetContactSettingDWord(hContact, piShortName, 'ID', 0) <> DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234)) and
+         (DBGetContactSettingDWord(hContact, piShortName, 'ID', 0) <> DBGetContactSettingDWord(0, piShortName, opt_WallSeparateContactID, 666)) then
+      begin
+        // make all our contacts in Miranda by default not Friends
+  		  DBWriteContactSettingByte(hContact, piShortName, 'Friend', 0);
 
-      // updating status & nick of existing contacts
-      for i:=Low(Friends) to High(Friends) do
-        if (Friends[i].ID = DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)) and (Friends[i].ID <> 0) Then
-        begin
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Updating data of existing contact, id: '+IntToStr(Friends[i].ID)+', nick: '+Friends[i].Name));
-          Friends[i].InList := True;
-          DBWriteContactSettingString(hContact, piShortName, 'Nick', PChar(Friends[i].Name));
-      		DBWriteContactSettingByte(hContact, piShortName, 'Friend', 1); // found on server list - making friend
-          if Friends[i].Deleted Then
-            DBWriteContactSettingByte(hContact, 'CList', 'Hidden', 1);
-          if Friends[i].Online then
-            SetContactStatus(hContact, ID_STATUS_ONLINE)
-          else
-            SetContactStatus(hContact, ID_STATUS_OFFLINE);
-          Break;
-        end;
-      // if contact is not found in the server's list
-      if DBGetContactSettingByte(hContact, piShortName, 'Friend', 1) = 0 then
-        if DBGetContactSettingByte(0, piShortName, opt_UserNonFriendsStatusSupport, 0) = 1 then // check status of non-friends?
-        begin
-          SetContactStatus(hContact,
-                           vk_GetContactStatus(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)));
-        end;
-
+        // updating status & nick of existing contacts
+        for i:=Low(Friends) to High(Friends) do
+          if (Friends[i].ID = DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)) and (Friends[i].ID <> 0) Then
+          begin
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Updating data of existing contact, id: '+IntToStr(Friends[i].ID)+', nick: '+Friends[i].Name));
+            Friends[i].InList := True;
+            DBWriteContactSettingString(hContact, piShortName, 'Nick', PChar(Friends[i].Name));
+      	   	DBWriteContactSettingByte(hContact, piShortName, 'Friend', 1); // found on server list - making friend
+            if Friends[i].Deleted Then
+              DBWriteContactSettingByte(hContact, 'CList', 'Hidden', 1);
+            if Friends[i].Online then
+              SetContactStatus(hContact, ID_STATUS_ONLINE)
+            else
+              SetContactStatus(hContact, ID_STATUS_OFFLINE);
+            Break;
+          end;
+        // if contact is not found in the server's list
+        if DBGetContactSettingByte(hContact, piShortName, 'Friend', 1) = 0 then
+          if DBGetContactSettingByte(0, piShortName, opt_UserNonFriendsStatusSupport, 0) = 1 then // check status of non-friends?
+          begin
+            SetContactStatus(hContact,
+                             vk_GetContactStatus(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)));
+          end;
+      end;
     end;
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
 	end;
-
   // probably, new Friends appeared on the server - should add them to contact list
   for i:=0 to High(Friends) do
-    if Not Friends[i].InList Then
-    Begin
-      if Friends[i].Online Then
+  begin
+    if not Friends[i].InList then
+    begin
+      if Friends[i].Online then
           vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_ONLINE, 1)
-      Else
+      else
           vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_OFFLINE, 1);
-    End;
-
+    end;
+  end;
   SetLength(Friends, 0);
 
   vk_StatusAdditionalGet(); // get additional statuses of friends
@@ -761,15 +764,13 @@ end;
 // -----------------------------------------------------------------------------
 procedure UpdateDataDestroy();
 begin
- if Assigned(ThrIDDataUpdate) then
- begin
-   ThrIDDataUpdate.Terminate;
-   ThrIDDataUpdate.WaitFor;
- end;  
- if Assigned(ThrIDDataUpdate) then
-   FreeAndNil(ThrIDDataUpdate);
+  if Assigned(ThrIDDataUpdate) then
+    begin
+      ThrIDDataUpdate.Terminate;
+      ThrIDDataUpdate.WaitFor;
+      FreeAndNil(ThrIDDataUpdate);
+    end;
 end;
-
 
 // =============================================================================
 // connection thread
@@ -805,7 +806,8 @@ begin
         THANDLE(vk_StatusPrevious),
         vk_Status);
       // connecting to the server
-      vk_Status := vk_Connect();
+      if not Terminated then // doing it only if thread is not being terminated
+        vk_Status := vk_Connect();
       if vk_Status <> 0 Then // error occuried
       begin
           vk_Status := ID_STATUS_OFFLINE; // need to change status to offline
@@ -821,6 +823,9 @@ begin
           vk_Status := vk_Status_Temp;
     End;
 
+  if Terminated then // if thread should be terminated (for ex., if miranda is being closed)
+    exit;
+
   // really change the status
   ProtoBroadcastAck(piShortName,
     0,
@@ -831,7 +836,9 @@ begin
 
   // the code below should be executed only AFTER we informed miranda
   // that status is changed - otherwise other plugins are informed incorrectly
-  if vk_Status = ID_STATUS_OFFLINE Then
+  if (vk_Status = ID_STATUS_OFFLINE) and
+     (not Terminated) and
+     (not Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0))) then
   begin
     UpdateDataDestroy(); // stop the thread for regular data update
     SetStatusOffline(); // make all contacts offline
@@ -841,22 +848,25 @@ begin
     vk_Logout(); // logout from the site
   if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
   begin
-    vk_GetUserNameID(); // update OUR name and id
+    if not Terminated then
+      vk_GetUserNameID(); // update OUR name and id
     // user agreed to join plugin's group (see OnModulesLoad)
     if DBGetContactSettingByte(0, piShortName, opt_GroupPluginJoined, 0) = 2 then
     begin
       DBWriteContactSettingByte (0, piShortName, opt_GroupPluginJoined, 3);
-      vk_JoinGroup(6929403); // id of plugins group
+      if not Terminated then
+        vk_JoinGroup(6929403); // id of plugins group
     end;
     // write default value of last date & time of contacts' status update
     // so they will be updated again immediately in DataUpdate thread
     DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeFriendsStatus, 539033600);
-    UpdateDataInit(); // start separate thread for online data update
+    if not Terminated then // doing it only if thread is not being terminated
+      UpdateDataInit(); // start separate thread for online data update
   end;
 
-  PluginLink^.CallService(MS_SYSTEM_THREAD_POP, 0, 0);
-
   ThrIDConnect := nil;
+
+  PluginLink^.CallService(MS_SYSTEM_THREAD_POP, 0, 0);
 
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadConnect) ... thread finished'));
 end;
@@ -867,7 +877,8 @@ end;
 procedure TThreadDataUpdate.Execute;
 var
   ThreadNameInfo: TThreadNameInfo;
-  NewsContactID: Integer;
+  ContactIDNews,
+  ContactIDWall: Integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Thread started...'));
 
@@ -880,22 +891,34 @@ begin
   except
   end;
 
+  // PluginLink^.CallService(MS_SYSTEM_THREAD_PUSH, 0, 0);
+
   // detecting news id handle
   if DBGetContactSettingByte(0, piShortName, opt_NewsSupport, 1) = 1 then
   begin
     // we need it only if getting news in a separate contact
     if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
     begin
-      NewsContactID := DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234);
-      NewsContactID := GetContactByID(NewsContactID);
+      ContactIDNews := DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234);
+      ContactIDNews := GetContactByID(ContactIDNews);
+    end;
+  end;
+  // detecting wall id handle
+  if DBGetContactSettingByte(0, piShortName, opt_WallReadSupport, 1) = 1 then
+  begin
+    // we need it only if getting wall messages in a separate contact
+    if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
+    begin
+      ContactIDWall := DBGetContactSettingDWord(0, piShortName, opt_WallSeparateContactID, 666);
+      ContactIDWall := GetContactByID(ContactIDWall);
     end;
   end;
 
   while true do // never ending cycle
   begin
     try
-      if Terminated = True or // if thread termination is requested OR
-        Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then // miranda is being closed
+      if (Terminated) or // if thread termination is requested OR
+        (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then // miranda is being closed
           break;
       if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) then // additional check that current status is online or invisible
       begin                                                                       // however this thread should be run only when status is online or invisible
@@ -906,8 +929,8 @@ begin
             DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeFriendsStatus, DateTimeToFileDate(Now));
             vk_GetFriends();
         end;
-        if Terminated = True or // check again if thread termination is requested OR
-          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then // miranda is being closed
+        if (Terminated) or // check again if thread termination is requested OR
+          (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then // miranda is being closed
             break;
 
         // checking for new messages received and for auth requests;   default value of last update is 539033600 = 1/1/1996 12:00 am
@@ -917,8 +940,8 @@ begin
             DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeMsgs, DateTimeToFileDate(Now));
             vk_GetMsgsFriendsEtc();
         end;
-        if Terminated = True or // one more time...
-          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+        if (Terminated) or // check again if thread termination is requested OR
+          (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then // miranda is being closed
             break;
 
         // updating avatars, if required
@@ -931,8 +954,8 @@ begin
               vk_AvatarsGet();
           end;
         end;
-        if Terminated = True or // one more time...
-          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+        if (Terminated) or // one more time...
+          (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
             break;
 
         // getting news, if required
@@ -940,56 +963,53 @@ begin
         begin
           // if we use separate contact for News, then make the contact online
           if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
-          begin
-            if DBGetContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_ONLINE then
-              DBWriteContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_ONLINE);
-          end;
+            SetContactStatus(ContactIDNews, ID_STATUS_ONLINE)
+          {else  // let's not do it to simplify
+            SetContactStatus(ContactIDNews, ID_STATUS_OFFLINE)};
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_NewsSecs, 300)) / SecsPerDay then
           begin
               // write new value of last date & time of new message received
               DBWriteContactSettingDWord (0, piShortName, opt_NewsLastUpdateDateTime, DateTimeToFileDate(Now));
-              {// if status is online, then make our separate news contact as online
-              if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
-              begin
-              if DBGetContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_ONLINE then
-              DBWriteContactSettingWord(ContactID, piShortName, 'Status', ID_STATUS_ONLINE);
-              end;}
               vk_GetNews();
           end;
         end
         else  // if news are not supported
         begin
-          // if we use separate contact for News, then make the contact offline
+          // if we used separate contact for News, then make the contact offline
           if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
-          begin
-            NewsContactID := DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234);
-            NewsContactID := GetContactByID(NewsContactID);
-            if DBGetContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_OFFLINE) <> ID_STATUS_OFFLINE then
-              DBWriteContactSettingWord(NewsContactID, piShortName, 'Status', ID_STATUS_OFFLINE);
-          end;
+            SetContactStatus(ContactIDNews, ID_STATUS_OFFLINE);
         end;
-        if Terminated = True or // one more time...
-          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+        if (Terminated) or // one more time...
+          (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
             break;
 
-        // checking for new posts on the wall
-        if DBGetContactSettingByte(0, piShortName, opt_UserWallReadSupport, 1) = 1 then
+        // checking for new messages on the wall
+        if DBGetContactSettingByte(0, piShortName, opt_WallReadSupport, 1) = 1 then
         begin
+          // if we use separate contact for The Wall, then make the contact online
+          if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
+            SetContactStatus(ContactIDWall, ID_STATUS_ONLINE);
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_WallLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_WallUpdateFreq, 60)) / SecsPerDay then
           begin
             // write new value of last date & time of posts received
             DBWriteContactSettingDWord (0, piShortName, opt_WallLastUpdateDateTime, DateTimeToFileDate(Now));
             vk_WallGetMessages(0);
           end;
+        end
+        else // wall messages are not supported
+        begin
+          // if we used separate contact for News, then make the contact offline
+          if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
+            SetContactStatus(ContactIDWall, ID_STATUS_OFFLINE);
         end;
-        if Terminated = True or // one more time...
-          Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+        if (Terminated) or // one more time...
+          (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
             break;
 
       end;
 
       // keep status online, if required
-      if (vk_Status = ID_STATUS_ONLINE) then
+      if (vk_Status = ID_STATUS_ONLINE) and (not Terminated) then
       begin
         if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeKeepOnline, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserKeepOnline, 360)) / SecsPerDay then
         begin
@@ -1003,6 +1023,8 @@ begin
     except
     end;
   end;
+
+  // PluginLink^.CallService(MS_SYSTEM_THREAD_POP, 0, 0);
 
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... thread finished'));
 end;

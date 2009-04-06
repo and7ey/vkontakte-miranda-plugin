@@ -431,10 +431,24 @@ end;
 
 // =============================================================================
 // function is run, when miranda is asking whether each plugin is ok to exit
+// miranda's shutdown sequence is the following:
+// ME_SYSTEM_OKTOEXIT: 40072 (online), netlib works, MS_SYSTEM_TERMINATED returns False
+// ME_SYSTEM_PRESHUTDOWN: 40071 (offline), netlib doesn't work, MS_SYSTEM_TERMINATED returns True
+// Unload: 40071 (offline), netlib doesn't work, MS_SYSTEM_TERMINATED returns True
 // -----------------------------------------------------------------------------
 function OkToExit(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
+  Netlib_Log(vk_hNetlibUser, PChar('(OkToExit) Starting to exit miranda...'));
+  if Assigned(ThrIDConnect) then
+    ThrIDConnect.Terminate; // just send a command to stop thread
+  UpdateDataDestroy(); // stop the thread for regular data update
+  SetStatusOffline(); // make all contacts offline
+  vk_Logout(); // logout from the site
+
+  Netlib_Log(vk_hNetlibUser, PChar('(OkToExit) ... ok to exit miranda'));
   Result := 0;
+
+
 end;
 
 // =============================================================================
@@ -442,6 +456,8 @@ end;
 // -----------------------------------------------------------------------------
 function PreShutdown(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
+  Netlib_Log(vk_hNetlibUser, PChar('(PreShutdown) Starting miranda pre-shutdown...'));
+  Netlib_Log(vk_hNetlibUser, PChar('(PreShutdown) ... miranda pre-shutdown is completed'));
   Result := 0;
 end;
 
@@ -450,9 +466,10 @@ end;
 // -----------------------------------------------------------------------------
 function Unload: int; cdecl;
 begin
-  // wait for thread completion
+  Netlib_Log(vk_hNetlibUser, PChar('(Unload) Starting to unload plugin...'));
+  // ask for thread completion
   if Assigned(ThrIDConnect) then
-    WaitForSingleObject(ThrIDConnect.Handle, 5000);  // ThrIDConnect.WaitFor;
+    ThrIDConnect.Terminate;
 
   // destroy services
   pluginLink^.DestroyServiceFunction(vk_hGetCaps);
@@ -481,6 +498,8 @@ begin
   pluginLink^.UnhookEvent(vk_hkContactDeleted);
   pluginLink^.UnhookEvent(vk_hkModulesLoad);
   pluginLink^.UnhookEvent(vk_hkOptInitialise);
+
+  Netlib_Log(vk_hNetlibUser, PChar('(Unload) ... unload plugin finished'));
 
   Result := 0;
 end;

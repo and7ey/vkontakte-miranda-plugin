@@ -678,7 +678,7 @@ begin
       While feedTablePosStart > 0 Do
       Begin
         HTMLNews := TextBetweenTagsAttrInc(HTMLDay, 'table', 'class', 'feedTable');
-        nNType := TextBetween(HTMLNews, 'images/icons/', '_icon.gif"');
+        nNType := TextBetween(HTMLNews, 'images/icons/', '.gif"');
         nIDstr := TextBetween(HTMLNews, 'a href=''/id', '''');
         nText := TextBetweenInc(HTMLNews, '<td class="feedStory', '</td>');
         // remove images
@@ -761,29 +761,33 @@ begin
         // filter news, if not minimal news chosen
         if DBGetContactSettingByte(0, piShortName, opt_NewsMin, 0) = 0 then
         begin
-          if (NewsAll[CurrNews].NType = 'add_photo') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPhotos, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'add_photo_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPhotos, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'movie') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterVideos, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'movie_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterVideos, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'add_item') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterNotes, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'add_item_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterNotes, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'q') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterQuestions, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'q_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterQuestions, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'post') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterThemes, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'post_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterThemes, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'plus') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterFriends, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'plus_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterFriends, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'person') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterStatuses, 0) = 0) Then
+          if (NewsAll[CurrNews].NType = 'person_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterStatuses, 0) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'group') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterGroups, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'group_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterGroups, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'event') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterMeetings, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'event_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterMeetings, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'audio') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterAudio, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'audio_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterAudio, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'record') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPersonalData, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'record_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPersonalData, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'add_tag') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterTags, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'add_tag_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterTags, 1) = 0) Then
+            ValidNews := False;
+          if (NewsAll[CurrNews].NType = 'app_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterApps, 1) = 0) Then
+            ValidNews := False;
+          if (NewsAll[CurrNews].NType = 'gift') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterGifts, 1) = 0) Then
             ValidNews := False;
         end;
         if ValidNews then
