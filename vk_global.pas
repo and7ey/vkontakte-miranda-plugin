@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 2 shl 16 + 0 shl 8 + 0;
+  piVersion = 0 shl 24 + 2 shl 16 + 1 shl 8 + 0;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -155,9 +155,11 @@ const
   opt_NewsFilterAudio: PChar = 'NewsFilterAudio';
   opt_NewsFilterPersonalData: PChar = 'NewsFilterPersonalData';
   opt_NewsFilterTags: PChar = 'NewsFilterTags';
+  opt_NewsFilterApps: PChar = 'NewsFilterApps';
+  opt_NewsFilterGifts: PChar = 'NewsFilterGift';
   opt_NewsLinks: PChar = 'NewsDisplayLinks';
   opt_NewsSeparateContact: PChar = 'NewsSeparateContact';
-  opt_NewsLastUpdateDateTime: PChar = 'LastUpdateDateTimeNews';
+  opt_NewsLastUpdateDateTime: PChar = 'NewsLastUpdateDateTime';
   opt_NewsLastNewsDateTime: PChar = 'NewsLastNewsDateTime';
   opt_NewsSeparateContactID: PChar = 'NewsSeparateContactID';
   opt_NewsSeparateContactName: PChar = 'NewsSeparateContactName';
@@ -179,7 +181,11 @@ const
   opt_WallLastUpdateDateTime: PChar = 'WallLastUpdateDateTime';
   opt_WallLastPostID: PChar = 'WallLastPostID';
   opt_WallUpdateFreq: PChar = 'WallUpdateFreqSecs';
-  opt_UserWallReadSupport: PChar = 'WallReadSupport';
+  opt_WallReadSupport: PChar = 'WallReadSupport';
+  opt_WallSeparateContactUse: PChar = 'WallSeparateContactUse';
+  opt_WallSeparateContactID: PChar = 'WallSeparateContactID';
+  opt_WallSeparateContactName: PChar = 'WallSeparateContactName';
+  opt_WallUseLocalTime: PChar = 'WallUseLocalTime';
   opt_GroupPluginJoined: PChar = 'GroupPluginJoined';
 
 type

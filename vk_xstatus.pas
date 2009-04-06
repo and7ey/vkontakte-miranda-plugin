@@ -149,7 +149,7 @@ begin
         if DBGetContactSettingWord(TempFriend, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_OFFLINE then
         XStatusUpdateTemp := False;
 
-     While Pos('a href=''id', HTML)<>0 Do
+     While Pos('a href=''/id', HTML)<>0 Do
      Begin
        StrTemp := TextBetweenInc(HTML, '<a href=''/id', '<br/>');
        // <a href='id123456'>Александр Фамилия</a> Avs advanced to next round <span class="stTime">11:46</span><br/>

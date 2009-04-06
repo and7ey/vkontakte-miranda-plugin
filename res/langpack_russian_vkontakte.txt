@@ -310,8 +310,6 @@
 Выпуск
 [Faculty]
 Факультет
-[Tags]
-Отметки
 [&Update Details for all users]
 &Обновить данные всех контактов
 [Details update completed for all contacts.]
@@ -320,8 +318,8 @@
 Запросить авторизацию
 [Enter an authorization request]
 Текст запроса авторизации
-[Use local time for incoming messages and wall posts]
-Использовать локальное время для входящих сообшений и стены 
+[Use local time for incoming messages]
+Использовать локальное время для входящих сообшений 
 [Show popups]
 Показывать всплывающие окна
 [Popups]
@@ -374,6 +372,12 @@
 Видео
 [Audio]
 Аудио
+[Gifts]
+Подарки
+[Applications]
+Приложения
+[Tags]
+Отметки
 [W&rite on the wall...]
 &Написать на стене...
 [write on the wall]
@@ -456,4 +460,7 @@
 Не удалять контакты с сервера при удалении из списка
 [Update status for non-friend contacts]
 Обновлять статус контактов не-друзей
-
+[Use local time for messages from the wall]
+Использовать локальное время для сообшений со стены
+[Display wall messages in the separate contact]
+Отображать сообещния со стены в отдельном контакте

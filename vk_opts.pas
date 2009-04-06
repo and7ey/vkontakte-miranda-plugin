@@ -54,7 +54,7 @@ uses Windows,
 
 {$include res\dlgopt\i_const.inc} // contains list of ids used in dialogs
 
-{$Resource dlgopt.res} // resource file with dialogs
+{$resource dlgopt.res} // resource file with dialogs
 
 function DlgProcOptionsAcc(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsAdv(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
@@ -301,10 +301,16 @@ begin
         val := DBGetContactSettingByte(0, piShortName, opt_UserNonFriendsStatusSupport, 0);
         CheckDlgButton(dialog, VK_OPT_UPDATE_STATUS_NONFRIENDS, val);
 
-        val := DBGetContactSettingByte(0, piShortName, opt_UserWallReadSupport, 1);
+        val := DBGetContactSettingByte(0, piShortName, opt_WallReadSupport, 1);
         CheckDlgButton(dialog, VK_OPT_WALLSUPPORT, val);
 
         SetDlgItemInt(dialog, VK_OPT_WALLUPD_SEC, DBGetContactSettingDWord(0, piShortName, opt_WallUpdateFreq, 7200), true);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0);
+        CheckDlgButton(dialog, VK_OPT_WALL_SEPARATECONTACT, val);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_WallUseLocalTime, 0);
+        CheckDlgButton(dialog, VK_OPT_WALL_USELOCALTIME, val);
 
         // send Changed message - make sure we can save the dialog
         SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
@@ -337,7 +343,11 @@ begin
 
             DBWriteContactSettingByte (0, piShortName, opt_UserNonFriendsStatusSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_UPDATE_STATUS_NONFRIENDS)));
 
-            DBWriteContactSettingByte (0, piShortName, opt_UserWallReadSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_WALLSUPPORT)));
+            DBWriteContactSettingByte (0, piShortName, opt_WallReadSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_WALLSUPPORT)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_WallUseLocalTime, Byte(IsDlgButtonChecked(dialog, VK_OPT_WALL_USELOCALTIME)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_WallSeparateContactUse, Byte(IsDlgButtonChecked(dialog, VK_OPT_WALL_SEPARATECONTACT)));
 
             val := GetDlgInt(dialog, VK_OPT_WALLUPD_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_WallUpdateFreq, val);
@@ -394,6 +404,10 @@ begin
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_PERSONAL, val);
         val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterTags, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_TAGS, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterGifts, 1);
+        CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_GIFTS, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterApps, 1);
+        CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_APPS, val);
 
         val := DBGetContactSettingByte(0, piShortName, opt_NewsLinks, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_SUPPORTLINKS, val);
@@ -437,6 +451,8 @@ begin
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterAudio, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_AUDIO)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterPersonalData, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_PERSONAL)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterTags, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_TAGS)));
+            DBWriteContactSettingByte (0, piShortName, opt_NewsFilterApps, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_APPS)));
+            DBWriteContactSettingByte (0, piShortName, opt_NewsFilterGifts, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_GIFTS)));
 
             DBWriteContactSettingByte (0, piShortName, opt_NewsLinks, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_SUPPORTLINKS)));
 
