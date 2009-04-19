@@ -1,4 +1,23 @@
-// MessageBox(0, 'Just groovy, baby!', 'VKontakte', MB_OK);
+(*
+    VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
+
+    Copyright (c) 2008-2009 Andrey Lukyanov
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*)
+
 library VKontakte;
 
 uses
@@ -7,14 +26,14 @@ uses
 
   vk_global, // module with global variables and constant used
   vk_http, // module to connect with the site
+  vk_core, // module with core functions
   vk_menu, // module to work with menus
+  vk_msgs, // module to send/receive messages
   vk_auth, // module to support authorization process
   vk_avatars, // module to support avatars
   vk_xstatus, // module to support additional status
   vk_info, // module to get contact's info
   vk_folders, // module to support custom folders
-  vk_msgs, // module to send/receive messages
-  vk_core, // module with core functions
   vk_search, // module to support search functionality
   vk_popup, // module to support popups
   vk_wall, // module to work with the wall
@@ -39,8 +58,7 @@ const
     authorEmail: piAuthorEmail;
     copyright: piCopyright;
     homepage: piHomepage;
-    // flags: UNICODE_AWARE;
-    flags: 0;
+    flags: UNICODE_AWARE;
     replacesDefaultModule: 0;
     uuid: '{75A5596C-3AD4-4B17-ABEF-5D45DEAA4A83}'
   );
@@ -54,8 +72,7 @@ const
     authorEmail: piAuthorEmail;
     copyright: piCopyright;
     homepage: piHomepage;
-    // flags: UNICODE_AWARE;
-    flags: 0;
+    flags: UNICODE_AWARE;
     replacesDefaultModule: 0;
   );
 
@@ -215,11 +232,6 @@ begin
       cy := SM_CYICON
     end;
 
-// Result := LoadImage(hInstance, MAKEINTRESOURCE('ICON_PROTO'), IMAGE_ICON, 16, 16, 0);
-// Result := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(vk_icon_note));
-// Result := LoadSkinnedIcon(SKINICON_OTHER_MIRANDA);
-// Result := CopyIcon(CallService(MS_SKIN2_GETICONBYHANDLE, 0, (LPARAM)iconList[i].hIconLibItem));
-
   Result := Int(LoadImage(hInstance,
   MAKEINTRESOURCE(PChar(id)),
   IMAGE_ICON,
@@ -263,8 +275,6 @@ begin
   if CallService(MS_SYSTEM_GETVERSIONTEXT, MAX_PATH, DWord(@szTemp)) = 0 then
     if StrPos(szTemp, 'Unicode') <> nil then
       bMirandaUnicode := True;
-  // if IsMirandaUnicode then
-  //  PluginInfo.flags := UNICODE_AWARE;
 
   // register functions to support popups
   PopupInit();
@@ -324,104 +334,57 @@ begin
   AvatarsInit();
 
   // temp code - to be removed in the next versions
-  if DBReadString(0, piShortName, 'user/defaultgroup', nil) <> nil then
-  begin
-    DBWriteContactSettingString(0, piShortName, opt_UserDefaultGroup, PChar(DBReadString(0, piShortName, 'user/defaultgroup', nil)));
-    DBDeleteContactSetting(0, piShortName, 'user/defaultgroup');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'UserDeleteFriendsFromTheServer', 0) <> 0 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserDontDeleteFriendsFromTheServer, DBGetContactSettingByte(0, piShortName, 'UserDeleteFriendsFromTheServer', 0));
-    DBDeleteContactSetting(0, piShortName, 'UserDeleteFriendsFromTheServer');
-  end;
-  if DBReadString(0, piShortName, 'user/email', nil) <> nil then
-  begin
-    DBWriteContactSettingString(0, piShortName, opt_UserName, PChar(DBReadString(0, piShortName, 'user/email', nil)));
-    DBDeleteContactSetting(0, piShortName, 'user/email');
-  end;
-  if DBReadString(0, piShortName, 'user/pass', nil) <> nil then
-  begin
-    DBWriteContactSettingString(0, piShortName, opt_UserPass, PChar(DBReadString(0, piShortName, 'user/pass', nil)));
-    DBDeleteContactSetting(0, piShortName, 'user/pass');
-  end;
-  if DBGetContactSettingDWord(0, piShortName, 'user/keeponlinesecs', 255) <> 255 then
-  begin
-    DBWriteContactSettingDWord(0, piShortName, opt_UserKeepOnline, DBGetContactSettingDWord(0, piShortName, 'user/keeponlinesecs', 900));
-    DBDeleteContactSetting(0, piShortName, 'user/keeponlinesecs');
-  end;
-  if DBGetContactSettingDWord(0, piShortName, 'user/newmessagessecs', 255) <> 255 then
-  begin
-    DBWriteContactSettingDWord(0, piShortName, opt_UserCheckNewMessages, DBGetContactSettingDWord(0, piShortName, 'user/newmessagessecs', 60));
-    DBDeleteContactSetting(0, piShortName, 'user/newmessagessecs');
-  end;
-  if DBGetContactSettingDWord(0, piShortName, 'user/friendsstatussecs', 255) <> 255 then
-  begin
-    DBWriteContactSettingDWord(0, piShortName, opt_UserUpdateFriendsStatus, DBGetContactSettingDWord(0, piShortName, 'user/friendsstatussecs', 60));
-    DBDeleteContactSetting(0, piShortName, 'user/friendsstatussecs');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'user/getmininfo', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserGetMinInfo, DBGetContactSettingByte(0, piShortName, 'user/getmininfo', 0));
-    DBDeleteContactSetting(0, piShortName, 'user/getmininfo');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'user/removeemptysubject', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, DBGetContactSettingByte(0, piShortName, 'user/removeemptysubject', 1));
-    DBDeleteContactSetting(0, piShortName, 'user/removeemptysubject');
-  end;
-  if DBReadString(0, piShortName, 'User/DefaultGroup', nil) <> nil then
-  begin
-    DBWriteContactSettingString(0, piShortName, opt_UserDefaultGroup, PChar(DBReadString(0, piShortName, 'User/DefaultGroup', nil)));
-    DBDeleteContactSetting(0, piShortName, 'User/DefaultGroup');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'user/updateadditionalstatus', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserUpdateAddlStatus, DBGetContactSettingByte(0, piShortName, 'user/updateadditionalstatus', 1));
-    DBDeleteContactSetting(0, piShortName, 'user/updateadditionalstatus');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'user/avssupport', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserAvatarsSupport, DBGetContactSettingByte(0, piShortName, 'user/avssupport', 1));
-    DBDeleteContactSetting(0, piShortName, 'user/avssupport');
-  end;
-  if DBGetContactSettingDWord(0, piShortName, 'user/avsupdatefreq', 255) <> 255 then
-  begin
-    DBWriteContactSettingDWord(0, piShortName, opt_UserAvatarsUpdateFreq, DBGetContactSettingDWord(0, piShortName, 'user/avsupdatefreq', 60));
-    DBDeleteContactSetting(0, piShortName, 'user/avsupdatefreq');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'user/avsupdatewhengetinfo', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, DBGetContactSettingByte(0, piShortName, 'user/avsupdatewhengetinfo', 1));
-    DBDeleteContactSetting(0, piShortName, 'user/avsupdatewhengetinfo');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'User/VKontakteURL', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserVKontakteURL, DBGetContactSettingByte(0, piShortName, 'User/VKontakteURL', 0));
-    DBDeleteContactSetting(0, piShortName, 'User/VKontakteURL');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'User/AddlStatusForOffline', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, DBGetContactSettingByte(0, piShortName, 'User/AddlStatusForOffline', 0));
-    DBDeleteContactSetting(0, piShortName, 'User/AddlStatusForOffline');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'User/UseLocalTimeForIncomingMessages', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, DBGetContactSettingByte(0, piShortName, 'User/UseLocalTimeForIncomingMessages', 0));
-    DBDeleteContactSetting(0, piShortName, 'User/UseLocalTimeForIncomingMessages');
-  end;
-  if DBGetContactSettingByte(0, piShortName, 'User/UseLocalTimeForIncomingMessages', 255) <> 255 then
-  begin
-    DBWriteContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, DBGetContactSettingByte(0, piShortName, 'User/UseLocalTimeForIncomingMessages', 0));
-    DBDeleteContactSetting(0, piShortName, 'User/UseLocalTimeForIncomingMessages');
-  end;
-  DBDeleteContactSetting(0, piShortName, 'LastUpdateDateTimeMsgs');
-  DBDeleteContactSetting(0, piShortName, 'LastUpdateDateTimeFriendsStatus');
-  DBDeleteContactSetting(0, piShortName, 'LastUpdateDateTimeKeepOnline');
-  DBDeleteContactSetting(0, piShortName, 'LastUpdateDateTimeAvatars');
+  if DBGetContactSettingDWord(0, piShortName, 'UserKeepOnlineFreqSecs', 900) <> 900 then
+    DBWriteContactSettingDWord(0, piShortName, opt_UserKeepOnline, DBGetContactSettingDWord(0, piShortName, 'UserKeepOnlineFreqSecs', 900));
+  DBDeleteContactSetting(0, piShortName, 'UserKeepOnlineFreqSecs');
+  if DBGetContactSettingDWord(0, piShortName, 'UserFriendsStatusFreqSecs', 60) <> 60 then
+    DBWriteContactSettingDWord(0, piShortName, opt_UserUpdateFriendsStatus, DBGetContactSettingDWord(0, piShortName, 'UserFriendsStatusFreqSecs', 60));
+  DBDeleteContactSetting(0, piShortName, 'UserFriendsStatusFreqSecs');
+  if DBGetContactSettingByte(0, piShortName, 'UserInfoMinimal', 0) <> 0 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserGetMinInfo, DBGetContactSettingByte(0, piShortName, 'UserInfoMinimal', 0));
+  DBDeleteContactSetting(0, piShortName, 'UserInfoMinimal');
+  if DBReadString(0, piShortName, 'UserFriendsDeleted', '') <> '' then
+    DBWriteContactSettingString(0, piShortName, opt_UserGetMinInfo, DBReadString(0, piShortName, 'UserFriendsDeleted', nil));
+  DBDeleteContactSetting(0, piShortName, 'UserFriendsDeleted');
+  if DBGetContactSettingByte(0, piShortName, 'UserMsgIncRemoveEmptySubject', 1) <> 1 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, DBGetContactSettingByte(0, piShortName, 'UserMsgIncRemoveEmptySubject', 1));
+  DBDeleteContactSetting(0, piShortName, 'UserMsgIncRemoveEmptySubject');
+  if DBReadString(0, piShortName, 'UserDefaultGroup', '') <> '' then
+    DBWriteContactSettingUnicode(0, piShortName, opt_UserGetMinInfo, PWideChar(WideString(DBReadString(0, piShortName, 'UserDefaultGroup', nil))));
+  DBDeleteContactSetting(0, piShortName, 'UserDefaultGroup');
+  if DBGetContactSettingByte(0, piShortName, 'UserAddlStatusUpdate', 1) <> 1 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserUpdateAddlStatus, DBGetContactSettingByte(0, piShortName, 'UserAddlStatusUpdate', 1));
+  DBDeleteContactSetting(0, piShortName, 'UserAddlStatusUpdate');
+  if DBGetContactSettingByte(0, piShortName, 'UserAvatarsSupport', 1) <> 1 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserAvatarsSupport, DBGetContactSettingByte(0, piShortName, 'UserAvatarsSupport', 1));
+  DBDeleteContactSetting(0, piShortName, 'UserAvatarsSupport');
+  if DBGetContactSettingDWord(0, piShortName, 'UserAvatarsUpdateFreqSecs', 3600) <> 3600 then
+    DBWriteContactSettingDWord(0, piShortName, opt_UserKeepOnline, DBGetContactSettingDWord(0, piShortName, 'UserAvatarsUpdateFreqSecs', 3600));
+  DBDeleteContactSetting(0, piShortName, 'UserAvatarsUpdateFreqSecs');
+  if DBGetContactSettingByte(0, piShortName, 'UserAvatarsUpdateWhenGetInfo', 1) <> 1 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, DBGetContactSettingByte(0, piShortName, 'UserAvatarsUpdateWhenGetInfo', 1));
+  DBDeleteContactSetting(0, piShortName, 'UserAvatarsUpdateWhenGetInfo');
+  if DBGetContactSettingByte(0, piShortName, 'UserInfoVKontaktePageURL', 0) <> 0 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserVKontakteURL, DBGetContactSettingByte(0, piShortName, 'UserInfoVKontaktePageURL', 0));
+  DBDeleteContactSetting(0, piShortName, 'UserInfoVKontaktePageURL');
+  if DBGetContactSettingByte(0, piShortName, 'UserAddlStatusForOfflineContacts', 1) <> 1 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, DBGetContactSettingByte(0, piShortName, 'UserAddlStatusForOfflineContacts', 1));
+  DBDeleteContactSetting(0, piShortName, 'UserAddlStatusForOfflineContacts');
+  if DBGetContactSettingByte(0, piShortName, 'UserMsgIncUseLocalTime', 0) <> 0 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, DBGetContactSettingByte(0, piShortName, 'UserMsgIncUseLocalTime', 0));
+  DBDeleteContactSetting(0, piShortName, 'UserMsgIncUseLocalTime');
+  if DBGetContactSettingByte(0, piShortName, 'UserDontDeleteFriendsFromTheServer', 1) <> 1 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserDontDeleteFriendsFromTheServer, DBGetContactSettingByte(0, piShortName, 'UserDontDeleteFriendsFromTheServer', 1));
+  DBDeleteContactSetting(0, piShortName, 'UserDontDeleteFriendsFromTheServer');
+  if DBGetContactSettingByte(0, piShortName, 'UserNonFriendsStatusSupport', 0) <> 0 then
+    DBWriteContactSettingByte(0, piShortName, opt_UserNonFriendsStatusSupport, DBGetContactSettingByte(0, piShortName, 'UserNonFriendsStatusSupport', 0));
+  DBDeleteContactSetting(0, piShortName, 'UserNonFriendsStatusSupport');
+  DBDeleteContactSetting(0, piShortName, 'UserNewMessagesFreqSecs');
+
 
   // ask to join plugin's group
   if DBGetContactSettingByte(0, piShortName, opt_GroupPluginJoined, 0) = 0 then // never asked before
-    case MessageBox(0, Translate(qst_join_vk_group), Translate(piShortName), MB_YESNOCANCEL + MB_ICONQUESTION) of
+    case MessageBoxW(0, TranslateW(qst_join_vk_group), TranslateW(piShortName), MB_YESNOCANCEL + MB_ICONQUESTION) of
       IDYES: DBWriteContactSettingByte(0, piShortName, opt_GroupPluginJoined, 2);
       IDNO:  DBWriteContactSettingByte(0, piShortName, opt_GroupPluginJoined, 1);
     end;
@@ -439,16 +402,18 @@ end;
 function OkToExit(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(OkToExit) Starting to exit miranda...'));
+  Netlib_Log(vk_hNetlibUser, PChar('(OkToExit) ... finishing ThrIDConnect thread'));
   if Assigned(ThrIDConnect) then
     ThrIDConnect.Terminate; // just send a command to stop thread
-  UpdateDataDestroy(); // stop the thread for regular data update
+  Netlib_Log(vk_hNetlibUser, PChar('(OkToExit) ... calling UpdateDataDestroy'));
+  if Assigned(ThrIDDataUpdate) then
+    ThrIDDataUpdate.Terminate;
+  Netlib_Log(vk_hNetlibUser, PChar('(OkToExit) ... making all contacts offline'));
   SetStatusOffline(); // make all contacts offline
   vk_Logout(); // logout from the site
 
   Netlib_Log(vk_hNetlibUser, PChar('(OkToExit) ... ok to exit miranda'));
   Result := 0;
-
-
 end;
 
 // =============================================================================

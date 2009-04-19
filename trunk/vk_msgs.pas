@@ -1,7 +1,7 @@
-  (*
+(*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (С) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ interface
   procedure MsgsDestroy();
   procedure vk_GetMsgsFriendsEtc();
   procedure vk_GetNews();
-  function vk_ReceiveMessage(FromID: THandle; MsgText: String; MsgDate: TDateTime): Boolean;  
+  function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; MsgDate: TDateTime): Boolean;  
 
 implementation
 
@@ -56,26 +56,16 @@ uses
   uLkJSON, // module to parse data from feed2.php (in JSON format)
 
   Windows,
-  SysUtils,
-  Classes;
+  SysUtils;
 
   {$include api/m_folders.inc}
-
-type
-  TThreadSendMsg = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
-
 
 type // type to keep news
   TNewsRecord = record
     NTime    : TDateTime;
     ID       : Integer;
-    NType    : String;       // add_photo = Фотографии
-                             // movie = Видео
+    NType    : String;       // add_photo = photo
+                             // movie = video
                              // add_item = Заметки
                              // q = Вопросы
                              // post = Темы
@@ -85,35 +75,37 @@ type // type to keep news
                              // event = Встречи
                              // audio = Аудио
                              // record = Личные данные
-    NText    : String;
+    NText    : WideString;
   end;
 
 type TNewsRecords = array of TNewsRecord;
+
+type
+  VK_PCCSDATA = ^VK_TCCSDATA;
+  VK_TCCSDATA = record
+    ccsData : TCCSDATA;
+    trx_id  : Integer;
+  end;
 
 var
   vk_hProtoMessageSend,
   vk_hProtoMessageSendW,
   vk_hProtoMessageReceive: THandle;
 
-  hContact_sendmessage: THandle; // variable to provide separate thread
-  MsgText_sendmessage: String;   // with message data
-  trx_id: Integer;
-
-  ThrIDSendMsg: TThreadSendMsg;
-
+  function MessageSendThread(ccs: VK_PCCSDATA): LongWord; forward;
 
 // =============================================================================
 // function to send message
 // (it is called from separate thread, so minimum number of WRITE global variables is used)
 // -----------------------------------------------------------------------------
-function vk_SendMessage(ToID: Integer; Text: String): Byte;
+function vk_SendMessage(ToID: Integer; Text: WideString): Byte;
 // 0 - successful
 // 1 - not successful (unknown reason)
 // 2 - msgs sent two often
 var SecureId: String; // temp variable to keep secure id needed for msg sending
     HTML: String; // html content of the page received
 begin
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) Sending new message to id '+ IntToStr(ToID) +', message text: '+Text));
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) Sending new message to id '+ IntToStr(ToID) +', message text: '+AnsiString(Text)));
   Result := 1;
   if ToID > 0 Then
   Begin
@@ -130,13 +122,8 @@ begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... secure id received: '+SecureId));
       // now the message can be sent
       Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... sending message'));
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... message text: ' + Text));
-      if Trim(UTF8Decode(Text))='' then // if text is not unicode, the encode it
-      begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... message text identified as not unicode, changing to UTF8'));
-        Text := UTF8Encode(Text);
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... message text changed to: '+ Text));
-      end;
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... message text: ' + AnsiString(Text)));
+      Text := UTF8Encode(Text);
       if Trim(Text)<>'' Then // not empty message
       begin
         Text := URLEncode(Text); // encode all Russian and other characters
@@ -147,13 +134,13 @@ begin
 
       // verify if user tries to send messages too often and inform
       // him about it - http://pda.vkontakte.ru/blank
-      if Pos('Вы попытались загрузить более одной однотипной страницы в секунду', HTML) > 0 then
+      if Pos('<div id="error">', HTML) > 0 then
       Begin
         Result := 2;
       End;
 
       // verify whether msg is delivered or not
-      if Pos('Сообщение отправлено', HTML) > 0 then
+      if Pos('<div id="msg">', HTML) > 0 then
       Begin
         Result := 0;
         Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... message sent successfully'));
@@ -166,7 +153,7 @@ end;
 // =============================================================================
 // function to add received message into Miranda's DB
 // -----------------------------------------------------------------------------
-function vk_ReceiveMessage(FromID: THandle; MsgText: String; MsgDate: TDateTime): Boolean;
+function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; MsgDate: TDateTime): Boolean;
 var
   ccs_chain: TCCSDATA;
   pre: TPROTORECVEVENT; // varibable required to add message to Miranda
@@ -174,7 +161,7 @@ begin
   Result := False;
   FillChar(pre, SizeOf(pre), 0);
   pre.flags := PREF_UTF;
-  pre.szMessage := pChar(MsgText);
+  pre.szMessage := PChar(UTF8Encode(MsgText)); // encode msg to utf8
   // Trunc((DateTime-UnixTimeStart) * SecondsPerDay);
   // UnixTimeStart = 25569; = 1970-01-01 00:00:00 in TDateTime
   // SecondsPerDay = 60*24*60; = 86400;
@@ -182,7 +169,6 @@ begin
   // Local time is used on the server, so, we need to convert it to GMT
   pre.timestamp := Trunc((MsgDate-25569)*86400)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,Trunc((MsgDate-25569)*86400),0);
  	pre.lParam := 0;
-
   // now we need to initiate incoming message event
   // we can add message without this event (with usage of MS_DB_EVENT_ADD directly),
   // but in this case some plugins will not able to filter message (for ex.,
@@ -191,7 +177,7 @@ begin
   ccs_chain.szProtoService := PSR_MESSAGE;  // so, ProtoMessageReceive will be called,
   ccs_chain.hContact := FromID; // if filtering is passed
 	ccs_chain.wParam := 0;
-  ccs_chain.flags := 0; // we say it is not utf8 message, otherwise flag should be = PREF_UTF
+  ccs_chain.flags := PREF_UTF; // it is utf8 message
  	ccs_chain.lParam := Windows.lParam(@pre);
   PluginLink^.CallService(MS_PROTO_CHAINRECV, 0, Windows.lParam(@ccs_chain));
 
@@ -207,8 +193,8 @@ var HTML: AnsiString; // html content of the pages received
     FriendsCount: Integer; // temp variable to keep number of new authorization requests received
     MsgID: String;
     MsgUrl: String;
-    MsgText: String;
-    MsgSenderName: String;
+    MsgText: WideString;
+    MsgSenderName: WideString;
     i, ii, temppos: Integer;
     MsgDate: TDateTime;
     MsgSender: Integer;
@@ -273,7 +259,7 @@ begin
             HTML := HTTP_NL_Get(MsgUrl);
             // date of message
             if DBGetContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, 0) = 0 then
-              MsgDate := RusDateToDateTime(TextBetween(HTML, '<span class="label">Дата:</span> ', '<br/>'), false)
+              MsgDate := RusDateToDateTime(TextBetween(Utf8ToAnsi(HTML), '<span class="label">Дата:</span> ', '<br/>'), false)
             else
               MsgDate := Now; // use local time, if requested in the settings
             // from
@@ -281,12 +267,12 @@ begin
              Exit;
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from id: '+IntToStr(MsgSender)));
             // from - Name (needed for not-friends)
-            MsgSenderName := TextBetween(HTML, 'От кого:', '/a>');
-            MsgSenderName := HTMLDecode(TextBetween(MsgSenderName, '">', '<'));
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from person: '+MsgSenderName));
+            MsgSenderName := TextBetween(HTML, '</span> <a href="', '/a>');
+            MsgSenderName := HTMLDecodeW(TextBetween(MsgSenderName, '">', '<'));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from person: '+String(MsgSenderName)));
 
             // subject and message
-            MsgText := TextBetween(HTML, '<span class="label">Тема:</span> ', '<span class="label">Ответить:');
+            MsgText := TextBetween(Utf8ToAnsi(HTML), '<span class="label">Тема:</span> ', '<span class="label">Ответить:');
             if DBGetContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, 1) = 1 then
             begin
               // remove empty subject, if user would like to
@@ -296,7 +282,7 @@ begin
               if (MsgText[1] = 'R') and (MsgText[2] = 'e') and (MsgText[3] = '(') then
               begin
                 ii := 4;
-                while (MsgText[ii] in ['0'..'9']) and (ii <= length(MsgText)-1) do
+                while (MsgText[ii] in [WideChar('0')..WideChar('9')]) and (ii <= Length(MsgText)-1) do
               	  Inc(ii);
                 temppos := PosEx('):  ...', MsgText);
                 if (temppos = ii) then
@@ -306,9 +292,9 @@ begin
             MsgText := StringReplace(MsgText, '<br/><br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
             MsgText := StringReplace(MsgText, '<br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
             MsgText := StringReplace(MsgText, Chr(9), '', [rfReplaceAll, rfIgnoreCase]);
-            MsgText := HTMLDecode(MsgText);
+            MsgText := HTMLDecodeW(MsgText);
             MsgText := Trim(MsgText);
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', text: '+MsgText));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', text: '+String(MsgText)));
 
             // if message from unknown contact then
             // we add contact to our list temporary
@@ -346,9 +332,9 @@ begin
        Begin
          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i+1) + ', getting id and name'));
          MsgID := FeedMsgsItems.NameOf[i];
-         MsgSenderName := HTMLDecode(FeedMsgsItems.getString(FeedMsgsItems.NameOf[i]));
+         MsgSenderName := HTMLDecodeW(FeedMsgsItems.getString(FeedMsgsItems.NameOf[i]));
          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i+1) + ', from id: '+MsgID));
-         Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i+1) + ', from person: '+MsgSenderName));
+         Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i+1) + ', from person: '+String(MsgSenderName)));
          if (Trim(MsgID)<>'') and (TryStrToInt(MsgID, MsgSender)) {and (Trim(MsgSenderName)<>'')} Then
          Begin
            // everything seems to be OK, may proceed
@@ -368,7 +354,7 @@ begin
            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i+1) + ', adding to miranda database'));
 
            FillChar(pre, SizeOf(pre), 0);
-           pre.flags := 0;
+           pre.flags := PREF_UTF;
            MsgDate := Now;
            pre.timestamp := Trunc((MsgDate-25569)*86400)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,Trunc((MsgDate-25569)*86400),0);
 
@@ -376,12 +362,13 @@ begin
            MsgText := '(text of authorization request is not supported currently)';
            pre.lParam := sizeof(DWORD) + sizeof(THANDLE) + Length(MsgSenderName) + Length(MsgID) + Length(MsgText) + 8;
            pCurBlob := AllocMem(pre.lParam);
-           pre.szMessage := pCurBlob;
+           pre.szMessage := PChar(pCurBlob);
            PDWORD(pCurBlob)^ := 0;
            Inc(pCurBlob, sizeof(DWORD));
-           PHANDLE (pCurBlob)^ := TempFriend;
+           PHANDLE(pCurBlob)^ := TempFriend;
            Inc(pCurBlob, sizeof(THANDLE));
            StrCopy(pCurBlob, PChar(MsgSenderName));
+           // lstrcpyw(pCurBlob, PWideChar(MsgSenderName));
            Inc(pCurBlob, Length(MsgSenderName)+1);
            pCurBlob^ := #0;            //firstName
            Inc(pCurBlob);
@@ -390,12 +377,13 @@ begin
            pCurBlob^ := #0;            //e-mail
            Inc(pCurBlob);
            StrCopy(pCurBlob, PChar(MsgText)); //reason
+           // lstrcpyw(pCurBlob, PWideChar(MsgText));
 
            FillChar(ccs_chain, SizeOf(ccs_chain), 0);
            ccs_chain.szProtoService := PSR_AUTH; // so, AuthRequestReceived will be called,
            ccs_chain.hContact := TempFriend;     // if filtering is passed
            ccs_chain.wParam := 0;
-           ccs_chain.flags := 0;
+           ccs_chain.flags := PREF_UTF;
          	 ccs_chain.lParam := Windows.lParam(@pre);
            PluginLink^.CallService(MS_PROTO_CHAINRECV, 0, Windows.lParam(@ccs_chain));
          End;
@@ -413,34 +401,24 @@ end;
 
 // =============================================================================
 // function to send message
-// called when text contains English characters only
 // -----------------------------------------------------------------------------
 function ProtoMessageSend(wParam: wParam; lParam: lParam): Integer; cdecl;
-var ccs: PCCSDATA;
+var ccs: VK_PCCSDATA;
+    res: LongWord;
 begin
-  ccs := PCCSDATA(lParam);
-  hContact_sendmessage := ccs.hContact;
-  MsgText_sendmessage := PChar(ccs.lParam);
+  New(ccs);
+  ccs^.ccsData := PCCSDATA(lParam)^;
+  ccs^.trx_id := StrToInt(FormatDateTime('nnsszzz', Now)); // generate trx (message) number
 
-  Netlib_Log(vk_hNetlibUser, PChar('(ProtoMessageSend) Sending message, text: '+PChar(ccs.lParam)));
+  Netlib_Log(vk_hNetlibUser, PChar('(ProtoMessageSend) Sending message, text: '+PWideChar(ccs^.ccsData.lParam+lstrlen(PChar(ccs^.ccsData.lParam))+1)));
 
-  trx_id := StrToInt(FormatDateTime('nnsszzz', Now)); // generate trx (message) number
   SleepEx(10, True);
 
   // call separate thread to send the msg
-  ThrIDSendMsg := TThreadSendMsg.Create(False);
+  CloseHandle(BeginThread(nil, 0, @MessageSendThread, ccs, 0, res));
 
   // return the transaction id we've assigned to the trx
-  Result := trx_id;
-end;
-
-// =============================================================================
-// function to send message
-// called when text contains English & non-English characters
-// -----------------------------------------------------------------------------
-function ProtoMessageSendW(wParam: wParam; lParam: lParam): Integer; cdecl;
-begin
-  Result := ProtoMessageSend(wParam, lParam);
+  Result := ccs^.trx_id;
 end;
 
 
@@ -464,11 +442,10 @@ begin
     szModule := piShortName;
     pBlob    := PByte(pre.szMessage);      // data
     cbBlob   := Length(pre.szMessage) + 1; // SizeOf(pBlob);
-    flags    := 0;
+    flags    := DBEF_UTF;
     timestamp := pre.timestamp;
   End;
   PluginLink^.CallService(MS_DB_EVENT_ADD, ccs_sm.hContact, dword(@dbeo));
-  // SkinPlaySound('VKontakte\MsgIncoming');
 
   Result := 0;
 end;
@@ -480,7 +457,7 @@ end;
 procedure MsgsInit();
 begin
   vk_hProtoMessageSend := CreateProtoServiceFunction(piShortName, PSS_MESSAGE, ProtoMessageSend);
-  vk_hProtoMessageSendW := CreateProtoServiceFunction(piShortName, PSS_MESSAGEW, ProtoMessageSendW);
+  vk_hProtoMessageSendW := CreateProtoServiceFunction(piShortName, PSS_MESSAGEW, ProtoMessageSend);
   vk_hProtoMessageReceive := CreateProtoServiceFunction(piShortName, PSR_MESSAGE, ProtoMessageReceive);
   // no need to support PSR_MESSAGEW - it is not used by new versions of Miranda
   // vk_hProtoMessageReceive := CreateProtoServiceFunction(piShortName, PSR_MESSAGEW, ProtoMessageReceive);
@@ -500,36 +477,32 @@ end;
 // =============================================================================
 // thread to send message
 // -----------------------------------------------------------------------------
-procedure TThreadSendMsg.Execute;
-var trx_id_temp: Integer;
-    hContact_temp: THandle;
-    MsgText: String;
-    ThreadNameInfo: TThreadNameInfo;
+function MessageSendThread(ccs: VK_PCCSDATA): LongWord;
+var trx_id: Integer;
+    hContact: THandle;
+    MsgText: WideString;
     ResultTemp: TResultDetailed;
     bPostingOnTheWall: Boolean;
-    sWord: String;
+    sWord: WideString;
     iWordLength: Byte;
 begin
- Netlib_Log(vk_hNetlibUser, PChar('(TThreadSendMsg) Thread started...'));
+ Result := 0;
 
- ThreadNameInfo.FType := $1000;
- ThreadNameInfo.FName := 'TThreadSendMsg';
- ThreadNameInfo.FThreadID := $FFFFFFFF;
- ThreadNameInfo.FFlags := 0;
- try
-   RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
- except
- end;
+ Netlib_Log(vk_hNetlibUser, PChar('(MessageSendThread) Thread started...'));
 
- // to be on the safe side (we work with threads!), put values from global
- // variables to temp variables, then only these temp variable will be used
- trx_id_temp := trx_id;
- hContact_temp := hContact_sendmessage;
- MsgText := MsgText_sendmessage;
+ trx_id := ccs^.trx_id;
+ hContact := ccs^.ccsData.hContact;
+ if (ccs^.ccsData.wParam and PREF_UTF) <> 0 then
+   MsgText := PChar(ccs^.ccsData.lParam) // GAP: not checked
+   else if (ccs^.ccsData.wParam and PREF_UNICODE) <> 0 then
+     MsgText := PWideChar(ccs^.ccsData.lParam+lstrlen(PChar(ccs^.ccsData.lParam))+1)
+       else
+         MsgText := PChar(ccs^.ccsData.lParam); // GAP: not checked
+ Dispose(ccs);
 
  if vk_Status = ID_STATUS_OFFLINE Then // if offline - send failed ack
  Begin
-    ProtoBroadcastAck(piShortName, hContact_temp, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id_temp), windows.lParam(Translate(err_sendmgs_offline)));
+    ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(TranslateW(err_sendmgs_offline)));
     Exit;
  End;
 
@@ -537,13 +510,12 @@ begin
   // (in this case it should be started with 'wall:' (or user defined value) or
   // with translated equivalent
   bPostingOnTheWall := False;
-  sWord := DBReadString(0, piShortName, opt_WallMessagesWord, 'wall:');
-  iWordLength := Length(Translate(PChar(sWord))) - 1;
-  if (Copy(MsgText, 0, iWordLength) = Translate(PChar(sWord))) then
+  sWord := DBReadUnicode(0, piShortName, opt_WallMessagesWord, 'wall:');
+  iWordLength := Length(TranslateW(PWideChar(sWord))) - 1;
+  if (Copy(MsgText, 0, iWordLength) = TranslateW(PWideChar(sWord))) then
     bPostingOnTheWall := True
   else
   begin
-    sWord := String(Translate(PChar(sWord)));
     iWordLength := Length(sWord);
 	  if (Copy(MsgText, 0, iWordLength) = sWord) then
 		  bPostingOnTheWall := True;
@@ -552,25 +524,25 @@ begin
   if bPostingOnTheWall then
   begin // posting message on the wall
     MsgText := Copy(MsgText, iWordLength + 1, Length(MsgText) - iWordLength);
-    ResultTemp := vk_WallPostMessage(DBGetContactSettingDword(hContact_temp, piShortName, 'ID', 0),
-                                 Trim(MsgText),
-                                 0);
+    ResultTemp := vk_WallPostMessage(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0),
+                                     Trim(MsgText),
+                                     0);
     case ResultTemp.Code of
       0: // 0 - successful
-         ProtoBroadcastAck(piShortName, hContact_temp, ACKTYPE_MESSAGE, ACKRESULT_SUCCESS, THandle(trx_id_temp), 0);
+         ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_SUCCESS, THandle(trx_id), 0);
       1: // 1 - failed
-         ProtoBroadcastAck(piShortName, hContact_temp, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id_temp), windows.lParam(ResultTemp.Text));
-    end;  
+         ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(ResultTemp.Text));
+    end;
   end
   else // calling function to send normal message
-  case vk_SendMessage(DBGetContactSettingDword(hContact_temp, piShortName, 'ID', 0), MsgText) of
+  case vk_SendMessage(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0), MsgText) of
      0: // 0 - successful
         // the ACK contains reference (thandle) to the trx number
-        ProtoBroadcastAck(piShortName, hContact_temp, ACKTYPE_MESSAGE, ACKRESULT_SUCCESS, THandle(trx_id_temp), 0);
+        ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_SUCCESS, THandle(trx_id), 0);
      1: // 1 - not successful (unknown reason)
-        ProtoBroadcastAck(piShortName, hContact_temp, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id_temp), 0);
+        ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), 0);
      2: // 2 - msgs sent two often
-        ProtoBroadcastAck(piShortName, hContact_temp, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id_temp), windows.lParam(Translate(err_sendmgs_freq)));
+        ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(TranslateW(err_sendmgs_freq)));
    end;
 
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadSendMsg) ... thread finished'));
@@ -590,7 +562,8 @@ function vk_GetNewsMinimal(): TNewsRecords;
 var NewsPosStart, DayWrapPosStart: Integer;
     HTML, HTMLDay: String;
 
-    nNType, nText, nIDstr, nNTimestr : String;
+    nNType, nIDstr, nNTimestr: String;
+    nText: WideString;
     nID: Integer;
     nNTime: TDateTime;
 
@@ -600,6 +573,8 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsMinimal) Receiving minimal news...'));
 
   HTML := HTTP_NL_Get(vk_url_pda_news);
+  HTML := UTF8Decode(HTML);
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsMinimal) ha-ha-ha...' + HTML));
 
   If Trim(HTML) <> '' Then
   begin
@@ -616,7 +591,7 @@ begin
         nText := StringReplace(nText, #10, '', [rfReplaceAll]);
         nText := StringReplace(nText, Chr(9), '', [rfReplaceAll]);
         nText := StringReplace(nText, '<br/>', ' ', [rfReplaceAll, rfIgnoreCase]);
-        nText := Trim(HTMLDecode(nText));
+        nText := Trim(HTMLDecodeW(nText));
         nNTimestr := TextBetweenInc(HTMLDay, '<span class="stTime">', '</span>');
         nNTimestr := Trim(HTMLRemoveTags(nNTimestr));
         GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, fSettings);
@@ -649,7 +624,9 @@ var DayWrapPosStart, feedTablePosStart: Integer;
     DayTime: TDateTime;
     HTML, HTMLDay, HTMLNews, HTMLDate: String;
 
-    nNType, nText, nIDstr, nNTimestr : String;
+    nNType, nIDstr, nNTimestr: String;
+    nText: WideString;
+
     nID: Integer;
     nNTime: TDateTime;
 
@@ -692,11 +669,10 @@ begin
         nText := StringReplace(nText, #10, '', [rfReplaceAll]);
         nText := StringReplace(nText, Chr(9), '', [rfReplaceAll]);
         nText := StringReplace(nText, '<br/>', ' ', [rfReplaceAll, rfIgnoreCase]);
-        nText := Trim(HTMLDecode(nText));
         // remove extra spaces (when contact added more than 1 friend)
         nText := StringReplace(nText, '</small></a>       </div></div><div class=''feedFriend''>', '</small></a>       </div></div>, <div class=''feedFriend''>', [rfReplaceAll]);
         nText := StringReplace(nText, '       ', ' ', [rfReplaceAll]);
-
+        nText := Trim(HTMLDecodeW(nText));
         // nText := LeftStr(nText, Length(nText)-1); // remove trailing dot - doesn't work correctly when contact added more than 1 friend
         nNTimestr := TextBetweenInc(HTMLNews, '<td class="feedTime', '</td>');
         nNTimestr := Trim(HTMLRemoveTags(nNTimestr));
@@ -736,7 +712,7 @@ procedure vk_GetNews();
 var NewsAll: TNewsRecords;
     CurrNews: Integer;
     ValidNews: Boolean;
-    NewsText: String;
+    NewsText: WideString;
     ContactID: THandle;
 begin
   if DBGetContactSettingByte(0, piShortName, opt_NewsMin, 0) = 1 then
@@ -751,7 +727,7 @@ begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... current local date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', Now)));
     for CurrNews:=0 to High(NewsAll)-1 do
     begin
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... checking news '+IntToStr(CurrNews+1)+' (from '+IntToStr(High(NewsAll))+')...'));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... checking news '+IntToStr(CurrNews+1)+' (of '+IntToStr(High(NewsAll))+')...'));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
       // validate date & time of message (if never was shown before)
       if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600) then
@@ -797,7 +773,7 @@ begin
           if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
           begin // display news in a separate contact
             ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234), // separate contact ID, 1234 by default
-                                      DBReadString(0, piShortName, opt_NewsSeparateContactName, Translate('News')), // separate contact nick, translated 'News' by default
+                                      DBReadUnicode(0, piShortName, opt_NewsSeparateContactName, TranslateW('News')), // separate contact nick, translated 'News' by default
                                       ID_STATUS_OFFLINE, // status
                                       1); // friend = yes
           end

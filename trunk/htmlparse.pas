@@ -13,14 +13,14 @@ uses
   function LastPos(ASearch: string; AText: string): Integer;
   function URLEncode(const AStr: string): string;
   function URLDecode(const AStr: string): string;  
-  function HTMLRemoveTags(const Value: string): string;
+  function HTMLRemoveTags(const Value: WideString): WideString;
   function HTMLDecode(const Value: string): string;
   function TextBetweenTagsInc(WholeText, Tag: string): string;
-  function TextBetweenTagsAttrInc(WholeText, Tag, AttrName, AttrValue: string): string;
-  function ReplaceLink(WholeText: string): string;
-  function RemoveDuplicates(WholeText: string): string;
-  function PosEx(Const SubStr, S: String; Offset: Cardinal = 1): Integer;  
-
+  function TextBetweenTagsAttrInc(WholeText, Tag, AttrName, AttrValue: WideString): WideString;
+  function ReplaceLink(WholeText: WideString): WideString;
+  function RemoveDuplicates(WholeText: WideString): WideString;
+  function PosEx(Const SubStr, S: String; Offset: Cardinal = 1): Integer;
+  function HTMLDecodeW(const Value: String): WideString;
 
 var
   RemainingText: string;
@@ -133,9 +133,9 @@ begin
   end;
 end;
 
-function TextBetweenTagsAttrInc(WholeText, Tag, AttrName, AttrValue: string): string;
+function TextBetweenTagsAttrInc(WholeText, Tag, AttrName, AttrValue: WideString): WideString;
 var
-  WorkText: string;
+  WorkText: WideString;
   BlockStart, BlockEnd, TagStart, TagEnd: integer;
 begin
   Result := '';
@@ -171,9 +171,9 @@ begin
   end;
 end;
 
-function RemoveDuplicates(WholeText: string): string;
+function RemoveDuplicates(WholeText: WideString): WideString;
 var DupBegin, DupEnd: Integer;
-    DupText: String;
+    DupText: WideString;
 begin
   DupBegin := Pos('(', WholeText);
   while DupBegin > 0 do
@@ -192,9 +192,9 @@ begin
   Result := WholeText;
 end;
 
-function ReplaceLink(WholeText: string): string;
+function ReplaceLink(WholeText: WideString): WideString;
 var OpenTagStart, OpenTagEnd, CloseTagStart, LinkStart, LinkEnd: integer;
-    LinkText: String;
+    LinkText: WideString;
 begin
   OpenTagStart := Pos('<a', WholeText);
   while OpenTagStart > 0 do
@@ -220,7 +220,7 @@ begin
       break;
     OpenTagStart := Pos('<a', WholeText);
   end;
-  Result := WholeText;
+  Result := Trim(WholeText);
 end;
 
 {    Searches for a partial text of one of the items of a TStringList
@@ -281,7 +281,7 @@ begin
   Result := PrevPos;
 end;
 
-function HTMLRemoveTags(const Value: string): string;
+function HTMLRemoveTags(const Value: WideString): WideString;
 var
   i, Max: Integer;
 begin
@@ -380,6 +380,83 @@ begin
   end;
 end;
 
+
+function HTMLDecodeW(const Value: String): WideString;
+const
+  Symbols: array [32..255] of string = (
+                        'nbsp',   '',       'quot',   '',       '',       '',       'amp',    '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    'lt',     '',       'gt',     '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       '',       '',       '',       '',       '',       '',       '',       '',       '',
+    '',       'iexcl',  'cent',   'pound',  'curren', 'yen',    'brvbar', 'sect',   'uml',    'copy',
+    'ordf',   'laquo',  'not',    'shy',    'reg',    'macr',   'deg',    'plusmn', 'sup2',   'sup3',
+    'acute',  'micro',  'para',   'middot', 'cedil',  'sup1',   'ordm',   'raquo',  'frac14', 'frac12',
+    'frac34', 'iquest', 'Agrave', 'Aacute', 'Acirc',  'Atilde', 'Auml',   'Aring',  'AElig',  'Ccedil',
+    'Egrave', 'Eacute', 'Ecirc',  'Euml',   'Igrave', 'Iacute', 'Icirc',  'Iuml',   'ETH',    'Ntilde',
+    'Ograve', 'Oacute', 'Ocirc',  'Otilde', 'Ouml',   'times',  'Oslash', 'Ugrave', 'Uacute', 'Ucirc',
+    'Uuml',   'Yacute', 'THORN',  'szlig',  'agrave', 'aacute', 'acirc',  'atilde', 'auml',   'aring',
+    'aelig',  'ccedil', 'egrave', 'eacute', 'ecirc',  'euml',   'igrave', 'iacute', 'icirc',  'iuml',
+    'eth',    'ntilde', 'ograve', 'oacute', 'ocirc',  'otilde', 'ouml',   'divide', 'oslash', 'ugrave',
+    'uacute', 'ucirc',  'uuml',   'yacute', 'thorn',  'yuml'
+  );
+var
+  i, Max, p1, p2: Integer;
+  Symbol: WideString;
+  SymbolLength: Integer;
+
+  function IndexStr(const AText: string; const AValues: array of string): Integer;
+  var
+    i: Integer;
+  begin
+    Result := -1;
+    for i := Low(AValues) to High(AValues) do
+      if AText = AValues[i] then
+      begin
+        Result := i;
+        Break;
+      end;
+  end;
+
+begin
+  result := '';
+  Max := Length(Value);
+  i := 1;
+  while i <= Max do
+  begin
+    if (Value[i] = '&') and (i + 1 < Max) then
+    begin
+      Symbol := Copy(Value, i + 1, Max);
+      p1 := Pos(' ', Symbol);
+      p2 := Pos(';', Symbol);
+      if (p2 > 0) and ((p2 < p1) xor (p1 = 0)) then
+      begin
+        Symbol := Copy(Symbol, 1, pos(';', Symbol) - 1);
+        SymbolLength := Length(Symbol) + 1;
+        if Symbol[1] <> '#' then
+        begin
+          Symbol := IntToStr(IndexStr(Symbol, Symbols) + 32);
+        end else
+          Delete(Symbol, 1, 1);
+        Symbol := WideChar(StrToIntDef(Symbol, 0));
+        result := result + Symbol;
+        inc(i, SymbolLength);
+      end else
+        result := result + Value[i];
+    end else
+      result := result + Value[i];
+    inc(i);
+  end;
+end;
+
 // ****************************************************************************
 // URL encode function
 // ****************************************************************************
@@ -432,6 +509,8 @@ begin
   end;
   SetLength(Result, pred(J));
 end;
+
+
 
 
 end.

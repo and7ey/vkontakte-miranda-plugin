@@ -3,7 +3,7 @@
 ; Locale: 0419
 ; Authors: LA
 ; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.1.9.0
+; ** VKontakte Protocol 0.3.0.0
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -40,22 +40,22 @@
 Протокол ВКонтакте для Miranda IM
 [VKontakte HTTP connections]
 Подключения модуля ВКонтакте
-[&Main page VKontakte...]
-&Страница ВКонтакте...
-[&Photos VKontakte...]
-&Фотографии ВКонтакте...
-[&Friends VKontakte...]
-&Друзья ВКонтакте...    
-[The &wall VKontakte...]
-&Стена ВКонтакте...
-[&Groups VKontakte...]
-&Группы ВКонтакте...
-[&Audio VKontakte...]
-&Аудиозаписи ВКонтакте...
-[&Notes VKontakte...]
-&Заметки ВКонтакте...
-[&Questions VKontakte...]
-&Вопросы ВКонтакте...
+[&Main page...]
+&Страница...
+[&Photos...]
+&Фотографии...
+[&Friends...]
+&Друзья...    
+[The &wall...]
+&Стена...
+[&Groups...]
+&Группы...
+[&Audio...]
+&Аудиозаписи...
+[&Notes...]
+&Заметки...
+[&Questions...]
+&Вопросы...
 [Remove subject of incoming message, if empty]
 Убирать тему входящего сообщения, если она пуста
 [Get only minimal contact details (name, date of birth, phones)]
@@ -72,22 +72,22 @@
 На вечеринке
 [Having dinner]
 За трапезой
-[My &main page VKontakte...]
-Моя &страница ВКонтакте...
-[My &photos VKontakte...]
-Мои &фотографии ВКонтакте...
-[My &friends VKontakte...]
-Мои &друзья ВКонтакте...
-[My &wall VKontakte...]
-Моя &стена ВКонтакте...
-[My &groups VKontakte...]
-Мои &группы ВКонтакте...
-[My &audio VKontakte...]
-Мои &аудиозаписи ВКонтакте...
-[My &notes VKontakte...]
-Мои &заметки ВКонтакте...
-[My &questions VKontakte...]
-Мои &вопросы ВКонтакте...
+[My &main page...]
+Моя &страница...
+[My &photos...]
+Мои &фотографии...
+[My &friends...]
+Мои &друзья...
+[My &wall...]
+Моя &стена...
+[My &groups...]
+Мои &группы...
+[My &audio...]
+Мои &аудиозаписи...
+[My &notes...]
+Мои &заметки...
+[My &questions...]
+Мои &вопросы...
 [Read additional status]
 Прочитать дополнительный статус
 [Avatars]
@@ -355,7 +355,7 @@
 [Test error popup]
 Проверочное сообщение об ошибке
 [Use protocol icon]
-Использовать иконку протокола
+Иконка протокола
 [Click here to choose the picture]
 Нажмите здесь для выбора изображения
 [write on the wall]
@@ -463,4 +463,28 @@
 [Use local time for messages from the wall]
 Использовать локальное время для сообшений со стены
 [Display wall messages in the separate contact]
-Отображать сообещния со стены в отдельном контакте
+Отображать сообщения со стены в отдельном контакте
+[Education]
+ВУЗ
+[Occupation]
+Деятельность
+[Hobby]
+Интересы
+[Music]
+Любимая музыка
+[Movies]
+Любимые фильмы
+[Shows]
+Любимые телешоу
+[Books]
+Любимые книги
+[Games]
+Любимые игры
+[Quotes]
+Любимые цитаты
+[Department]
+Кафедра
+[College]
+ВУЗ
+[School]
+Школа

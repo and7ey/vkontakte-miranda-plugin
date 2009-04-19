@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (С) 2009 Andrey Lukyanov
+    Copyright (c) 2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -42,10 +42,10 @@ type
   PPROTOSEARCHRESULT_VK = ^TPROTOSEARCHRESULT_VK;
   TPROTOSEARCHRESULT_VK = record
     cbSize   : int;
-    nick     : PChar;
-    firstName: PChar;
-    lastName : PChar;
-    email    : PChar;
+    nick     : PWideChar;
+    firstName: PWideChar;
+    lastName : PWideChar;
+    email    : PWideChar;
     reserved : array [0..15] of Byte;
     // protocol-specific fields
     id       : Integer; // contains unique contact's id
@@ -248,7 +248,7 @@ end;
 function CreateAdvSearchUI(wParam: wParam; lParam: lParam): Integer; cdecl;
 begin
   If (lParam <> 0) And (hInstance <> 0) Then
-    Result := CreateDialog(hInstance, MAKEINTRESOURCE('VK_SEARCHADVANCED'), lParam, @AdvancedSearchDlgProc)
+    Result := CreateDialogW(hInstance, MAKEINTRESOURCEW(WideString('VK_SEARCHADVANCED')), lParam, @AdvancedSearchDlgProc)
   else
     Result := 0; // failure
 end;
@@ -257,24 +257,22 @@ end;
 // procedure to find contacts by name, surname and other details
 // find first 20 contacts
 // -----------------------------------------------------------------------------
-procedure vk_SearchFriends(SearchURL: String; SearchID: Integer; SearchPages: Integer);
+procedure vk_SearchFriends(SearchURL: WideString; SearchID: Integer; SearchPages: Integer);
 var
-    HTML: String;
-    FoundTemp: TStringList;
+    HTML: WideString;
     i: Byte;
     TempInteger: Integer;
-    FriendDetails_temp: String;
+    FriendDetails_temp: WideString;
     FoundCount: Integer;
 
     csr: CUSTOMSEARCHRESULTS_VK;  // variables for customer search results
-    columns: array [0..3] of TCHAR;
+    columns: array [0..3] of TChar;
 
-    FriendStatus,
+    FriendStatus: String;
     FriendID,
     FriendFullName,
-//    FriendSecID,
     FriendGraduated,
-    FriendFaculty: String;
+    FriendFaculty: WideString;
 
 begin
   SearchURL := SearchURL + vk_url_search_suffix;
@@ -291,14 +289,9 @@ begin
         HTML := HTML + HTTP_NL_Get(Format(SearchURL, [i*10]));
   end;
 
-
   if Trim(HTML) <> '' then
   begin
 	  // for unicode should use columns[0].W, see mRadio Mod for example
-	  columns[0].a := 'ID';               // id
-	  columns[1].a := 'Nick';             // имя
-	  columns[2].a := 'Graduated';        // выпуск
-	  columns[3].a := 'Faculty';          // факультет
 	  columns[0].w := 'ID';
 	  columns[1].w := 'Nick';
 	  columns[2].w := 'Graduated';
@@ -316,43 +309,38 @@ begin
 		  FriendID := TextBetween(FriendDetails_temp, 'friend.php?id=', '">');
 		  FriendDetails_temp := TextBetweenInc(FriendDetails_temp,'div class="info"','</li>');
 
-		  FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<dt>Имя:', '<dt>')));
+		  FriendFullName := Trim(TextBetween(FriendDetails_temp, '<dt>Имя:', '<dt>'));
+		  FriendFullName := HTMLDecodeW(Trim(FriendFullName));
+      FriendFullName := Trim(HTMLRemoveTags(FriendFullName));
 		  if FriendFullName = '' Then
 			  FriendFullName := HTMLRemoveTags(Trim(TextBetween(FriendDetails_temp, '<dt>Имя:', '</dd>')));
-		  FriendFullName := HTMLDecode(Trim(FriendFullName));
 		  FriendGraduated := TextBetween(FriendDetails_temp, '<dt>Выпуск:', '<dt>');
-		  FriendGraduated := Trim(HTMLRemoveTags(HTMLDecode(FriendGraduated)));
+		  FriendGraduated := Trim(HTMLRemoveTags(HTMLDecodeW(FriendGraduated)));
 		  if Pos('&nbsp', FriendDetails_temp) > 0 then
 			  FriendFaculty := TextBetween(FriendDetails_temp, '<dt>Факультет:', '&nbsp')
 		  else
 			  FriendFaculty := TextBetween(FriendDetails_temp, '<dt>Факультет:', '</dd>');
-		  FriendFaculty := Trim(HTMLRemoveTags(HTMLDecode(FriendFaculty)));
-		  // FriendSecID := TextBetween(FoundTemp.Strings[i], '&amp;h=', '">Добавить в друзья');
+		  FriendFaculty := Trim(HTMLRemoveTags(HTMLDecodeW(FriendFaculty)));
 		  FriendStatus := TextBetween(FriendDetails_temp, '<span class=''bbb''>', '</span>');
-
 		  if TryStrToInt(FriendID, TempInteger) and (FriendID<>'') and (FriendFullName<>'') then
 		  begin
 			  FillChar(csr, sizeof(csr), 0);
 			  csr.psr.cbSize := sizeOf(csr.psr);
-			  csr.psr.nick := StrNew(PChar(FriendID));
-			  csr.psr.firstName := StrNew(PChar(FriendFullName));
-			  csr.psr.lastName := StrNew(PChar(FriendGraduated));
-			  csr.psr.email := StrNew(PChar(FriendFaculty));
+			  csr.psr.nick := PWideChar(FriendID);
+			  csr.psr.firstName := PWideChar(FriendFullName);
+			  csr.psr.lastName := PWideChar(FriendGraduated);
+			  csr.psr.email := PWideChar(FriendFaculty);
+
 			  csr.psr.id := TempInteger;
-			  // csr.psr.SecureID := StrNew(PChar(FriendSecID));
 			  if FriendStatus = 'Online' then
 			    csr.psr.Status := ID_STATUS_ONLINE
 			  else
 			    csr.psr.Status := ID_STATUS_OFFLINE;
 
-			  columns[0].a := PChar(FriendID);
-			  columns[1].a := PChar(FriendFullName);
-			  columns[2].a := PChar(FriendGraduated);
-			  columns[3].a := PChar(FriendFaculty);
 			  columns[0].w := PWideChar(WideString(FriendID));
-			  columns[1].w := PWideChar(WideString(FriendFullName));
-			  columns[2].w := PWideChar(WideString(FriendGraduated));
-			  columns[3].w := PWideChar(WideString(FriendFaculty));
+			  columns[1].w := PWideChar(FriendFullName);
+			  columns[2].w := PWideChar(FriendGraduated);
+			  columns[3].w := PWideChar(FriendFaculty);
 
 			  csr.nSize       := SizeOf(csr);
 			  csr.nFieldCount := 4;
@@ -400,10 +388,10 @@ end;
 // -----------------------------------------------------------------------------
 function SearchAdv(wnd: HWnd): DWord;
 var
-  SearchURL: String;
+  SearchURL: WideString;
 
   srchFirstName,
-  srchLastName: String;
+  srchLastName: WideString;
   srchSex,
   srchStatus,
   srchPolitical,
@@ -420,8 +408,8 @@ var
   srchOnline: Integer;
 
 begin
-  srchFirstName := GetDlgString(wnd, VK_ADVSRCH_FIRSTNAME);
-  srchLastName := GetDlgString(wnd, VK_ADVSRCH_LASTNAME);
+  srchFirstName := GetDlgUnicode(wnd, VK_ADVSRCH_FIRSTNAME);
+  srchLastName := GetDlgUnicode(wnd, VK_ADVSRCH_LASTNAME);
   srchSex := GetDlgComboBoxItem(wnd, VK_ADVSRCH_GENDER);
   srchStatus := GetDlgComboBoxItem(wnd, VK_ADVSRCH_MARITALSTATUS);
   srchPolitical := GetDlgComboBoxItem(wnd, VK_ADVSRCH_POLITICALVIEWS);
@@ -479,7 +467,7 @@ function SearchName(lParam: lParam): DWord;
 var
   sbn: TPROTOSEARCHBYNAME;
 
-  SearchURL: String;
+  SearchURL: WideString;
 
   srchFirstName,
   srchLastName: String;

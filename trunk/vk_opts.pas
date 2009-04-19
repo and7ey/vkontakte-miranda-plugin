@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -273,7 +273,7 @@ function DlgProcOptionsAdv2(Dialog: HWnd; Message, wParam, lParam: DWord): Boole
 var
   val: Integer;
   str: String;  // temp variable for types conversion
-  pc: PChar;    // temp variable for types conversion
+  pc: PWideChar;    // temp variable for types conversion
 begin
   Result:=False;
 
@@ -284,7 +284,7 @@ begin
         // translate all dialog texts
         TranslateDialogDefault(Dialog);
 
-        SetDlgItemText(dialog, VK_OPT_DEFAULT_GROUP, PChar(DBReadString(0, piShortName, opt_UserDefaultGroup, nil))); // default group
+        SetDlgItemTextW(dialog, VK_OPT_DEFAULT_GROUP, PWideChar(DBReadUnicode(0, piShortName, opt_UserDefaultGroup, nil))); // default group
 
         val := DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0);
         CheckDlgButton(dialog, VK_OPT_VKONTAKTE_URL, val);
@@ -329,9 +329,9 @@ begin
         if PNMHdr(lParam)^.code = PSN_APPLY then
           begin
             SetLength(Str, 256);
-            pc := PChar(Str);
-            GetDlgItemText(dialog, VK_OPT_DEFAULT_GROUP, pc, 256);
-            DBWriteContactSettingString (0, piShortName, opt_UserDefaultGroup, pc);
+            pc := PWideChar(WideString(Str));
+            GetDlgItemTextW(dialog, VK_OPT_DEFAULT_GROUP, pc, 256);
+            DBWriteContactSettingUnicode (0, piShortName, opt_UserDefaultGroup, pc);
 
             DBWriteContactSettingByte (0, piShortName, opt_UserVKontakteURL, Byte(IsDlgButtonChecked(dialog, VK_OPT_VKONTAKTE_URL)));
 

@@ -96,6 +96,7 @@ function DBGetContactSettingStr(hContact: THandle;
 function DBReadStringLength(hContact:THANDLE;szModule:PChar;szSetting:PChar):integer;
 function DBReadString (hContact:THANDLE;szModule:PChar;szSetting:PChar;
          default:PChar=nil;enc:integer=DBVT_ASCIIZ):PChar;
+function DBReadUnicode(hContact:THANDLE;szModule:PAnsiChar;szSetting:PAnsiChar;default:PWideChar=nil):PWideChar; // added by LA
 
 function DBFreeVariant(dbv: PDBVARIANT): integer;
 function DBDeleteContactSetting(hContact: THandle; const szModule: PChar; const szSetting: PChar): Integer;
@@ -221,6 +222,30 @@ begin
     DBFreeVariant(@dbv);
 end;
 
+function DBReadUnicode(hContact:THANDLE;szModule:PAnsiChar;szSetting:PAnsiChar;default:PWideChar=nil):PWideChar;
+var
+  cgs:TDBCONTACTGETSETTING;
+  dbv:TDBVARIANT;
+  i:integer;
+begin
+  cgs.szModule :=szModule;
+  cgs.szSetting:=szSetting;
+  cgs.pValue   :=@dbv;
+  dbv._type    :=DBVT_WCHAR;
+  i:=PluginLink^.CallService(MS_DB_CONTACT_GETSETTING_STR,hContact,lParam(@cgs));
+  if i=0 then
+    default:=dbv.szVal.w;
+  if (default=nil) or (default^=#0) then
+    result:=nil
+  else
+  begin
+    result:=mmi.malloc((lstrlenw(default)+1)*SizeOf(WideChar));
+    if result<>nil then
+      lstrcpyw(result,default);
+  end;
+  if i=0 then
+    DBFreeVariant(@dbv);
+end;
 {* functions above taken from dbsettings.pas file} 
 
 function DBFreeVariant(dbv: PDBVARIANT): Integer;

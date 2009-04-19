@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (С) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -53,21 +53,13 @@ uses
   vk_http, // module to connect with the site
   vk_menu, // module to work with menus
   vk_popup, // module to support popups
+  vk_opts, // unit to work with options
 
   htmlparse, // module to simplify html parsing
 
   CommCtrl,
-  Dialogs,
   SysUtils,
-  Classes;
-
-type
-  TThreadStatusSet = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
+  Messages;
 
 const
   opt_AddlStatus: PChar = 'AddlStatus';   // List of settings in DB file
@@ -77,7 +69,7 @@ var
   vk_hkListStatusAdditionalImageApply,
   vk_hkIconsSkinReload: THandle;
 
-  vk_hkMenuContactPrebuild: THandle;  
+  vk_hkMenuContactPrebuild: THandle;
 
   vk_hMenuContactStatusAdditionalRead,
   vk_hMenuStatus: THandle;   // handle of parent menu
@@ -85,19 +77,15 @@ var
   vk_hMenuStatusAddl: Array [1..13] of THandle;
   vk_hMenuStatusAddlSF: Array [1..13] of THandle;
 
-  StatusText: String;
-
-  ThrIDStatusSet: TThreadStatusSet;
-
-
-// declare procedures
-procedure MenuStatusAdditionalStatusUpdate(); forward;
-procedure StatusAddlSetIcon(hContact, hIcon: THandle); forward;
+  // declare procedures
+  procedure MenuStatusAdditionalStatusUpdate(); forward;
+  procedure StatusAddlSetIcon(hContact, hIcon: THandle); forward;
+  function ThreadStatusSet(pwcStatusText: PWideChar): LongWord; forward;
 
 // =============================================================================
 // procedure to set up additional status message on the server
 // -----------------------------------------------------------------------------
-procedure vk_StatusAdditionalSet(StatusText: String);
+procedure vk_StatusAdditionalSet(StatusText: WideString);
 var HTML: String;
     SecurityHash: String;
 begin
@@ -105,7 +93,7 @@ begin
   HTML := HTTP_NL_Get(vk_url_pda_setstatus_securityhash);
   SecurityHash := TextBetween(HTML, 'name="activityhash" value="','"');
   Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... received security id: ' + SecurityHash));
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... new additional status to be assigned: ' + StatusText));
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... new additional status to be assigned: ' + String(StatusText)));
   if Trim(StatusText)<>'' Then
   begin
     StatusText := UTF8Encode(StatusText);
@@ -127,7 +115,7 @@ var HTML: String; // html content of the pages received
     hContact: THandle;
     TempFriend: Integer;
     MsgID: String;
-    MsgText: String;
+    MsgText: WideString;
     MsgDate: TDateTime;
     MsgSender: Integer;
     i: Integer;
@@ -140,6 +128,8 @@ begin
    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... reading additional statuses from the server'));
 
    HTML := HTTP_NL_Get(vk_url_pda_news);
+   HTML := UTF8Decode(HTML);
+   
    If Trim(HTML) <> '' Then
    Begin
     XStatusUpdateTemp := True;
@@ -152,7 +142,7 @@ begin
      While Pos('a href=''/id', HTML)<>0 Do
      Begin
        StrTemp := TextBetweenInc(HTML, '<a href=''/id', '<br/>');
-       // <a href='id123456'>Александр Фамилия</a> Avs advanced to next round <span class="stTime">11:46</span><br/>
+       // <a href='id123456'>Surname Name</a> Status text <span class="stTime">11:46</span><br/>
        if (Pos('покинул',StrTemp)=0) and
           (Pos('добавил',StrTemp)=0) and
           (Pos('вступил',StrTemp)=0) and
@@ -171,7 +161,9 @@ begin
           begin
             MsgID := TextBetween(StrTemp, '<a href=''/id', '''>');
             MsgText := Trim(TextBetween(StrTemp, '</a> ', ' <span class="stTime">'));
-            MsgText := HTMLDecode(MsgText);
+            MsgText := StringReplace(MsgText, '<wbr/>', '', [rfReplaceAll, rfIgnoreCase]);
+            MsgText := HTMLDecodeW(MsgText);
+
             if (TryStrToInt(MsgID, MsgSender)) and (MsgText<>'') then
             begin
               TempFriend := GetContactByID(MsgSender);
@@ -184,8 +176,8 @@ begin
                     if StrToTime(DBReadString(TempFriend, piShortName, 'XStatusTime', '00:00')) < MsgDate then
                     begin
                       DBWriteContactSettingString(TempFriend, piShortName, 'XStatusTime', PChar(StrTemp));
-                      DBWriteContactSettingString(TempFriend, piShortName, 'XStatusMsg', PChar(MsgText));
-                      DBWriteContactSettingString(TempFriend, piShortName, 'XStatusName', Translate('Current')); // required for clist_modern to display status
+                      DBWriteContactSettingUnicode(TempFriend, piShortName, 'XStatusMsg', PWideChar(MsgText));
+                      DBWriteContactSettingUnicode(TempFriend, piShortName, 'XStatusName', TranslateW('Current')); // required for clist_modern to display status
 
                       pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.WPARAM(TempFriend), 0); // inform other plugins that we've updated xstatus for a contact
 
@@ -194,7 +186,7 @@ begin
                       // GAP (?): need to remove ... at the end of xStatuses[i].Text
                       begin
                         if (Pos(AnsiLowerCase(xStatuses[i].Text), MsgText)<>0) or
-                             (Pos(AnsiLowerCase(String(Translate(PChar(xStatuses[i].Text)))), MsgText)<>0) then
+                             (Pos(AnsiLowerCase(String(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText)<>0) then
                         begin
                           DBWriteContactSettingByte(TempFriend, piShortName, 'XStatusId', i);
                           StatusAddlSetIcon(TempFriend, xStatuses[i].IconExtraIndex);
@@ -251,11 +243,56 @@ begin
 end;
 
 // =============================================================================
+// Dialog function to ask Additional status text
+// -----------------------------------------------------------------------------
+function DlgAddlStatusAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+var
+  pc: PWideChar;    // temp variable for types conversion
+begin
+  Result := False;
+  case Msg of
+     WM_INITDIALOG:
+       begin
+         // translate all dialog texts
+         TranslateDialogDefault(Dialog);
+         SetFocus(GetDlgItem(Dialog, VK_ADDLSTATUS_TEXT));
+         SetDlgItemTextW(Dialog, VK_ADDLSTATUS_TEXT, PWideChar(lParam));
+         SetWindowLong(Dialog, GWL_USERDATA, lParam);
+       end;
+     WM_CLOSE:
+       begin
+         EndDialog(Dialog, 0);
+         Result := True;
+       end;
+     WM_COMMAND:
+       begin
+         case wParam of
+           VK_ADDLSTATUS_OK:
+             begin
+               pc := PWideChar(GetWindowLong(Dialog, GWL_USERDATA));
+               GetDlgItemTextW(Dialog, VK_ADDLSTATUS_TEXT, pc, 2048);
+               EndDialog(Dialog, 0);
+               Result := True;
+             end;
+           VK_ADDLSTATUS_CANCEL:
+             begin
+               EndDialog(Dialog, 0);
+               Result := True;
+             end;
+         end;
+       end;
+  end;
+end;
+
+// =============================================================================
 // function is called when Status menu - Additional status item is chosen
 // -----------------------------------------------------------------------------
 function MenuStatusAdditionalStatus(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl;
 var smi, smiRoot: TCLISTMENUITEM;
     i: Byte;
+    StatusText: WideString;
+    pwcStatusText: PWideChar;
+    res: LongWord;
 begin
  if (vk_Status <> ID_STATUS_ONLINE) and (vk_Status <> ID_STATUS_INVISIBLE) Then
  begin
@@ -270,41 +307,47 @@ begin
 
  if lParam1=200001 Then // 'Custom'
  Begin
-   StatusText := Trim(InputBox(Translate('Status message'),
-            Translate('Please input new custom status message'),
-            '')); // default value
+   // the code below can display current status, if StatusText is updated here
+   // with the current value
+   // StatusText := 'some text';
+   GetMem(pwcStatusText, (2048 + 1) * SizeOf(WideChar));
+   lstrcpynw(pwcStatusText, PWideChar(StatusText), Length(StatusText) + 1);
+   DialogBoxParamW(hInstance, MAKEINTRESOURCEW(WideString('VK_ADDLSTATUS')), 0, @DlgAddlStatusAsk, Windows.lParam(pwcStatusText));
+   StatusText := WideString(pwcStatusText);
+   FreeMem(pwcStatusText);
+
    if StatusText <> '' then
    Begin
      // save statuses in DB
      // first of 5 status is deleted
      for i:=5 downto 2 do
-       DBWriteContactSettingString (0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), DBReadString(0, piShortName, PChar(opt_AddlStatus+IntToStr(i-1)), ''));
-     DBWriteContactSettingString (0, piShortName, PChar(opt_AddlStatus+'1'), PChar(StatusText));
+       DBWriteContactSettingUnicode(0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), DBReadUnicode(0, piShortName, PChar(opt_AddlStatus+IntToStr(i-1)), ''));
+     DBWriteContactSettingUnicode(0, piShortName, PChar(opt_AddlStatus+'1'), PWideChar(StatusText));
      // update list of additional statuses
      MenuStatusAdditionalStatusUpdate();
      // remove selection from all items
      for i:=1 to 13 do
      Begin
-       smi.flags := CMIM_FLAGS;
+       smi.flags := CMIF_UNICODE + CMIM_FLAGS;
        pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuStatusAddl[i], Windows.lparam(@smi));
      End;
      // make first item selected
-     smi.flags := CMIM_FLAGS + CMIF_CHECKED;
+     smi.flags := CMIF_UNICODE + CMIM_FLAGS + CMIF_CHECKED;
      pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuStatusAddl[9], Windows.lparam(@smi));
    End;
  End Else // any other item selected
  Begin
    case lParam1 of
-      200001..299999: StatusText := DBReadString(0, piShortName, PChar(opt_AddlStatus+IntToStr(lParam1-200001)), nil);
-      300000..399999: StatusText := Translate(PChar(xStatuses[lParam1-300000].Text));
+      200001..299999: StatusText := DBReadUnicode(0, piShortName, PChar(opt_AddlStatus+IntToStr(lParam1-200001)), nil);
+      300000..399999: StatusText := TranslateW(PWideChar(xStatuses[lParam1-300000].Text));
    end;
    // remove selection from all items
    for i:=1 to 13 do
    Begin
-     smi.flags := CMIM_FLAGS;
+     smi.flags := CMIF_UNICODE + CMIM_FLAGS;
      pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuStatusAddl[i], Windows.lparam(@smi));
    End;
-   smi.flags := CMIM_FLAGS + CMIF_CHECKED;
+   smi.flags := CMIF_UNICODE + CMIM_FLAGS + CMIF_CHECKED;
    pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, lParam, Windows.lparam(@smi));
  End;
 
@@ -324,10 +367,13 @@ begin
      DBDeleteContactSetting(0, piShortName, 'XStatusId');
      smiRoot.hIcon := 0;
    end;
- smiRoot.flags := CMIM_FLAGS + CMIM_ICON;
+ smiRoot.flags := CMIF_UNICODE + CMIM_FLAGS + CMIM_ICON;
  pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuStatus, Windows.lparam(@smiRoot));
 
- ThrIDStatusSet := TThreadStatusSet.Create(False); // vk_StatusAdditionalSet(StatusText);
+ GetMem(pwcStatusText, (Length(StatusText) + 1) * SizeOf(WideChar));
+ lstrcpynw(pwcStatusText, PWideChar(StatusText), Length(StatusText) + 1);
+ CloseHandle(BeginThread(nil, 0, @ThreadStatusSet, pwcStatusText, 0, res));
+
  Result := 0;
 end;
 
@@ -345,20 +391,21 @@ begin
   begin
     if vk_hMenuStatusAddl[8+i]<>0 Then
      Begin // update menu item
-       smi.flags := CMIF_CHECKED + CMIM_NAME + CMIM_FLAGS;
-       smi.szName.a := DBReadString(0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), nil);
+       smi.flags := CMIF_UNICODE + CMIF_CHECKED + CMIM_NAME + CMIM_FLAGS;
+       smi.szName.w := DBReadUnicode(0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), nil);
        pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuStatusAddl[8+i], Windows.lparam(@smi));
      End Else
      Begin // add item
-       if Trim(DBReadString(0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), nil))<>'' Then
+       if Trim(DBReadUnicode(0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), nil))<>'' Then
        begin
+         smi.flags := CMIF_UNICODE;
          smi.popupPosition := 990000;
-         smi.szPopupName.a := Translate('Status');
+         smi.szPopupName.w := TranslateW('Status');
          smi.Position := 200001+i;
          srvFce := PChar(Format('%s/MenuStatusAddlStatus%d', [piShortName, smi.Position]));
          vk_hMenuStatusAddlSF[8+i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuStatusAdditionalStatus, smi.Position);
          smi.pszService := srvFce;
-         smi.szName.a := DBReadString(0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), nil);
+         smi.szName.w := DBReadUnicode(0, piShortName, PChar(opt_AddlStatus+IntToStr(i)), nil);
          smi.pszContactOwner := piShortName;
          vk_hMenuStatusAddl[8+i] := pluginLink^.CallService(MS_CLIST_ADDSTATUSMENUITEM, Windows.wParam(@vk_hMenuStatus), Windows.lparam(@smi));
        end;
@@ -370,16 +417,12 @@ end;
 // function to read contact's additional status
 // -----------------------------------------------------------------------------
 function MenuContactAdditionalStatusRead(wParam: wParam; lParam: lParam): Integer; cdecl;
-var MsgCaption: String;
+var MsgCaption: WideString;
 begin
-  MsgCaption := String(Translate('Additional status')) + ', ' + DBReadString(wParam, piShortName, 'XStatusTime', '00:00') + ': '+#10#13+
-                DBReadString(wParam, piShortName, 'XStatusMsg', '');
+  MsgCaption := TranslateW('Additional status') + ', ' + WideString(DBReadString(wParam, piShortName, 'XStatusTime', '00:00')) + ': '+#10#13+
+                DBReadUnicode(wParam, piShortName, 'XStatusMsg', '');
   ShowPopupMsg(wParam, MsgCaption, 1);
 
-  {MessageBox(0,
-             DBReadString(wParam, piShortName, 'XStatusMsg', ''),
-             PChar(MsgCaption),
-             MB_OK + MB_ICONINFORMATION); // here icon can be changed to xStatus Icon}
   Result := 0;
 end;
 
@@ -401,7 +444,7 @@ begin
   FillChar(smi, sizeof(smi), 0);
   smi.cbSize := sizeof(smi);
   smi.popupPosition := 990000;
-  smi.szPopupName.a := Translate('Status');
+  smi.szPopupName.w := TranslateW('Status');
   // standard statuses
   for i:=Low(xStatuses) to High(xStatuses) do
   begin
@@ -415,13 +458,13 @@ begin
       end;
     End;
     if smi.Position=SelectedItem Then
-      smi.flags := CMIF_CHECKED // 'No' is selected by default
+      smi.flags := CMIF_UNICODE + CMIF_CHECKED // 'No' is selected by default
     Else
-      smi.flags := 0; // will change item name & flags in future
+      smi.flags := CMIF_UNICODE + 0; // will change item name & flags in future
     srvFce := PChar(Format('%s/MenuStatusAddlStatus%d', [piShortName, smi.Position]));
     vk_hMenuStatusAddlSF[i] := pluginLink^.CreateServiceFunctionParam(srvFce, @MenuStatusAdditionalStatus, smi.Position);
     smi.pszService := srvFce;
-    smi.szName.a := PChar(xStatuses[i].Text);
+    smi.szName.w := PWideChar(xStatuses[i].Text);
     smi.pszContactOwner := piShortName;
     vk_hMenuStatusAddl[i] := pluginLink^.CallService(MS_CLIST_ADDSTATUSMENUITEM, Windows.wParam(@vk_hMenuStatus),  Windows.lparam(@smi));
   end;
@@ -439,7 +482,7 @@ begin
    smiRoot.hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar(xStatuses[SelectedItem-300000].Name)))
  else
    smiRoot.hIcon := 0;
- smiRoot.flags := CMIM_FLAGS + CMIM_ICON;
+ smiRoot.flags := CMIF_UNICODE + CMIM_FLAGS + CMIM_ICON;
  pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuStatus, Windows.lparam(@smiRoot));
 
   Result := 0;
@@ -593,13 +636,13 @@ begin
   cmi.cbSize := sizeof(cmi);
   // display addl. status for online contacts only?
   if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
-     flags := CMIM_FLAGS + CMIF_NOTOFFLINE // not show for offline
+     flags := CMIF_UNICODE + CMIM_FLAGS + CMIF_NOTOFFLINE // not show for offline
   else
-     flags := CMIM_FLAGS; // show for offline
-  if DBReadString(wParam, piShortName, 'XStatusMsg')<>'' then
-    cmi.flags := flags
+     flags := CMIF_UNICODE + CMIM_FLAGS; // show for offline
+  if DBReadUnicode(wParam, piShortName, 'XStatusMsg')<>'' then
+    cmi.flags := CMIF_UNICODE + flags
   else
-    cmi.flags := flags + CMIF_HIDDEN; // + CMIF_NOTOFFLINE;
+    cmi.flags := CMIF_UNICODE + flags + CMIF_HIDDEN; // + CMIF_NOTOFFLINE;
   pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuContactStatusAdditionalRead, Windows.lparam(@cmi));
 
   // Add permanently to contact list menu
@@ -607,18 +650,18 @@ begin
   cmi.cbSize := sizeof(cmi);
   // display menu item only for non-Friends, and when plugin is online/invisible
   if (DBGetContactSettingByte(wParam, piShortName, 'Friend', 1) = 0) and (vk_Status <> ID_STATUS_OFFLINE) then
-     cmi.flags := CMIM_FLAGS
+     cmi.flags := CMIF_UNICODE + CMIM_FLAGS
   else
-     cmi.flags := CMIM_FLAGS + CMIF_HIDDEN; // hide for Friends
+     cmi.flags := CMIF_UNICODE + CMIM_FLAGS + CMIF_HIDDEN; // hide for Friends
   pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuContactPages[1], Windows.lparam(@cmi));
 
   // display 'Write on the wall' menu item only when online
   FillChar(cmi, sizeof(cmi), 0);
   cmi.cbSize := sizeof(cmi);
   if (vk_Status <> ID_STATUS_OFFLINE) then
-     cmi.flags := CMIM_FLAGS
+     cmi.flags := CMIF_UNICODE + CMIM_FLAGS
   else
-     cmi.flags := CMIM_FLAGS + CMIF_HIDDEN;
+     cmi.flags := CMIF_UNICODE + CMIM_FLAGS + CMIF_HIDDEN;
   pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuContactPages[10], Windows.lparam(@cmi));
 
   Result := 0;
@@ -649,12 +692,12 @@ begin
   sid.cx := 16;
   sid.cy := 16;
   sid.pszDefaultFile := PChar(szFile);
-  sid.szSection.a := PChar(piShortName + '/Additional status');   // identifies group of icons - protocol specific
+  sid.szSection.w := PWideChar(WideString(piShortName + '/Additional status'));   // identifies group of icons - protocol specific
   for i:=Low(xStatuses)+2 to High(xStatuses) do
   begin
     sid.pszName         := PChar(xStatuses[i].Name);
     sid.iDefaultIndex   := -xStatuses[i].IconIndex;
-    sid.szDescription.a := Translate(PChar(xStatuses[i].Text));
+    sid.szDescription.w := TranslateW(PWideChar(xStatuses[i].Text));
     {vk_hIconsStatusAddl[i] := }PluginLink^.CallService(MS_SKIN2_ADDICON, 0, dword(@sid));
   end;
   vk_hkListStatusAdditionalPrebuild := pluginLink^.HookEvent(ME_CLIST_EXTRA_LIST_REBUILD, @ListStatusAdditionalPrebuild);
@@ -681,14 +724,14 @@ begin
   cmi.cbSize := sizeof(cmi);
   // display addl. status for online contacts only?
   if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
-    cmi.flags := CMIF_HIDDEN + CMIF_NOTOFFLINE // not show for offline
+    cmi.flags := CMIF_UNICODE + CMIF_HIDDEN + CMIF_NOTOFFLINE // not show for offline
   else
-    cmi.flags := CMIF_HIDDEN; // show for offline
+    cmi.flags := CMIF_UNICODE + CMIF_HIDDEN; // show for offline
   cmi.Position := -2000004999;
   srvFce := PChar(Format('%s/MenuContactReadAdditionalStatus', [piShortName]));
   pluginLink^.CreateServiceFunction(srvFce, @MenuContactAdditionalStatusRead);
   cmi.pszService := srvFce;
-  cmi.szName.a := 'Read additional status';
+  cmi.szName.w := 'Read additional status';
   cmi.pszContactOwner := piShortName;
   vk_hMenuContactStatusAdditionalRead := pluginLink^.CallService(MS_CLIST_ADDCONTACTMENUITEM, 0,  Windows.lparam(@cmi));
 
@@ -720,25 +763,18 @@ end;
 // =============================================================================
 // additional status thread
 // -----------------------------------------------------------------------------
-procedure TThreadStatusSet.Execute;
-var ThreadNameInfo: TThreadNameInfo;
+function ThreadStatusSet(pwcStatusText: PWideChar): LongWord;
 begin
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadStatusSet) Thread started...'));
+  Netlib_Log(vk_hNetlibUser, PChar('(ThreadStatusSet) Thread started...'));
 
-  ThreadNameInfo.FType := $1000;
-  ThreadNameInfo.FName := 'TThreadStatusSet';
-  ThreadNameInfo.FThreadID := $FFFFFFFF;
-  ThreadNameInfo.FFlags := 0;
-  try
-    RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
-  except
-  end;
+  Result := 0;
 
-  vk_StatusAdditionalSet(StatusText); // set new status on the server
+  vk_StatusAdditionalSet(WideString(pwcStatusText)); // set new status on the server
+  FreeMem(pwcStatusText);
+
   pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, 0, 0); // inform other plugins that we've changed our status
-  ThrIDStatusSet := nil;
 
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadStatusSet) ... thread finished'));
+  Netlib_Log(vk_hNetlibUser, PChar('(ThreadStatusSet) ... thread finished'));
 end;
 
 

@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,16 +43,17 @@ uses
 
 type
   TFriendName = record
-    Nick     : String;
-    FirstName: String;
-    LastName : String;
+    Nick     : WideString;
+    FirstName: WideString;
+    LastName : WideString;
   end;
 
   function GetContactByID(uid: Integer): LongWord;
-  function FullNameToNameSurnameNick(S: String): TFriendName;
+  function FullNameToNameSurnameNick(S: WideString): TFriendName;
   function RusDateToDateTime(RDate: String; LMonthes: Boolean): TDateTime;
 
   function GetDlgString(hDlg: HWnd; idCtrl: Integer): String;
+  function GetDlgUnicode(hDlg: HWnd; idCtrl: Integer): WideString;  
   function GetDlgInt(hDlg: HWnd; idCtrl: Integer): Integer;
   function GetDlgComboBoxItem(hDlg: HWnd; idCtrl: Integer): Integer;
   procedure InitComboBox(hwndCombo: HWnd; const Names: Array of TComboBoxItem);
@@ -81,11 +82,11 @@ begin
   begin
     // by default MS_DB_CONTACT_FINDFIRST returns all contacts found
     // next line verifies that found contact belongs to our protocol
-    if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PChar(piShortName))) <> 0 Then
+    if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, Windows.lParam(PChar(piShortName))) <> 0 Then
     begin
-      if DBGetContactSettingDword(hContact, piShortName, 'ID', 0) = uid Then
+      if DBGetContactSettingDWord(hContact, piShortName, 'ID', 0) = uid Then
         begin
-          Netlib_Log(vk_hNetlibUser, PChar('(GetContactByID) ... found id: '+IntToStr(DBGetContactSettingDword(hContact, piShortName, 'ID', 0))+' - match found!'));
+          Netlib_Log(vk_hNetlibUser, PChar('(GetContactByID) ... found id: '+IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0))+' - match found!'));
           Result := hContact;
           Exit;
         end;
@@ -101,7 +102,7 @@ end;
 // 'Name Nick1 Nick2 Surname'
 // 'Name Surname'
 // -----------------------------------------------------------------------------
-function FullNameToNameSurnameNick(S: String): TFriendName;
+function FullNameToNameSurnameNick(S: WideString): TFriendName;
 begin
  result.Nick := Copy(S, Pos(' ',S)+1, LastPos(' ',S)-Pos(' ',S)-1);
  result.FirstName := Copy(S, 1, Pos(' ',S)-1);
@@ -146,6 +147,18 @@ var
 begin
   ZeroMemory(@dlg_text,SizeOf(dlg_text));
   GetDlgItemText(hDlg,idCtrl,@dlg_text,1023);
+  Result := dlg_text;
+end;
+
+// =============================================================================
+// function to get text of dialog item
+// -----------------------------------------------------------------------------
+function GetDlgUnicode(hDlg: HWnd; idCtrl: Integer): WideString;
+var
+  dlg_text: array[0..1023] of Char;
+begin
+  ZeroMemory(@dlg_text,SizeOf(dlg_text));
+  GetDlgItemTextW(hDlg,idCtrl,@dlg_text,1023);
   Result := dlg_text;
 end;
 

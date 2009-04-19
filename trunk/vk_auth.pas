@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -54,7 +54,7 @@ uses
 
   Messages,
   SysUtils,
-  Classes;
+  Classes; 
 
 type
   TAuthRequest = record
@@ -145,7 +145,7 @@ end;
 // -----------------------------------------------------------------------------
 function AuthRequestReceived(wParam: wParam; lParam: lParam): Integer; cdecl;
 var ccs_ar: PCCSDATA;
-    dbeo, dbei: TDBEVENTINFO; // varibable required to add auth request to Miranda DB
+    dbeo, dbei: TDBEVENTINFO; // varibables required to add auth request to Miranda DB
     pre: TPROTORECVEVENT;
     hEvent, hContact: THandle;
 begin
@@ -177,6 +177,7 @@ begin
     hEvent := pluginLink^.CallService(MS_DB_EVENT_FINDPREV, hEvent, 0);
 	end;
 
+
   FillChar(dbeo, SizeOf(dbeo), 0);
   With dbeo Do
   Begin
@@ -185,9 +186,10 @@ begin
     szModule := piShortName;
     pBlob    := PByte(pre.szMessage);      // data
     cbBlob   := pre.lParam;
-    flags    := 0;
+    flags    := DBEF_UTF;
     timestamp := pre.timestamp;
   End;
+
   PluginLink^.CallService(MS_DB_EVENT_ADD, 0, dword(@dbeo));
 
   Result := 0;
@@ -296,8 +298,8 @@ end;
 // -----------------------------------------------------------------------------
 function DlgAuthAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
 var
-  str: String;  // temp variable for types conversion
-  pc: PChar;    // temp variable for types conversion
+  str: WideString;  // temp variable for types conversion
+  pc: PWideChar;    // temp variable for types conversion
   res: LongWord;
   AuthRequest: TAuthRequest;
 begin
@@ -321,8 +323,8 @@ begin
            VK_AUTH_OK:
              begin
                SetLength(Str, 2048);
-               pc := PChar(Str);
-               GetDlgItemText(Dialog, VK_AUTH_TEXT, pc, 2048);
+               pc := PWideChar(Str);
+               GetDlgItemTextW(Dialog, VK_AUTH_TEXT, pc, 2048);
                AuthRequest.MessageText := pc;
                AuthRequest.ID := AuthRequestID;
                // request authorization in a separate thread
