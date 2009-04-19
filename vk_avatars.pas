@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -67,7 +67,7 @@ var
   vk_hAvatarMyGet,
   vk_hAvatarMySet: THandle;
 
-  AvatarMyFileName: String; // variable to keep our avatar filename
+  AvatarMyFileName: WideString; // variable to keep our avatar filename
 
   ThrIDAvatarMySet: TThreadAvatarMySet;
 
@@ -77,7 +77,7 @@ var
 // -----------------------------------------------------------------------------
 procedure vk_AvatarGetAndSave(ID, AvatarURL: String);
 var AvatarURLOrig: String;
-    AvatarFileName: String;
+    AvatarFileName: WideString;
     hContact: THandle;
     pai: TPROTO_AVATAR_INFORMATION;
     bAvatarDownloaded: Boolean;
@@ -97,7 +97,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... verifying whether avatar is changed or file is deleted'));
 
   if (DBReadString(hContact, 'ContactPhoto', 'AvatarURL', nil) <> AvatarURL) or
-  (not FileExists(DBReadString(hContact, 'ContactPhoto', 'File', nil))) then
+  (not FileExists(DBReadUnicode(hContact, 'ContactPhoto', 'File', nil))) then
   begin
     AvatarFileName := FolderAvatars + '\' + ID + '.jpg';
     Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... downloading avatar'));
@@ -118,7 +118,7 @@ begin
       end;
     if bAvatarDownloaded then // downloaded successfully
     begin
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... avatar downloaded successfully and saved to '+ AvatarFileName));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... avatar downloaded successfully and saved to '+ String(AvatarFileName)));
       // write Avatar File Name to DB
       // DBWriteContactSettingString(hContact, 'ContactPhoto', 'File', PChar(AvatarFileName));
       // DBWriteContactSettingString(hContact, 'ContactPhoto', 'RFile', PChar(piShortName + '\' + ID + '.jpg'));
@@ -173,8 +173,8 @@ end;
 // =============================================================================
 // procedure to setup our avatar
 // -----------------------------------------------------------------------------
-procedure vk_AvatarMySetup(AvatarFileName: String);
-var AvatarFileNameNew: String;
+procedure vk_AvatarMySetup(AvatarFileName: WideString);
+var AvatarFileNameNew: WideString;
     CopyResult: LongBool;
     HTML: String;
     URLUpload: String;
@@ -186,14 +186,14 @@ begin
   if AvatarFileName <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) Setting up our avatar... '));
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup)  ... avatar filename: ' + AvatarFileName));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup)  ... avatar filename: ' + String(AvatarFileName)));
     // copy file to our avatars storage
     AvatarFileNameNew := IncludeTrailingPathDelimiter(FolderAvatars) + ExtractFileName(AvatarFileName);
-    CopyResult := CopyFile(PChar(AvatarFileName), PChar(AvatarFileNameNew), false); // overwrites existing file
+    CopyResult := CopyFileW(PWideChar(AvatarFileName), PWideChar(AvatarFileNameNew), false); // overwrites existing file
 
     if CopyResult then
     begin
-      DBWriteContactSettingString(0, piShortName, 'AvatarFile', PChar(AvatarFileNameNew));
+      DBWriteContactSettingUnicode(0, piShortName, 'AvatarFile', PWideChar(AvatarFileNameNew));
       // now we should upload our picture to the server
       Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... uploading our avatar to the server'));
       AvatarFile := TFileStream.Create(AvatarFileNameNew, fmOpenRead);
@@ -230,7 +230,7 @@ begin
     end
     else
     begin
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... not possible to create file: '+AvatarFileNameNew));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... not possible to create file: '+String(AvatarFileNameNew)));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... setting up of our avatar failed'));
     end;
   end
@@ -328,7 +328,7 @@ end;
 // function to inform Miranda about our avatar
 // -----------------------------------------------------------------------------
 function AvatarMyGet(wParam: wParam; lParam: lParam): Integer; cdecl;
-var AvatarFileName: PChar;
+var AvatarFileName: PWideChar;
 begin
   if DBGetContactSettingByte(0, piShortName, opt_UserAvatarsSupport, 0) = 0 then // don't support avatars
   begin
@@ -342,7 +342,7 @@ begin
     Exit;
   end;
 
-  AvatarFileName := DBReadString(0, piShortName, 'AvatarFile', '');
+  AvatarFileName := DBReadUnicode(0, piShortName, 'AvatarFile', '');
 
   if AvatarFileName='' then
   begin
@@ -350,7 +350,7 @@ begin
     Exit;
   end;
 
-  StrLCopy(PChar(wParam), AvatarFileName, Integer(lParam));
+  lstrcpynw(PWideChar(wParam), AvatarFileName, Integer(lParam));
   Result := 0;
 end;
 

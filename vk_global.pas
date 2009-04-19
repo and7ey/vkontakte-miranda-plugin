@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 2 shl 16 + 1 shl 8 + 0;
+  piVersion = 0 shl 24 + 3 shl 16 + 0 shl 8 + 0;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -120,26 +120,40 @@ const
   // confirmations
   conf_info_update_completed = 'Details update completed for all contacts.';
 
+  // user details paramaters names
+  usr_dtl_education = 'Education';
+  usr_dtl_faculty = 'Faculty';
+  usr_dtl_occupation = 'Occupation';
+  usr_dtl_hobby = 'Hobby';
+  usr_dtl_music = 'Music';
+  usr_dtl_movies = 'Movies';
+  usr_dtl_shows = 'Shows';
+  usr_dtl_books = 'Books';
+  usr_dtl_games = 'Games';
+  usr_dtl_quotes = 'Quotes';
+  usr_dtl_department = 'Department';
+  usr_dtl_school = 'School';
+
 const
   // List of settings in DB
   opt_UserName: PChar = 'UserEmail';
   opt_UserPass: PChar = 'UserPass';
-  opt_UserKeepOnline: PChar = 'UserKeepOnlineFreqSecs';
-  opt_UserCheckNewMessages: PChar = 'UserNewMessagesFreqSecs';
-  opt_UserUpdateFriendsStatus: PChar = 'UserFriendsStatusFreqSecs';
-  opt_UserFriendsDeleted: PChar = 'UserFriendsDeleted';
-  opt_UserGetMinInfo: PChar = 'UserInfoMinimal';
-  opt_UserRemoveEmptySubj: PChar = 'UserMsgIncRemoveEmptySubject';
-  opt_UserDefaultGroup: PChar = 'UserDefaultGroup';
-  opt_UserUpdateAddlStatus: PChar = 'UserAddlStatusUpdate';
-  opt_UserAvatarsSupport: PChar = 'UserAvatarsSupport';
-  opt_UserAvatarsUpdateFreq: PChar = 'UserAvatarsUpdateFreqSecs';
-  opt_UserAvatarsUpdateWhenGetInfo: PChar = 'UserAvatarsUpdateWhenGetInfo';
-  opt_UserVKontakteURL: PChar = 'UserInfoVKontaktePageURL';
-  opt_UserAddlStatusForOffline: PChar = 'UserAddlStatusForOfflineContacts';
-  opt_UserUseLocalTimeForIncomingMessages: PChar = 'UserMsgIncUseLocalTime';
-  opt_UserDontDeleteFriendsFromTheServer: PChar = 'UserDontDeleteFriendsFromTheServer';
-  opt_UserNonFriendsStatusSupport: PChar = 'UserNonFriendsStatusSupport';
+  opt_UserKeepOnline: PChar = 'KeepOnlineFreqSecs';
+  opt_UserCheckNewMessages: PChar = 'MsgIncFreqSecs';
+  opt_UserUpdateFriendsStatus: PChar = 'FriendsStatusFreqSecs';
+  opt_UserFriendsDeleted: PChar = 'FriendsDeleted';
+  opt_UserGetMinInfo: PChar = 'InfoMinimal';
+  opt_UserRemoveEmptySubj: PChar = 'MsgIncRemoveEmptySubject';
+  opt_UserDefaultGroup: PChar = 'GroupDefault';
+  opt_UserUpdateAddlStatus: PChar = 'AddlStatusSupport';
+  opt_UserAvatarsSupport: PChar = 'AvatarsSupport';
+  opt_UserAvatarsUpdateFreq: PChar = 'AvatarsUpdateFreqSecs';
+  opt_UserAvatarsUpdateWhenGetInfo: PChar = 'AvatarsUpdateWhenGetInfo';
+  opt_UserVKontakteURL: PChar = 'InfoVKontaktePageURL';
+  opt_UserAddlStatusForOffline: PChar = 'AddlStatusForOfflineContacts';
+  opt_UserUseLocalTimeForIncomingMessages: PChar = 'MsgIncUseLocalTime';
+  opt_UserDontDeleteFriendsFromTheServer: PChar = 'FriendsDontDeleteFromTheServer';
+  opt_UserNonFriendsStatusSupport: PChar = 'NonFriendsStatusSupport';
   opt_NewsSupport: PChar = 'NewsEnabled';
   opt_NewsSecs: PChar = 'NewsUpdateFrequencySecs';
   opt_NewsMin: PChar = 'NewsMinimalOnly';
@@ -188,9 +202,9 @@ const
   opt_WallUseLocalTime: PChar = 'WallUseLocalTime';
   opt_GroupPluginJoined: PChar = 'GroupPluginJoined';
 
-type
+type              
   TAdditionalStatusIcon = record
-    Text: String;
+    Text: WideString;
     Name: String;
     IconIndex: Integer;
     IconExtraIndex: Integer;
@@ -207,7 +221,7 @@ type
 type
   TResultDetailed = record
     Code: Byte;
-    Text: String;
+    Text: WideString;
   end;
 
 const

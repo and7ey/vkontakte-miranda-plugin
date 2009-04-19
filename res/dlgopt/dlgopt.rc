@@ -184,6 +184,20 @@ BEGIN
     EDITTEXT        VK_AUTH_TEXT,7,7,172,59,ES_AUTOHSCROLL
 END
 
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog - Ask additional status text
+//
+VK_ADDLSTATUS DIALOGEX 0, 0, 186, 95, 0
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | 
+    WS_CAPTION | WS_SYSMENU
+CAPTION "Status message"
+FONT 8, "MS Shell Dlg", 400
+BEGIN
+    DEFPUSHBUTTON   "&OK",VK_ADDLSTATUS_OK,34,74,50,14, 0x0,0
+    PUSHBUTTON      "&Cancel",VK_ADDLSTATUS_CANCEL,98,74,50,14, 0x0,0
+    EDITTEXT        VK_ADDLSTATUS_TEXT,7,7,172,59,ES_AUTOHSCROLL
+END
 
 /////////////////////////////////////////////////////////////////////////////
 //

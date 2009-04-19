@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -88,19 +88,19 @@ const
     (Name:'&Audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:500004; Proc: MenuContactPages),
     (Name:'&Notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:500005; Proc: MenuContactPages),
     (Name:'&Questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:500006; Proc: MenuContactPages),
-    (Name:'W&rite on the wall...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:600000; Proc: MenuContactWall) // don't change id of this item! it is used in vk_xstatus
+    (Name:'W&rite on the wall VKontakte...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:600000; Proc: MenuContactWall) // don't change id of this item! it is used in vk_xstatus
     );
 
   // list of main menu items
   MenuMainItems: Array [1..9] of TMenuItem = (
-    (Name:'My &main page VKontakte...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:000000; Proc: MenuMainPages),
-    (Name:'My &photos VKontakte...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:100000; Proc: MenuMainPages),
-    (Name:'My &friends VKontakte...'; URL:vk_url_friends; Icon:'ICON_FRIENDS'; Position:100001; Proc: MenuMainPages),
-    (Name:'My &wall VKontakte...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:100002; Proc: MenuMainPages),
-    (Name:'My &groups VKontakte...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:100003; Proc: MenuMainPages),
-    (Name:'My &audio VKontakte...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:100004; Proc: MenuMainPages),
-    (Name:'My &notes VKontakte...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:100005; Proc: MenuMainPages),
-    (Name:'My &questions VKontakte...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:100006; Proc: MenuMainPages),
+    (Name:'My &main page...'; URL:vk_url_friend; Icon:'ICON_PROTO'; Position:000000; Proc: MenuMainPages),
+    (Name:'My &photos...'; URL:vk_url_photos; Icon:'ICON_PHOTOS'; Position:100000; Proc: MenuMainPages),
+    (Name:'My &friends...'; URL:vk_url_friends; Icon:'ICON_FRIENDS'; Position:100001; Proc: MenuMainPages),
+    (Name:'My &wall...'; URL:vk_url_wall; Icon:'ICON_POST'; Position:100002; Proc: MenuMainPages),
+    (Name:'My &groups...'; URL:vk_url_groups; Icon:'ICON_GROUPS'; Position:100003; Proc: MenuMainPages),
+    (Name:'My &audio...'; URL:vk_url_audio; Icon:'ICON_SOUND'; Position:100004; Proc: MenuMainPages),
+    (Name:'My &notes...'; URL:vk_url_notes; Icon:'ICON_NOTES'; Position:100005; Proc: MenuMainPages),
+    (Name:'My &questions...'; URL:vk_url_questions; Icon:'ICON_QUESTIONS'; Position:100006; Proc: MenuMainPages),
     (Name:'&Update Details for all users'; URL:''; Icon:'ICON_INFO'; Position:200000; Proc: MenuMainUpdateDetailsAllUsers)
     );
 
@@ -133,7 +133,7 @@ end;
 // -----------------------------------------------------------------------------
 function MenuContactPages(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl;
 begin
-  ShellAPI.ShellExecute(0, 'open', PChar(Format(MenuContactPagesItems[lParam1].URL, [DBGetContactSettingDword(wParam, piShortName, 'ID', 0)])), nil, nil, 0);
+  ShellAPI.ShellExecute(0, 'open', PChar(Format(MenuContactPagesItems[lParam1].URL, [DBGetContactSettingDWord(wParam, piShortName, 'ID', 0)])), nil, nil, 0);
   Result := 0;
 end;
 
@@ -142,7 +142,7 @@ end;
 // -----------------------------------------------------------------------------
 function MenuMainPages(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl;
 begin
-  ShellAPI.ShellExecute(0, 'open', PChar(Format(MenuMainItems[lParam1].URL, [DBGetContactSettingDword(wParam, piShortName, 'ID', 0)])), nil, nil, 0);
+  ShellAPI.ShellExecute(0, 'open', PChar(Format(MenuMainItems[lParam1].URL, [DBGetContactSettingDWord(wParam, piShortName, 'ID', 0)])), nil, nil, 0);
   Result := 0;
 end;
 
@@ -153,7 +153,7 @@ end;
 function MenuContactAddPermanently(wParam: wParam; lParam: lParam; lParam1: Integer): Integer; cdecl;
 begin
   // requesting authorization text
-  Result := DialogBoxParam(hInstance, MAKEINTRESOURCE('VK_AUTHASK'), 0, @DlgAuthAsk, Windows.lParam(wParam));
+  Result := DialogBoxParamW(hInstance, MAKEINTRESOURCEW(WideString('VK_AUTHASK')), 0, @DlgAuthAsk, Windows.lParam(wParam));
 end;
 
 // =============================================================================
@@ -172,36 +172,14 @@ end;
 // -----------------------------------------------------------------------------
 function MenuContactWall(wParam: WPARAM; lParam: LPARAM; lParam1: Integer): Integer; cdecl;
 begin
-  Result := DialogBoxParam(hInstance, MAKEINTRESOURCE('VK_WALL_PICTURE'), 0, @DlgWallPic, Windows.lParam(wParam));
+  Result := DialogBoxParamW(hInstance, MAKEINTRESOURCEW(WideString('VK_WALL_PICTURE')), 0, @DlgWallPic, Windows.lParam(wParam));
 end;
 
 // =============================================================================
 // TEST FUNCTION
 // -----------------------------------------------------------------------------
 function MenuContactTest(wParam: WPARAM; lParam: LPARAM): Integer; cdecl;
-{var hContact: THandle;
-    MsgB: TMsgBox;
-var ppd: TPOPUPDATAEX; }
-
 begin
-
-  Result := DialogBoxParam(hInstance, MAKEINTRESOURCE('VK_WALL_PICTURE'), 0, @DlgWallPic, Windows.lParam(wParam));
-
-  // pluginLink^.CallService(MS_POPUP_SHOWMESSAGE, Windows.wParam(PChar('text message')), SM_WARNING);
-
-  {hContact := 0;
-  FillChar(MsgB, SizeOf(MsgB), 0);
-  MsgB.uSize := SizeOf(MsgB);
-  MsgB.uType := MB_OK + MB_ICON_ERROR; // MB_ICON_OTHER;
-  // MsgB.hiLogo := LoadImage(hInstance, MAKEINTRESOURCE(MenuContactPagesItems[1].Icon), IMAGE_ICON, 16, 16, 0);
-  // MsgB.hiMsg := LoadImage(hInstance, MAKEINTRESOURCE(MenuContactPagesItems[2].Icon), IMAGE_ICON, 16, 16, 0);
-  MsgB.szTitle := 'Title';
-  MsgB.szInfoText := 'Info Text';
-  MsgB.szMsg := 'Message';
-  // MsgB.hParent := ;
-
-  pluginLink^.CallService(MS_MSGBOX, wParam, Windows.lParam(@MsgB));   }
-
   Result := 0;
 end;
 

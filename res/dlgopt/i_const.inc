@@ -105,6 +105,11 @@ const
   VK_AUTH_OK = 5002;
   VK_AUTH_CANCEL = 5003;
   
+  // Additional status dialog elements IDs
+  VK_ADDLSTATUS_OK = 8001;
+  VK_ADDLSTATUS_CANCEL = 8002; 
+  VK_ADDLSTATUS_TEXT = 8003; 
+  
   // Wall - Add picture dialog elements IDs
   VK_WALL_PIC_TEXT = 6001;
   VK_WALL_PIC_IMAGE = 6002;

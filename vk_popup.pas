@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2009 Andrey Lukyanov
+    Copyright (c) 2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -35,8 +35,8 @@ interface
 
   procedure PopupInit();
   procedure PopupDestroy();
-  function Popup(hContact: THandle; MsgText: String; MsgType: Byte; ProtoIcon: Boolean; DelayOption: Byte; DelaySecs: Integer; ColorOption: Byte; ColorInfBack, ColorInfFore, ColorErrorBack, ColorErrorFore: Longword): Integer;
-  procedure ShowPopupMsg(hContact: THandle; MsgText: String; MsgType: Byte; ShowMsgBox: Boolean = True);
+  function Popup(hContact: THandle; MsgText: WideString; MsgType: Byte; ProtoIcon: Boolean; DelayOption: Byte; DelaySecs: Integer; ColorOption: Byte; ColorInfBack, ColorInfFore, ColorErrorBack, ColorErrorFore: Longword): Integer;
+  procedure ShowPopupMsg(hContact: THandle; MsgText: WideString; MsgType: Byte; ShowMsgBox: Boolean = True);
 
 implementation
 
@@ -53,9 +53,9 @@ uses
 // function to display popup
 // all settings should be provided
 // -----------------------------------------------------------------------------
-function Popup(hContact: THandle; MsgText: String; MsgType: Byte; ProtoIcon: Boolean; DelayOption: Byte; DelaySecs: Integer; ColorOption: Byte; ColorInfBack, ColorInfFore, ColorErrorBack, ColorErrorFore: Longword): Integer;
+function Popup(hContact: THandle; MsgText: WideString; MsgType: Byte; ProtoIcon: Boolean; DelayOption: Byte; DelaySecs: Integer; ColorOption: Byte; ColorInfBack, ColorInfFore, ColorErrorBack, ColorErrorFore: Longword): Integer;
 var
-  ppd: TPOPUPDATAEX;
+  ppd: TPOPUPDATAW;
 begin
   FillChar(ppd, SizeOf(ppd), 0);
   ppd.icbSize := sizeof(ppd);
@@ -71,11 +71,11 @@ begin
     end;
   if CallService(MS_POPUP_ISSECONDLINESHOWN, 0, 0) = 1 then // second line is shown
   begin
-    StrPLCopy(ppd.lpszContactName, Translate(piShortName), MAX_CONTACTNAME-1);
-    StrPLCopy(ppd.lpszText, Translate(PChar(MsgText)), MAX_SECONDLINE-1);
+    lstrcpynw(ppd.lpwzContactName, TranslateW(piShortName), MAX_CONTACTNAME-1);
+    lstrcpynw(ppd.lpwzText, TranslateW(PWideChar(MsgText)), MAX_SECONDLINE-1);
   end
   else
-    StrPLCopy(ppd.lpszContactName, MsgText, MAX_CONTACTNAME-1);
+    lstrcpynw(ppd.lpwzContactName, TranslateW(PWideChar(MsgText)), MAX_CONTACTNAME-1);
   ppd.PluginWindowProc := nil; // which procedure should be called when clicked?
   case DelayOption of
     0: ppd.iSeconds := 0; // default time
@@ -109,7 +109,7 @@ begin
       end;
   end;
 
-  Result := pluginLink^.CallService(MS_POPUP_ADDPOPUPEX, Windows.wParam(@ppd), 0);
+  Result := pluginLink^.CallService(MS_POPUP_ADDPOPUPW, Windows.wParam(@ppd), 0);
 
 end;
 
@@ -117,7 +117,7 @@ end;
 // simplified function to display popup
 //  types: 1 - info; 2 - error
 // -----------------------------------------------------------------------------
-procedure ShowPopupMsg(hContact: THandle; MsgText: String; MsgType: Byte; ShowMsgBox: Boolean = True);
+procedure ShowPopupMsg(hContact: THandle; MsgText: WideString; MsgType: Byte; ShowMsgBox: Boolean = True);
 begin
   // if plugin is installed and Popups option is enabled
   if (bPopupSupported) and (DBGetContactSettingByte(0, piShortName, opt_PopupsEnabled, 1) = 1) then
@@ -141,9 +141,9 @@ begin
   if ShowMsgBox then
     case MsgType of
       // info
-      1: MessageBox(0, Translate(PChar(MsgText)), Translate(piShortName), MB_OK + MB_ICONINFORMATION);
+      1: MessageBoxW(0, TranslateW(PWideChar(MsgText)), TranslateW(piShortName), MB_OK + MB_ICONINFORMATION);
       // error
-      2: MessageBox(0, Translate(PChar(MsgText)), Translate(piShortName), MB_OK + MB_ICONSTOP);
+      2: MessageBoxW(0, TranslateW(PWideChar(MsgText)), TranslateW(piShortName), MB_OK + MB_ICONSTOP);
   end;
 
 end;

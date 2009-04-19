@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (Ñ) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2009 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -83,14 +83,11 @@ var nlhr: TNETLIBHTTPREQUEST;
     nlhrReply: PNETLIBHTTPREQUEST;
     szRedirUrl: String;
     i: Integer;
-    UTF8Result: Boolean;
     szHost: String;
     CookiesText: String;
 
 begin
   result := ' ';
-
-  UTF8Result := False; // by default we expect not UTF8 response
 
   // create 'storage' for cookies
   if Not Assigned(CookiesGlobal) Then
@@ -128,11 +125,11 @@ begin
   begin
 
     // fast exit when Miranda terminating
-    {if Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+    if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
     begin
        Result := '';
        Exit;
-    end;}
+    end;
 
     Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Get) Dowloading page: '+ szUrl));
 
@@ -153,10 +150,6 @@ begin
           Else
             CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
         End;
-        // read page encoding
-        if nlhrReply.headers[i].szName = 'Content-Type' then
-          if Pos('utf-8', LowerCase(nlhrReply.headers[i].szValue)) > 0 Then
-            UTF8Result := True;
       End;
 
       // if the recieved code is 200 OK
@@ -164,12 +157,7 @@ begin
       begin
         ConnectionErrorsCount := 0;
         // save the retrieved data
-        if UTF8Result Then
-          Result := Utf8ToAnsi(nlhrReply.pData)
-          // Result := Utf8ToAnsi(ZDecompressStr(nlhrReply.pData))
-        Else
-          Result := nlhrReply.pData;
-          // Result := ZDecompressStr(nlhrReply.pData);
+        Result := nlhrReply.pData;
         if nlhrReply.dataLength = 0 Then
           Result := ''; // DATA_EMPTY;
       end
@@ -203,6 +191,7 @@ begin
               Result := HTTP_NL_Get(szRedirUrl)                          // not the best solution
             else
               Result := 'div class="menu2"';
+
             CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
             Exit;
           end
@@ -251,13 +240,9 @@ var nlhr: TNETLIBHTTPREQUEST;
     szRedirUrl: String;
     szHost: String;
     i: Integer;
-    UTF8Result: Boolean;
-
 
 begin
   result := ' ';
-
-  UTF8Result := False; // by default we expect not UTF8 response
 
   // create 'storage' for cookies
   if Not Assigned(CookiesGlobal) Then
@@ -298,7 +283,7 @@ begin
   begin
 
     // fast exit when Miranda terminating
-    if Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+    if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
        Exit;
 
     Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Post) Dowloading page: '+ szUrl));
@@ -312,22 +297,13 @@ begin
         // read cookie
         if nlhrReply.headers[i].szName = 'Set-Cookie' then
           CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
-        // read page encoding
-        if nlhrReply.headers[i].szName = 'Content-Type' then
-          if Pos('utf-8', LowerCase(nlhrReply.headers[i].szValue)) > 0 Then
-            UTF8Result := True;
       End;
 
       // if the recieved code is 200 OK
       if (nlhrReply.resultCode = 200) then
       begin
         // save the retrieved data
-        if UTF8Result Then
-          Result := Utf8ToAnsi(nlhrReply.pData)
-          // Result := Utf8ToAnsi(ZDecompressStr(nlhrReply.pData))
-        Else
-          Result := nlhrReply.pData;
-          // Result := ZDecompressStr(nlhrReply.pData);
+        Result := nlhrReply.pData;
         if nlhrReply.dataLength = 0 Then
           Result := ''; // DATA_EMPTY;
       end
@@ -424,7 +400,7 @@ begin
   nlhr.headers[4].szValue := PChar(CookiesGlobal.DelimitedText);
 
   // fast exit when Miranda terminating
-  if Boolean(PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0)) then
+  if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
      Exit;
 
   Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) Dowloading file: '+ szUrl));
