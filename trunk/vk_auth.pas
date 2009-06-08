@@ -41,7 +41,7 @@ uses
 
   procedure AuthInit();
   procedure AuthDestroy();
-  procedure vk_AuthRequestSend(ID: Integer; MessageText: String);
+  procedure vk_AuthRequestSend(ID: Integer; MessageText: WideString);
   function DlgAuthAsk(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
 
 implementation
@@ -57,9 +57,10 @@ uses
   Classes; 
 
 type
+  PAuthRequest = ^TAuthRequest;
   TAuthRequest = record
     ID: Integer;
-    MessageText: String;
+    MessageText: WideString;
   end;
 
 var
@@ -71,24 +72,31 @@ var
   AuthRequestID: Integer; // temp variable to keep ID of contact, whom we are trying to get authorization from
 
 // =============================================================================
+// function to read Secure ID to request authorization
+// (used only for contacts, which are already in contact list,
+// for search another procedure is used)
+// -----------------------------------------------------------------------------
+function vk_GetSecureIDAuthRequest(UserID: Integer): String;
+var HTML: String;
+begin
+  HTML := HTTP_NL_Get(Format(vk_url_auth_securityid, [UserID]));
+  Result := TextBetween(HTML, 'id=\"h\" value=\"', '\"');
+end;
+
+// =============================================================================
 // procedure to request authorization
 // -----------------------------------------------------------------------------
-procedure vk_AuthRequestSend(ID: Integer; MessageText: String);
-var HTML: String;
-    SecureID: String;
+procedure vk_AuthRequestSend(ID: Integer; MessageText: WideString);
+var SecureID: String;
 begin
-  HTML := HTTP_NL_Get(Format(vk_url_auth_securityid, [ID]));
-  if Trim(HTML) <> '' then
+  SecureID := vk_GetSecureIDAuthRequest(ID);
+  if Trim(SecureID) <> '' then
   begin
-    SecureID := TextBetween(HTML, 'id=\"h\" value=\"', '\"');
-    if Trim(SecureID) <> '' then
-    begin
-      MessageText := URLEncode(MessageText); // encode all Russian and other characters
-      // GAP (?): we don't care about result as of now
-      // we also don't need page html body, so request head only
-      // text for verification - получил уведомление и подтвердит, что Вы его друг
-      HTTP_NL_Get(Format(vk_url_authrequestsend, [ID, SecureID, MessageText]));
-   end;   
+    MessageText := URLEncode(MessageText); // encode all Russian and other characters
+    // GAP (?): we don't care about result as of now
+    // we also don't need page html body, so request head only
+    // text for verification - получил уведомление и подтвердит, что Вы его друг
+    HTTP_NL_Get(Format(vk_url_authrequestsend, [ID, SecureID, MessageText]));
  end;
 end;
 
@@ -135,6 +143,7 @@ function AuthRequestSend(wParam: wParam; lParam: lParam): Integer; cdecl;
 var ccs_ar: PCCSDATA;
 begin
   ccs_ar := PCCSDATA(lParam);
+  // GAP (?): use Ansi string as Unicode not supported by Miranda
   // call function to send authorization request
   vk_AuthRequestSend(psreID, PChar(ccs_ar.lParam));
   Result := 0;
@@ -181,12 +190,12 @@ begin
   FillChar(dbeo, SizeOf(dbeo), 0);
   With dbeo Do
   Begin
-    cbSize   := SizeOf(dbeo);
+    cbSize    := SizeOf(dbeo);
     eventType := EVENTTYPE_AUTHREQUEST;    // auth request
-    szModule := piShortName;
-    pBlob    := PByte(pre.szMessage);      // data
-    cbBlob   := pre.lParam;
-    flags    := DBEF_UTF;
+    szModule  := piShortName;
+    pBlob     := PByte(pre.szMessage);      // data
+    cbBlob    := pre.lParam;
+    flags     := 0;
     timestamp := pre.timestamp;
   End;
 
@@ -271,26 +280,13 @@ begin
 end;
 
 // =============================================================================
-// function to read Secure ID to request authorization
-// (used only for contacts, which are already in contact list,
-// for search another procedure is used)
+// procedure to request authorization from our own dialog
+// - run in a separate thread
 // -----------------------------------------------------------------------------
-function vk_GetSecureIDAuthRequest(UserID: Integer): String;
-var HTML: String;
+procedure AuthAsk(AuthRequest: PAuthRequest);
 begin
-  HTML := HTTP_NL_Get(Format(vk_url_searchbyid, [UserID]));
-  Result := TextBetween(HTML, '&h=', '">Добавить в друзья');
-end;
-
-// =============================================================================
-// procedure to request authorization - run in a separate thread
-// -----------------------------------------------------------------------------
-procedure AuthAsk(AuthRequest: TAuthRequest);
-var SecureID: String;
-begin
-  SecureID := vk_GetSecureIDAuthRequest(AuthRequest.ID);
-  if Trim(SecureID) <> '' then
-    vk_AuthRequestSend(AuthRequest.ID, AuthRequest.MessageText);
+  vk_AuthRequestSend(AuthRequest^.ID, AuthRequest^.MessageText);
+  Dispose(AuthRequest);
 end;
 
 // =============================================================================
@@ -301,7 +297,7 @@ var
   str: WideString;  // temp variable for types conversion
   pc: PWideChar;    // temp variable for types conversion
   res: LongWord;
-  AuthRequest: TAuthRequest;
+  AuthRequest: PAuthRequest;
 begin
   Result := False;
   case Msg of
@@ -325,11 +321,12 @@ begin
                SetLength(Str, 2048);
                pc := PWideChar(Str);
                GetDlgItemTextW(Dialog, VK_AUTH_TEXT, pc, 2048);
-               AuthRequest.MessageText := pc;
-               AuthRequest.ID := AuthRequestID;
+               New(AuthRequest);
+               AuthRequest^.MessageText := pc;
+               AuthRequest^.ID := AuthRequestID;
                // request authorization in a separate thread
                if AuthRequest.ID <> 0 then
-                 CloseHandle(BeginThread(nil, 0, @AuthAsk, @AuthRequest, 0, res));
+                 CloseHandle(BeginThread(nil, 0, @AuthAsk, AuthRequest, 0, res));
                EndDialog(Dialog, 0);
                Result := True;
              end;

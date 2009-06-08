@@ -693,6 +693,7 @@ begin
   sid.cy := 16;
   sid.pszDefaultFile := PChar(szFile);
   sid.szSection.w := PWideChar(WideString(piShortName + '/Additional status'));   // identifies group of icons - protocol specific
+  sid.flags := SIDF_UNICODE;
   for i:=Low(xStatuses)+2 to High(xStatuses) do
   begin
     sid.pszName         := PChar(xStatuses[i].Name);

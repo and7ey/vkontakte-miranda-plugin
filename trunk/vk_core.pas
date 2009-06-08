@@ -211,13 +211,13 @@ begin
                if (vk_o_pass<>'') and (vk_o_login<>'') then
                begin
                  EndDialog(Dialog, 0);
-                 Result:=True;
+                 Result := True;
                end;
              end;
            IDCANCEL, VK_LOGIN_CANCEL:
              begin
                EndDialog(Dialog, 0);
-               Result:=True;
+               Result := True;
              end;
            VK_LOGIN_NEWID:
              begin
@@ -313,7 +313,7 @@ begin
   end;
 
   // here is real connection happens
-  HTML := HTTP_NL_Get(Format(vk_url_pda_login, [vk_o_login, URLEncode(vk_o_pass)]));
+  HTML := HTTP_NL_Get(Format(vk_url_pda_login, [vk_o_login, URLEncode(UTF8Encode(vk_o_pass))]));
 
   // no info received
   If trim(HTML) = '' Then
@@ -805,9 +805,6 @@ begin
           vk_Status := vk_Status_Temp;
     End;
 
-  if Terminated then // if thread should be terminated (for ex., if miranda is being closed)
-    exit;
-
   // really change the status
   ProtoBroadcastAck(piShortName,
     0,
@@ -815,6 +812,9 @@ begin
     ACKRESULT_SUCCESS,
     THANDLE(vk_StatusPrevious),
     vk_Status);
+
+  if Terminated then // if thread should be terminated (for ex., if miranda is being closed)
+    Exit;
 
   // the code below should be executed only AFTER we informed miranda
   // that status is changed - otherwise other plugins are informed incorrectly

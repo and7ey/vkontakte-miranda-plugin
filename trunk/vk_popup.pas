@@ -164,10 +164,11 @@ begin
   sid.cbSize := SizeOf(TSKINICONDESC);
   sid.cx := 16;
   sid.cy := 16;
+  sid.flags := SIDF_UNICODE;
   sid.hDefaultIcon := LoadImage(hInstance, MAKEINTRESOURCE('ICON_PROTO'), IMAGE_ICON, 16, 16, 0);
-  sid.szSection.a := PChar(piShortName);   // identifies group of icons - protocol specific
+  sid.szSection.w := PWideChar(WideString(piShortName));   // identifies group of icons - protocol specific
   sid.pszName := PChar(piShortName + '_popups');
-  sid.szDescription.a := Translate('Popups');
+  sid.szDescription.w := TranslateW('Popups');
   PluginLink^.CallService(MS_SKIN2_ADDICON, 0, dword(@sid));
 end;
 

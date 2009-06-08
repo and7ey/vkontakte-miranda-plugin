@@ -56,7 +56,7 @@ uses
   vk_popup, // module to support popups  
 
   StrUtils,
-  SysUtils;
+  SysUtils, DateUtils;
 
 var
   vk_hGetInfo: THandle;
@@ -73,6 +73,9 @@ var HTML: String;
    AvatarURL: String;
    BirthYear: Integer;
    StrTemp: WideString;
+   Age: Smallint;
+   DOBM, DOBD: Byte;
+   DOBY: Word;
 
 begin
  HTML := HTTP_NL_Get(Format(vk_url_pda_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]));
@@ -109,6 +112,22 @@ begin
            DBWriteContactSettingWord(hContact, piShortName, 'BirthYear', StrToInt(FormatDateTime('yyyy', DOB)));
        end;
      except
+     end;
+     // calculating age
+     DBDeleteContactSetting(hContact, piShortName, 'Age');
+     DOBY := DBGetContactSettingWord(hContact, piShortName, 'BirthYear', 0);
+     DOBM := DBGetContactSettingByte(hContact, piShortName, 'BirthMonth', 0);
+     DOBD := DBGetContactSettingByte(hContact, piShortName, 'BirthDay', 0);
+     if (DOBY > 0) and (DOBY < 10000) and
+        (DOBM > 0) and (DOBM <= 12) and
+        (DOBD > 0) and (DOBD <= 31) then
+     begin
+       Age := CurrentYear - DOBY;
+       if (MonthOf(Now) < DOBM) or
+          ((MonthOf(Now) = DOBM) and (DayOf(Now) < DOBD)) then
+            Age := Age - 1;
+       if Age > 0 then
+         DBWriteContactSettingWord(hContact, piShortName, 'Age', Age);
      end;
 
      PhoneMobile := Trim(TextBetween(TextBetween(HTML, 'Моб. тел.: ', '<br/>'),'>','<'));
@@ -159,6 +178,10 @@ var HTML: String;
    ContactFN: TFriendName;
    DOB: TDateTime;
    BirthYear: Integer;
+   Age: Smallint;
+   DOBM, DOBD: Byte;
+   DOBY: Word;
+      
 begin
  HTML := HTTP_NL_Get(Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]));
 
@@ -288,6 +311,23 @@ begin
        except
        end;
      end;
+     // calculating age
+     DBDeleteContactSetting(hContact, piShortName, 'Age');
+     DOBY := DBGetContactSettingWord(hContact, piShortName, 'BirthYear', 0);
+     DOBM := DBGetContactSettingByte(hContact, piShortName, 'BirthMonth', 0);
+     DOBD := DBGetContactSettingByte(hContact, piShortName, 'BirthDay', 0);
+     if (DOBY > 0) and (DOBY < 10000) and
+        (DOBM > 0) and (DOBM <= 12) and
+        (DOBD > 0) and (DOBD <= 31) then
+     begin
+       Age := CurrentYear - DOBY;
+       if (MonthOf(Now) < DOBM) or
+          ((MonthOf(Now) = DOBM) and (DayOf(Now) < DOBD)) then
+            Age := Age - 1;
+       if Age > 0 then
+         DBWriteContactSettingWord(hContact, piShortName, 'Age', Age);
+     end;
+
 
      // origin city
      StrTemp := TextBetween(BasicInfo,'<td class="label">Родной город:</td>', '</td>');
