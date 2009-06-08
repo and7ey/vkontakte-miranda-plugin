@@ -309,6 +309,7 @@ end;
 // function, which run once all modules are loaded
 // -----------------------------------------------------------------------------
 function OnModulesLoad(wParam{0}, lParam{0}: DWord): Integer; cdecl;
+var sid: TSKINICONDESC;
 begin
   // code to identify Options function
   vk_hkOptInitialise := pluginLink^.HookEvent(ME_OPT_INITIALISE, @OnOptInitialise);
@@ -389,7 +390,7 @@ begin
       IDNO:  DBWriteContactSettingByte(0, piShortName, opt_GroupPluginJoined, 1);
     end;
 
-  Result:=0;
+  Result := 0;
 end;
 
 // =============================================================================

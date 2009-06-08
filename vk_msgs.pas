@@ -267,7 +267,7 @@ begin
              Exit;
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from id: '+IntToStr(MsgSender)));
             // from - Name (needed for not-friends)
-            MsgSenderName := TextBetween(HTML, '</span> <a href="', '/a>');
+            MsgSenderName := TextBetween(Utf8ToAnsi(HTML), '</span> <a href="', '/a>');
             MsgSenderName := HTMLDecodeW(TextBetween(MsgSenderName, '">', '<'));
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from person: '+String(MsgSenderName)));
 
@@ -358,32 +358,33 @@ begin
            MsgDate := Now;
            pre.timestamp := Trunc((MsgDate-25569)*86400)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,Trunc((MsgDate-25569)*86400),0);
 
+           // GAP(?): use AnsiStrings below, as unicode not supported
            //blob is: uin( DWORD ), hContact( HANDLE ), nick( ASCIIZ ), first( ASCIIZ ), last( ASCIIZ ), email( ASCIIZ ), reason( ASCIIZ )
            MsgText := '(text of authorization request is not supported currently)';
-           pre.lParam := sizeof(DWORD) + sizeof(THANDLE) + Length(MsgSenderName) + Length(MsgID) + Length(MsgText) + 8;
+           pre.lParam := sizeof(DWORD) + sizeof(THANDLE) + Length(AnsiString(MsgSenderName)) + Length(MsgID) + Length(AnsiString(MsgText)) + 8;
            pCurBlob := AllocMem(pre.lParam);
            pre.szMessage := PChar(pCurBlob);
            PDWORD(pCurBlob)^ := 0;
            Inc(pCurBlob, sizeof(DWORD));
            PHANDLE(pCurBlob)^ := TempFriend;
            Inc(pCurBlob, sizeof(THANDLE));
-           StrCopy(pCurBlob, PChar(MsgSenderName));
+           StrCopy(pCurBlob, PChar(AnsiString(MsgSenderName)));
            // lstrcpyw(pCurBlob, PWideChar(MsgSenderName));
-           Inc(pCurBlob, Length(MsgSenderName)+1);
+           Inc(pCurBlob, Length(AnsiString(MsgSenderName))+1);
            pCurBlob^ := #0;            //firstName
            Inc(pCurBlob);
            pCurBlob^ := #0;            //lastName
            Inc(pCurBlob);
            pCurBlob^ := #0;            //e-mail
            Inc(pCurBlob);
-           StrCopy(pCurBlob, PChar(MsgText)); //reason
+           StrCopy(pCurBlob, PChar(AnsiString(MsgText))); //reason
            // lstrcpyw(pCurBlob, PWideChar(MsgText));
 
            FillChar(ccs_chain, SizeOf(ccs_chain), 0);
            ccs_chain.szProtoService := PSR_AUTH; // so, AuthRequestReceived will be called,
            ccs_chain.hContact := TempFriend;     // if filtering is passed
            ccs_chain.wParam := 0;
-           ccs_chain.flags := PREF_UTF;
+           ccs_chain.flags := 0;
          	 ccs_chain.lParam := Windows.lParam(@pre);
            PluginLink^.CallService(MS_PROTO_CHAINRECV, 0, Windows.lParam(@ccs_chain));
          End;
@@ -502,7 +503,7 @@ begin
 
  if vk_Status = ID_STATUS_OFFLINE Then // if offline - send failed ack
  Begin
-    ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(TranslateW(err_sendmgs_offline)));
+    ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(Translate(err_sendmgs_offline)));
     Exit;
  End;
 
@@ -542,7 +543,7 @@ begin
      1: // 1 - not successful (unknown reason)
         ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), 0);
      2: // 2 - msgs sent two often
-        ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(TranslateW(err_sendmgs_freq)));
+        ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(Translate(err_sendmgs_freq)));
    end;
 
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadSendMsg) ... thread finished'));

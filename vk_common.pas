@@ -60,6 +60,8 @@ type
 
   function GetFileSize_(sFileName: string): cardinal;
 
+  function IfThen(AValue: Boolean; const ATrue: Integer; const AFalse: Integer = 0): Integer;  
+
 implementation
 
 uses
@@ -220,6 +222,14 @@ begin
   FileSize := Windows.GetFileSize(hFile, nil);
   Result := FileSize;
   CloseHandle(hFile);
+end;
+
+function IfThen(AValue: Boolean; const ATrue: Integer; const AFalse: Integer = 0): Integer;
+begin
+  if AValue then
+    Result := ATrue
+  else
+    Result := AFalse;
 end;
 
 begin
