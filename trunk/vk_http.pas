@@ -45,6 +45,7 @@ uses
 
   procedure HTTP_NL_Init();
   function HTTP_NL_Get(szUrl: String; szRequestType: Integer = REQUEST_GET): String;
+  function HTTP_NL_Post(szUrl: String; szData: String; Boundary: String; szHeaders: String = ''): String;  
   function HTTP_NL_PostPicture(szUrl: String; szData: String; Boundary: String): String;
   function HTTP_NL_GetPicture(szUrl, szFileName: String): Boolean;  
 
@@ -233,6 +234,134 @@ end;
 // szData = data to be posted
 // return value = HTML string
 // global var used: vk_hNetlibUser = contains handle to netlibuser created
+//
+// TODO: enable usage of szHeaders value
+//       re-write usage of Boundary (in to order just to pass values)
+// -----------------------------------------------------------------------------
+function HTTP_NL_Post(szUrl: String; szData: String; Boundary: String; szHeaders: String = ''): String;
+var nlhr: TNETLIBHTTPREQUEST;
+    nlhrReply: PNETLIBHTTPREQUEST;
+    szRedirUrl: String;
+    szHost: String;
+    i: Integer;
+
+begin
+  result := ' ';
+
+  // create 'storage' for cookies
+  if Not Assigned(CookiesGlobal) Then
+  Begin
+    CookiesGlobal := TStringList.Create;
+    CookiesGlobal.Sorted := True;
+    CookiesGlobal.Duplicates := dupIgnore;
+    CookiesGlobal.Delimiter := ' ';
+  End;
+
+  FillChar(nlhr, sizeof(nlhr), 0);
+  nlhrReply := @nlhr;
+
+  // initialize the netlib request
+  nlhr.cbSize := sizeof(nlhr);
+  nlhr.requestType := REQUEST_POST;
+  nlhr.flags := NLHRF_DUMPASTEXT or NLHRF_HTTP11;
+  nlhr.szUrl := PChar(szUrl);
+
+  nlhr.pData := PChar(szData);
+  nlhr.dataLength := Length(szData)+1;
+
+  nlhr.headersCount := 6;
+  SetLength(nlhr.headers, 6);
+  nlhr.headers[0].szName  := 'User-Agent';
+  nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
+  nlhr.headers[1].szName  := 'Connection';
+  nlhr.headers[1].szValue := 'keep-alive';
+  nlhr.headers[2].szName  := 'Keep-Alive';
+  nlhr.headers[2].szValue := '300';
+  nlhr.headers[3].szName  := 'Cookie';
+  nlhr.headers[3].szValue := PChar(CookiesGlobal.DelimitedText);
+  nlhr.headers[4].szName  := 'Content-Type';
+  nlhr.headers[4].szValue := PChar('multipart/form-data; boundary='+Boundary);
+  nlhr.headers[5].szName  := 'X-Requested-With';
+  nlhr.headers[5].szValue := 'XMLHttpRequest';
+
+  while (result = ' ') do
+  begin
+
+    // fast exit when Miranda terminating
+    if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
+       Exit;
+
+    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Post) Dowloading page: '+ szUrl));
+    // download the page
+    nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
+    if (nlhrReply <> nil) Then
+    Begin
+      // read cookies & store it
+      For i:=0 To nlhrReply.headersCount-1 Do
+      Begin
+        // read cookie
+        if nlhrReply.headers[i].szName = 'Set-Cookie' then
+          CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
+      End;
+
+      // if the recieved code is 200 OK
+      if (nlhrReply.resultCode = 200) then
+      begin
+        // save the retrieved data
+        Result := nlhrReply.pData;
+        if nlhrReply.dataLength = 0 Then
+          Result := ''; // DATA_EMPTY;
+      end
+      // if the recieved code is 302 Moved, Found, etc
+      // workaround for url forwarding
+      else if (nlhrReply.resultCode = 302) then // page moved
+      begin
+        // get the url for the new location and save it to szInfo
+        // look for the reply header "Location"
+        For i:=0 To nlhrReply.headersCount-1 Do
+        begin
+          if nlhrReply.headers[i].szName = 'Location' then
+          begin
+            // if location url doesn't contain host name, we should add it
+            szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
+            if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
+            begin
+              if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                szHost := szHost + '/';
+              szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
+            end
+            Else
+              szRedirUrl := nlhrReply.headers[i].szValue;
+            nlhr.szUrl := PChar(szRedirUrl);
+
+            Result := HTTP_NL_Get(szRedirUrl);
+            CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+            Exit;
+          end
+        end;
+      end
+      // return error code if the recieved code is neither 200 OK nor 302 Moved
+      else
+      begin
+        // store the error code
+        Result:='Error occured! HTTP Error!';
+      end
+    end
+    // if the data does not downloaded successfully (ie. disconnected), then return 1000 as error code
+    else
+    begin
+      // store the error code
+      Result:='NetLib error occurred!';
+    end;
+  end;
+end;
+
+// =============================================================================
+// function to post picture to the site
+// szUrl = URL of the webpage to be retrieved
+// szData = data to be posted
+// return value = HTML string
+// global var used: vk_hNetlibUser = contains handle to netlibuser created
 // -----------------------------------------------------------------------------
 function HTTP_NL_PostPicture(szUrl: String; szData: String; Boundary: String): String;
 var nlhr: TNETLIBHTTPREQUEST;
@@ -265,8 +394,8 @@ begin
   nlhr.pData := PChar(szData);
   nlhr.dataLength := Length(szData)+1;
 
-  nlhr.headersCount := 5;
-  SetLength(nlhr.headers, 5);
+  nlhr.headersCount := 6;
+  SetLength(nlhr.headers, 6);
   nlhr.headers[0].szName  := 'User-Agent';
   nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
   nlhr.headers[1].szName  := 'Connection';
@@ -277,7 +406,6 @@ begin
   nlhr.headers[3].szValue := PChar(CookiesGlobal.DelimitedText);
   nlhr.headers[4].szName  := 'Content-Type';
   nlhr.headers[4].szValue := PChar('multipart/form-data; boundary='+Boundary);
-
 
   while (result = ' ') do
   begin

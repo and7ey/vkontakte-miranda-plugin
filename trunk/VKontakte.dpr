@@ -246,7 +246,6 @@ end;
 function Load(link: PPLUGINLINK): integer; cdecl;
 var
   pd: TPROTOCOLDESCRIPTOR;
-  szTemp: array [0..255] of AnsiChar;
 begin
   // the following two lines are VERY VERY important, if it's not present, expect crashes
   pluginLink := Pointer(link);
@@ -268,13 +267,6 @@ begin
   vk_hOnCreateAccMgrUI := CreateProtoServiceFunction(piShortName, PS_CREATEACCMGRUI, OnCreateAccMgrUI); // for Miranda 0.8+ Account Manager support
 
   ConnectionErrorsCount := 0;
-
-  // get miranda's version
-  MirandaVersion := CallService(MS_SYSTEM_GETVERSION, 0, 0);
-  // identify Unicode miranda
-  if CallService(MS_SYSTEM_GETVERSIONTEXT, MAX_PATH, DWord(@szTemp)) = 0 then
-    if StrPos(szTemp, 'Unicode') <> nil then
-      bMirandaUnicode := True;
 
   // register functions to support popups
   PopupInit();
@@ -309,7 +301,6 @@ end;
 // function, which run once all modules are loaded
 // -----------------------------------------------------------------------------
 function OnModulesLoad(wParam{0}, lParam{0}: DWord): Integer; cdecl;
-var sid: TSKINICONDESC;
 begin
   // code to identify Options function
   vk_hkOptInitialise := pluginLink^.HookEvent(ME_OPT_INITIALISE, @OnOptInitialise);

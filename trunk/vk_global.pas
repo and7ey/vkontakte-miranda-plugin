@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 3 shl 16 + 0 shl 8 + 3;
+  piVersion = 0 shl 24 + 3 shl 16 + 0 shl 8 + 4;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -57,10 +57,10 @@ const
   vk_url = 'http://' + vk_url_host;
   // vk_url_pda = 'http://pda.vkontakte.ru';
   vk_url_pda_login = vk_url + '/login.php?pda=index&email=%s&pass=%s&expire=0';
-  vk_url_feed_friendsonline = vk_url + '/friendJS.php?act=online';
-  vk_url_feed_friends = vk_url + '/friendJS.php';
-  // vk_url_pda_friendsonline = 'http://pda.vkontakte.ru/friendsonline%d?nr=1';
-  // vk_url_pda_friends = 'http://pda.vkontakte.ru/friends%d?nr=1';
+  vk_url_feed_friendsonline = vk_url + '/friends.php?id=0&filter=online';
+  vk_url_feed_friends = vk_url + '/friends.php?id=0';
+  // vk_url_feed_friendsonline = vk_url + '/friendJS.php?act=online';
+  // vk_url_feed_friends = vk_url + '/friendJS.php';
   vk_url_pda_logout = 'http://pda.vkontakte.ru/logout';
   vk_url_pda_forgot = 'http://pda.vkontakte.ru/forgot';
   vk_url_friends_all = 'http://vkontakte.ru/friend.php';
@@ -266,8 +266,6 @@ type // for debuging purposes use Thread Names
 
 
 var
-  bMirandaUnicode: Boolean = False;
-  MirandaVersion: DWord;
   bPopupSupported: Boolean = False;
 
   vk_hNetlibUser: THandle;
