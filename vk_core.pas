@@ -250,16 +250,15 @@ begin
   // plugin doesn't support all statuses, but Miranda may try to
   // setup unsupported status (for ex., when user presses Ctrl+0..9)
   // so, we should have the following lines
-  if (vk_Status = ID_STATUS_AWAY) or
-     (vk_Status = ID_STATUS_DND) or
-     (vk_Status = ID_STATUS_NA) or
-     (vk_Status = ID_STATUS_OCCUPIED) or
-     (vk_Status = ID_STATUS_FREECHAT) or
-     (vk_Status = ID_STATUS_ONTHEPHONE) or
-     (vk_Status = ID_STATUS_OUTTOLUNCH) then
-   begin
-     vk_Status := ID_STATUS_ONLINE;
-   end;
+  case vk_Status of
+    ID_STATUS_AWAY,
+    ID_STATUS_DND,
+    ID_STATUS_OCCUPIED,
+    ID_STATUS_FREECHAT,
+    ID_STATUS_ONTHEPHONE,
+    ID_STATUS_OUTTOLUNCH: vk_Status := ID_STATUS_ONLINE;
+    ID_STATUS_NA: vk_Status := ID_STATUS_INVISIBLE;
+  end;
 
   if not Assigned(ThrIDConnect) then
   begin
@@ -474,18 +473,23 @@ begin
   // get friends online
   // status of friends is read only
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends from the server...'));
-  HTML := HTTP_NL_Get(vk_url_feed_friendsonline);
+  HTML := HTTP_NL_Post(vk_url_feed_friendsonline, '', '');
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
-	  HTML := TextBetween(HTML, 'list:[',']');
+	  HTML := TextBetween(HTML, 'friends'':[','],''universities');
     if Trim(HTML) <> '' then
     begin
 		  TempList := TStringList.Create();
 		  TempList.Sorted := True; // list should be sorted and
 		  TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
-		  TempList.Delimiter := ',';
-		  TempList.DelimitedText := HTML;
+      while Pos('[', HTML) > 0 do
+      begin
+        TempList.Add(TextBetween(HTML, '[', ','));
+        if Pos(']', HTML) > 0 then
+          Delete(HTML, 1, Pos(']', HTML))
+        else break;  
+      end;
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... ' + IntToStr(TempList.Count) + ' friend(s) online found'));
 		  For i:=0 to TempList.Count-1 Do
 		  Begin
@@ -519,16 +523,18 @@ begin
 
   // get full list of friends
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
-  HTML := HTTP_NL_Get(vk_url_feed_friends);
+  // HTML := HTTP_NL_Get(vk_url_feed_friends);
+  HTML := HTTP_NL_Post(vk_url_feed_friends, '', '');
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
-    HTML := TextBetween(HTML, 'list:[',']]');
+    HTML := TextBetween(HTML, 'friends'':[',']]');
     if Trim(HTML) <> '' then
     begin
       HTML := HTML + ']';
       while Pos('[', HTML) > 0 do
       begin
+        // [1234567,"Name Surname","http:\/\/cs123.vkontakte.ru\/u1234567\/b_d919d26a.jpg",9,"","Евгении",0,1,0,"05"]
         // 1234567, {f:'Name', l:'Surname'},{p:'http://cs1264.vkontakte.ru/u5545710/b_1234567.jpg',uy:'05',uf:12345,fg:5,to:'Name',r:63,f:0,u:123,ds:0}
         StrTemp1 := TextBetween(HTML, '[', ']');
         if Trim(StrTemp1) <> '' then
@@ -538,11 +544,12 @@ begin
           if TryStrToInt(StrTemp2, Friends[High(Friends)].ID) then
           begin
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found friend with id: ' + StrTemp2));
-            StrTemp2 := TextBetween(StrTemp1, 'f:''', '''') + ' ' +TextBetween(StrTemp1, 'l:''', '''');
+            StrTemp2 := TextBetween(StrTemp1, ',"', '",');
             Friends[High(Friends)].Name := HTMLDecodeW(StrTemp2);
-            Friends[High(Friends)].AvatarURL := TextBetween(StrTemp1, 'p:''', '''');
-            TryStrToInt(Trim(TextBetween(StrTemp1, 'r:', ',')), Friends[High(Friends)].Rating);
-            TryStrToInt(Trim(TextBetween(StrTemp1, 'fg:', ',')), Friends[High(Friends)].Group);
+            Friends[High(Friends)].AvatarURL := 'http' + TextBetween(StrTemp1, '"http', '"');
+            Friends[High(Friends)].AvatarURL := StringReplace(Friends[High(Friends)].AvatarURL, '\/', '/', [rfReplaceAll]);
+            // TryStrToInt(Trim(TextBetween(StrTemp1, 'r:', ',')), Friends[High(Friends)].Rating);
+            // TryStrToInt(Trim(TextBetween(StrTemp1, 'fg:', ',')), Friends[High(Friends)].Group);
 
             Friends[High(Friends)].InList := False;
             // mark online friends
