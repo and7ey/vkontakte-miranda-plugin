@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 3 shl 16 + 0 shl 8 + 4;
+  piVersion = 0 shl 24 + 3 shl 16 + 0 shl 8 + 6;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -55,7 +55,7 @@ const
   // URLs
   vk_url_host = 'vkontakte.ru';
   vk_url = 'http://' + vk_url_host;
-  // vk_url_pda = 'http://pda.vkontakte.ru';
+  vk_url_pda = 'http://pda.vkontakte.ru';
   vk_url_pda_login = vk_url + '/login.php?pda=index&email=%s&pass=%s&expire=0';
   vk_url_feed_friendsonline = vk_url + '/friends.php?id=0&filter=online';
   vk_url_feed_friends = vk_url + '/friends.php?id=0';
@@ -63,7 +63,7 @@ const
   // vk_url_feed_friends = vk_url + '/friendJS.php';
   vk_url_pda_logout = 'http://pda.vkontakte.ru/logout';
   vk_url_pda_forgot = 'http://pda.vkontakte.ru/forgot';
-  vk_url_friends_all = 'http://vkontakte.ru/friend.php';
+  // vk_url_friends_all = 'http://vkontakte.ru/friend.php';
   vk_url_register = 'http://vkontakte.ru/reg0';
   vk_url_forgot = 'http://vkontakte.ru/login.php?op=forgot';
   vk_url_pda_sendmsg_secureid = 'http://pda.vkontakte.ru/?act=write&to=%d';
@@ -89,9 +89,9 @@ const
   vk_url_username = 'http://vkontakte.ru/feed2.php?mask=u';  // http://vkontakte.ru/feed2.php?mask=ufpvmge
   vk_url_auth_securityid = 'http://vkontakte.ru/friend.php?act=a_add_form&fid=%d';
   vk_url_authrequestsend = 'http://vkontakte.ru/friend.php?act=addFriend&fid=%d&h=%s&message=%s';  // http://vkontakte.ru/friend.php?act=add&id=123456&h=8e30f2fe
-  vk_url_authrequestreceivedallow = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=1';
-  vk_url_authrequestreceiveddeny = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=0';
-  vk_url_authrequestreceived_requestid = 'http://vkontakte.ru/friend.php?out=1';
+  // vk_url_authrequestreceivedallow = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=1';
+  // vk_url_authrequestreceiveddeny = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=0';
+  vk_url_authrequestreceived_requestid = 'http://pda.vkontakte.ru/friendsrequests';
   vk_url_pda_setstatus_securityhash = 'http://pda.vkontakte.ru/setstatus?pda=1';
   vk_url_pda_setstatus = 'http://pda.vkontakte.ru/setstatus?pda=1&activityhash=%s&setactivity=%s';
   vk_url_pda_statusdelete = 'http://pda.vkontakte.ru/setstatus?pda=1&activityhash=%s&clearactivity=1';

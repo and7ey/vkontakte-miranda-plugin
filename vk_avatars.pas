@@ -147,22 +147,18 @@ var HTML: String;
     ID, AvatarURL: String;
     intID: Integer;
 begin
-  HTML := HTTP_NL_Get(vk_url_friends_all);
+  HTML := HTTP_NL_Post(vk_url_feed_friends, '', '');
+  HTML := TextBetween(HTML, 'friends'':[',']]');
   If Trim(HTML) <> '' Then
   begin
-
-    HTML := TextBetween(HTML, 'list:[', ']]');
+    HTML := HTML + ']';
     while Pos('[', HTML)>0 do
     begin
-      // list:[[123456, {f:'Мария', l:'Фамилия'},{p:'http://cs1058.vkontakte.ru/u123456/b_cf123456.jpg',uy:'07',uf:9302,fg:1,to:'Марии',r:74,f:0,u:326}],
-      // [789012, {f:'Олег', l:'Фамилия'},{p:'http://cs1082.vkontakte.ru/u789012/b_7898dc4d.jpg',uy:'05',uf:9302,fg:1,to:'Олега',r:67,f:0,u:326}],
-      // [345678, {f:'Андрей', l:'Фамилия'},{p:'http://cs13.vkontakte.ru/u345678/b_dc0124a.jpg',uy:'05',uf:1811,fg:1,to:'Андрея',r:72,f:0,u:326}],
-      // [901234, {f:'Юлия', l:'Фамилия'},{p:'http://cs118.vkontakte.ru/u901234/b_49bee611.jpg',uy:'07',uf:9302,fg:1,to:'Юлии',r:66,f:0,u:326}],
-      // ...
-      // [5678901, {f:'Эльвира', l:'Фамилия'},{p:'http://cs1366.vkontakte.ru/u5678901/b_34567c4e.jpg',uy:'09',uf:1421,fg:1,to:'Эльвиры',r:72,f:0,u:326}]],
+      // [1234567,"Name Surname","http:\/\/cs123.vkontakte.ru\/u1234567\/b_d919d26a.jpg",9,"","Евгении",0,1,0,"05"]
       ID := TextBetween(HTML, '[', ',');
-      AvatarURL := TextBetween(HTML, 'p:''', '''');
-      Delete(HTML, 1, Pos(']', HTML)+2);
+      AvatarURL := TextBetween(HTML, '","', '"');
+      AvatarURL := StringReplace(AvatarURL, '\/', '/', [rfReplaceAll]);
+      Delete(HTML, 1, Pos(']', HTML));
       if (TryStrToInt(ID, intID)) and (AvatarURL <> 'images/question_b.gif') and (Trim(AvatarURL)<>'') then
         vk_AvatarGetAndSave(ID, AvatarURL); // update avatar for each contact
     end;
