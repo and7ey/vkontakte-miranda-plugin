@@ -105,17 +105,15 @@ end;
 // -----------------------------------------------------------------------------
 procedure vk_AuthRequestReceivedAllow(ID: String);
 var HTML: String;
-    RequestID: String;
-    RequestIDint: Integer;
+    RequestURL: String;
 begin
-  // first we have to get request's id
+  // first we have to get URL to accept request
   HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
-  Delete(HTML, 1, Pos('friendShownName'+ID, HTML));
-  RequestID := TextBetween(HTML, 'processRequest(', ',');
+  RequestURL := TextBetween(HTML, 'addfriend', '"');
+  RequestURL := vk_url_pda + '/addfriend' + RequestURL;
 
-  if TryStrToInt(RequestID, RequestIDint) then
-    // GAP (?): we don't care about result as of now
-    HTTP_NL_Get(Format(vk_url_authrequestreceivedallow, [StrToInt(RequestID)]), REQUEST_HEAD);
+  // GAP (?): we don't care about result as of now
+  HTTP_NL_Get(RequestURL, REQUEST_HEAD);
 end;
 
 // =============================================================================
@@ -123,17 +121,15 @@ end;
 // -----------------------------------------------------------------------------
 procedure vk_AuthRequestReceivedDeny(ID: String);
 var HTML: String;
-    RequestID: String;
-    RequestIDint: Integer;
+    RequestURL: String;
 begin
-  // first we have to get request's id
+  // first we have to get URL to deny request
   HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
-  Delete(HTML, 1, Pos('friendShownName'+ID, HTML));
-  RequestID := TextBetween(HTML, 'processRequest(', ',');
+  RequestURL := TextBetween(HTML, 'deletefriend', '"');
+  RequestURL := vk_url_pda + '/deletefriend' + RequestURL;
 
-  if TryStrToInt(RequestID, RequestIDint) then
-    // GAP (?): we don't care about result as of now
-    HTTP_NL_Get(Format(vk_url_authrequestreceiveddeny, [RequestIDint]), REQUEST_HEAD);
+  // GAP (?): we don't care about result as of now
+  HTTP_NL_Get(RequestURL, REQUEST_HEAD);
 end;
 
 // =============================================================================
