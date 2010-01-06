@@ -79,7 +79,7 @@ var
 function vk_GetSecureIDAuthRequest(UserID: Integer): String;
 var HTML: String;
 begin
-  HTML := HTTP_NL_Get(Format(vk_url_auth_securityid, [UserID]));
+  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_auth_securityid, [UserID]));
   Result := TextBetween(HTML, 'id=\"h\" value=\"', '\"');
 end;
 
@@ -96,7 +96,7 @@ begin
     // GAP (?): we don't care about result as of now
     // we also don't need page html body, so request head only
     // text for verification - получил уведомление и подтвердит, что ¬ы его друг
-    HTTP_NL_Get(Format(vk_url_authrequestsend, [ID, SecureID, MessageText]));
+    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_authrequestsend, [ID, SecureID, MessageText]));
  end;
 end;
 
@@ -108,7 +108,7 @@ var HTML: String;
     RequestURL: String;
 begin
   // first we have to get URL to accept request
-  HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_authrequestreceived_requestid);
   RequestURL := TextBetween(HTML, 'addfriend', '"');
   RequestURL := vk_url_pda + '/addfriend' + RequestURL;
 
@@ -124,7 +124,7 @@ var HTML: String;
     RequestURL: String;
 begin
   // first we have to get URL to deny request
-  HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_authrequestreceived_requestid);
   RequestURL := TextBetween(HTML, 'deletefriend', '"');
   RequestURL := vk_url_pda + '/deletefriend' + RequestURL;
 

@@ -4,7 +4,8 @@ interface
 
 uses
   SysUtils,
-  Classes;
+  Classes,
+  vk_global;
 
   function TextBetweenInc(WholeText: string; BeforeText: string; AfterText: string): string;
   function TextBetween(WholeText: string; BeforeText: string; AfterText: string): string;
@@ -12,7 +13,7 @@ uses
   function FindFullLine(Line: string; List: TStringList; StartAt: Integer): Integer;
   function LastPos(ASearch: string; AText: string): Integer;
   function URLEncode(const AStr: string): string;
-  function URLDecode(const AStr: string): string;  
+  function URLDecode(const AStr: string): string;
   function HTMLRemoveTags(const Value: WideString): WideString;
   function HTMLDecode(const Value: string): string;
   function TextBetweenTagsInc(WholeText, Tag: string): string;
@@ -21,6 +22,7 @@ uses
   function RemoveDuplicates(WholeText: WideString): WideString;
   function PosEx(Const SubStr, S: String; Offset: Cardinal = 1): Integer;
   function HTMLDecodeW(const Value: String): WideString;
+  function Replace(Str, X, Y: string): string;
 
 var
   RemainingText: string;
@@ -212,7 +214,9 @@ begin
       LinkText := Copy(LinkText, LinkStart, LinkEnd-LinkStart-1);
       if (LinkText[1] = '"') or (LinkText[1] = '''') then
         LinkText := Copy(LinkText, 2, Length(LinkText)-2);
-      Insert(' (http://vkontakte.ru/'+LinkText+')', WholeText, CloseTagStart + 4);
+	    // fix id - remove leading backslash
+  	  if (LinkText[1] = '/') then LinkText := Copy(LinkText, 2, Length(LinkText)-1);
+      Insert(' (' + PAnsiChar(vk_url_prefix + vk_url_host) + '/' + LinkText + ')', WholeText, CloseTagStart + 4);
       Delete(WholeText, CloseTagStart, 4);
       Delete(WholeText, OpenTagStart, OpenTagEnd-OpenTagStart+1);
     end
@@ -302,7 +306,6 @@ begin
     end;
   end;
 end;
-
 
 function HTMLDecode(const Value: string): string;
 const
@@ -510,7 +513,36 @@ begin
   SetLength(Result, pred(J));
 end;
 
+{ **** UBPFD *********** by delphibase.endimus.com ****
+>> Функция замены в строке всех вхождений одной подстроки на другую
+Зависимости: Windows, SysUtils
+Автор:       Матюшкин Сергей, seregam@ua.fm, ICQ:162733776, Днепропетровск
+Copyright:   Sergey_M
+Дата:        26 мая 2003 г.
+***************************************************** }
 
+function Replace(Str, X, Y: string): string;
+{Str - строка, в которой будет производиться замена.
+ X - подстрока, которая должна быть заменена.
+ Y - подстрока, на которую будет произведена заменена}
 
+var
+  buf1, buf2, buffer: string;
+
+begin
+  buf1 := '';
+  buf2 := Str;
+  Buffer := Str;
+
+  while Pos(X, buf2) > 0 do
+  begin
+    buf2 := Copy(buf2, Pos(X, buf2), (Length(buf2) - Pos(X, buf2)) + 1);
+    buf1 := Copy(Buffer, 1, Length(Buffer) - Length(buf2)) + Y;
+    Delete(buf2, Pos(X, buf2), Length(X));
+    Buffer := buf1 + buf2;
+  end;
+
+  Replace := Buffer;
+end;
 
 end.

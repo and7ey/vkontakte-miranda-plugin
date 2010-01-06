@@ -183,7 +183,7 @@ var HTML: String;
    DOBY: Word;
       
 begin
- HTML := HTTP_NL_Get(Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]));
+ HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]));
 
  if Trim(HTML) = '' then
  begin
@@ -391,7 +391,7 @@ begin
        StrTemp := Trim(TextBetween(StrTemp,'''>', '</a>'));
      end
      else
-       StrTemp := Format(vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]);
+       StrTemp := Format(vk_url_prefix + vk_url_host + vk_url_friend,[DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)]);
      if Trim(StrTemp) <> '' Then
        DBWriteContactSettingString(hContact, piShortName, 'Homepage', PChar(String(StrTemp)));
 

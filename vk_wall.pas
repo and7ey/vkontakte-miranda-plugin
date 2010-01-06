@@ -57,11 +57,15 @@ type
 
   function DlgCaptcha(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
   function DlgWallPic(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+
   function vk_WallPostMessage(MsgDetails: PMsgDetails): TResultDetailed; overload;
   function vk_WallPostMessage(ID: Integer; const MessageText: WideString; Wnd: HWnd): TResultDetailed; overload;
+
+  function vk_WallPostPicture(MsgDetails: PMsgDetails): TResultDetailed; overload;
+  function vk_WallPostPicture(ID: Integer; const MessageText: WideString; Wnd: HWnd): TResultDetailed; overload;
+
   function vk_WallPostMessageDialog(MsgDetails: PMsgDetails): Integer;
-  function vk_WallPostPicture(MsgDetails: PMsgDetails): Integer; overload;
-  function vk_WallPostPicture(ID: Integer; const MessageText: WideString; Wnd: HWnd): Integer; overload;
+  function vk_WallPostPictureDialog(MsgDetails: PMsgDetails): Integer;
 
   procedure vk_WallGetMessages(ID: Integer = 0);
 
@@ -296,7 +300,7 @@ begin
        begin
          if wParam = WM_USER + 1 then // menu item is chosen
          begin
-           ShellAPI.ShellExecute(0, 'open', PChar(Format(vk_url_wall_id, [ContactID])), nil, nil, 0);
+           ShellAPI.ShellExecute(0, 'open', PChar(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ContactID])), nil, nil, 0);
            Result := True;
          end;
        end;
@@ -420,7 +424,7 @@ begin
                begin
                  MsgDetails^.MessageText := sPicFileName; // passing picture file name as message text
                  // posting picture in a separate thread
-                 CloseHandle(BeginThread(nil, 0, @vk_WallPostPicture, MsgDetails, 0, res));
+                 CloseHandle(BeginThread(nil, 0, @vk_WallPostPictureDialog, MsgDetails, 0, res));
                end
                else
                begin // text mode is chosen, sending text
@@ -516,7 +520,7 @@ var
   StrTemp: String;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetFullID) Getting full id of contact ' + IntToStr(ContactID) + '...'));
-  HTML := HTTP_NL_Get(Format(vk_url_wall_id, [ContactID]));
+  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ContactID]));
   if Trim(HTML) <> '' then
   begin
     StrTemp := TextBetween(HTML, '&id=', '">Написать на стене');
@@ -526,78 +530,54 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetFullID) ... full id of contact ' + IntToStr(ContactID) + ' identified as ' + IntToStr(Result)));
 end;
 
+// function to decode wall hash
+function DecodeWallHash(Hash: String): String;
+
+  function Invert(S: String): String;
+  var
+    i: Integer;
+  begin
+    Result := '';
+    for i := 0 to Length(S)-1 do Result := Result + S[Length(S) - i];
+  end;
+
+var
+  leftStr,
+  rightStr: String;
+
+begin
+  leftStr := Copy(hash, Length(hash)-4, 5);
+  rightStr := Copy(hash, 5, Length(hash)-12);
+  Result := Invert(leftStr + rightStr);
+end;
+
 // =============================================================================
 // function to get hash to post message on the wall
 // (full id is required for this)
 // -----------------------------------------------------------------------------
 function vk_WallGetHash(ContactFullID: Int64): String;
-
-  // function to decode hash
-  // converted from javascript function from wall.php
-  function DecodeHash(Hash: string; z: String; Num: Integer): string;
-    function Func1(x: Integer): String;
-    begin
-      while x < 48 do
-        x := x + 75;
-      while x > 122 do
-        x := x - 75;
-      Result := Chr(x);
-    end;
-
-    function Func2(x: String): Integer;
-    begin
-      Result := Ord(x[1]);
-    end;
-
-  var j: String;
-      p: byte;
-  begin
-    j := '';
-
-    for p := 1 to length(Hash) do
-    begin
-      j := j + Func1(Func2(z) + Num - Func2(Hash[p]));
-      z := Hash[p];
-    end;
-
-    Result := j;
-  end;
-
 var
   HTML,
-  Hash,
-  HashDecodeSymbol,
-  HashDecodeNumberStr,
-  StrTemp: String;
-  HashDecodeNumber: Integer;
+  Hash: String;
 begin
   Result := '';
 
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) Getting hash of contact ' + IntToStr(ContactFullID) + '...'));
 
   // getting encoded wall hash
-  HTML := HTTP_NL_Get(Format(vk_url_wall_hash, [ContactFullID]));
+  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_hash, [ContactFullID]));
   if Trim(HTML) <> '' then
   begin
     Hash := Trim(TextBetween(HTML, 'name="wall_hash" value="', '"'));
-    // tricky actions to decode hash -
-    // reading data from javascript
-    StrTemp :=  TextBetween(HTML, '="";var ', 'charAt(');
-    HashDecodeSymbol := Trim(TextBetween(StrTemp, '="', '"'));
-    HashDecodeNumberStr := TextBetween(StrTemp, ')+', '-');
-
     Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) ... encoded hash of contact ' + IntToStr(ContactFullID) + ' is ' + Hash));
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) ... hash symbol of contact ' + IntToStr(ContactFullID) + ' is ' + HashDecodeSymbol));
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) ... hash number of contact ' + IntToStr(ContactFullID) + ' is ' + HashDecodeNumberStr));
-
-    if (Hash <> '') and (HashDecodeSymbol <> '') and (TryStrToInt(HashDecodeNumberStr, HashDecodeNumber)) then
+    if Length(Hash) = 39 then
     begin // decode hash if everything is OK
       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) ... decoding hash of contact ' + IntToStr(ContactFullID) + '...'));
-      Result := DecodeHash(Hash, HashDecodeSymbol, HashDecodeNumber);
+      Result := DecodeWallHash(Hash);
       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) ... decoded hash of contact ' + IntToStr(ContactFullID) + ' is ' + Result));
     end;
-
   end;
+
 end;
 
 
@@ -653,16 +633,17 @@ begin
     SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_getting_hash)));
   if FullContactID <> 0 then
     Hash := vk_WallGetHash(FullContactID);
-  if Trim(Hash) <> '' then
+
+  if Length(Hash) = 32 then
   begin
 
     if (vk_Status = ID_STATUS_INVISIBLE) then
     begin
       if Dialog <> 0 then
         SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_posting)));
-      HTML := HTTP_NL_Get(Format(vk_url_wall_postmsg, [FullContactID, Hash, MsgText]), REQUEST_HEAD);
+      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postmsg, [FullContactID, Hash, MsgText]), REQUEST_HEAD);
       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' finished. Unable to verify result fully due to Invisible mode, but trying'));
-      HTML := HTTP_NL_Get(Format(vk_url_wall_id, [ContactID]));
+      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ContactID]));
       if Pos(MsgTextOrig, HTMLDecode(HTML)) > 0 then
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' looks successful'));
@@ -683,10 +664,10 @@ begin
     begin // status = ONLINE
       if Dialog <> 0 then
         SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_posting)));
-      HTML := HTTP_NL_Get(Format(vk_url_wall_postmsg, [FullContactID, Hash, MsgText]));
+      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postmsg, [FullContactID, Hash, MsgText]));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' done. Checking result...'));
 
-      if Pos('r/id', HTML) > 0 then
+      if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
       begin
         Result.Text := TranslateW(wall_status_succ);
         Result.Code := 0;
@@ -696,7 +677,7 @@ begin
         if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
       end
       else
-        if Pos('Введите код:', HTML) > 0 then
+        if Pos('captcha_sid', HTML) > 0 then // captcha!
         begin
           Result.Text := TranslateW(wall_status_captcha_required);
           Result.Code := 1; // not successful yet
@@ -704,13 +685,13 @@ begin
             SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
           if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
           Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha input is required, getting it...'));
-          CaptchaId := TextBetween(HTML, 'id="sid_captcha" value="', '"');
-          CaptchaURL := TextBetween(HTML, 'captchaImg" src="', '"');
+          CaptchaId := TextBetween(HTML, '"captcha_sid":"', '"');
+          CaptchaURL := 'captcha.php?s=1&sid=' + CaptchaId;
           Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha id is ' + CaptchaId));
           Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha URL is ' + CaptchaURL));
           if (CaptchaId <> '') and (CaptchaURL <> '') then
           begin
-            CaptchaURL := vk_url + '/' + CaptchaURL;
+            CaptchaURL := vk_url_prefix + vk_url_host + '/' + CaptchaURL;
             SetString(TempDir, Buf, GetTempPath(Sizeof(Buf)-1, Buf)); // getting path to Temp directory
             TempFile := TempDir + 'vk_captcha.jpg';
             if HTTP_NL_GetPicture(CaptchaURL, TempFile) then
@@ -722,8 +703,8 @@ begin
               Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha downloaded successfully and saved to ' + TempDir));
               // ask user to input the value
               DialogBoxParamW(hInstance, MAKEINTRESOURCEW(WideString('VK_CAPTCHA')), 0, @DlgCaptcha, Windows.lParam(TempFile));
-              HTML := HTTP_NL_Get(Format(vk_url_wall_postmsg_captcha, [FullContactID, Hash, MsgText, CaptchaId, CaptchaValue]), REQUEST_GET);
-              if Pos('userProfile', HTML) > 0 then
+              HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postmsg_captcha, [FullContactID, Hash, MsgText, CaptchaId, CaptchaValue]), REQUEST_GET);
+              if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
               begin
                 Result.Text := TranslateW(wall_status_succ);
                 Result.Code := 0;
@@ -795,14 +776,23 @@ begin
   Result := vk_WallPostMessage(MsgDetails).Code;
 end;
 
+// =============================================================================
+// procedure to post picture on the wall, just call another function
+// called in the separate thread from the dialog
+// separate procedure is created as BeginThread can not accept TResultDetailed
+// as result of the function
+// -----------------------------------------------------------------------------
+function vk_WallPostPictureDialog(MsgDetails: PMsgDetails): Integer;
+begin
+  Result := vk_WallPostPicture(MsgDetails).Code;
+end;
 
 // =============================================================================
 // function to post picture on the wall
 // called from the separate dialog only
 // -----------------------------------------------------------------------------
-function vk_WallPostPicture(MsgDetails: PMsgDetails): Integer; overload;
+function vk_WallPostPicture(MsgDetails: PMsgDetails): TResultDetailed; overload;
 var
-  ResultText: WideString;
   HTML: String;
   sFileName: String;
   Dialog, DialogLabel: HWnd; // handles of the dialog and dialog lable reflecting processing status
@@ -821,6 +811,10 @@ var
 
   FullContactID: Int64;
   Hash, MsgID, StrTemp: String;
+
+  CaptchaId, CaptchaURL: String;
+  TempDir, TempFile: String;
+  Buf: array[0..1023] of Char;
 begin
   sFileName := MsgDetails^.MessageText;
   ContactID := MsgDetails^.ID;
@@ -831,8 +825,8 @@ begin
 	if Dialog <> 0 then
 		SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_posting_pic_started)));
 
-  ResultText := '';
-  Result := 1; // failed
+  Result.Text := '';
+  Result.Code := 1; // failed
   if DBGetContactSettingByte(0, piShortName, opt_PopupsWallShowStatus, 0) = 0 then // display status in popups?
      PopupsShowStatus := False
    else
@@ -847,9 +841,9 @@ begin
     begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... picture file found, reading it...'));
 		  // reading picture file
-      ResultText := TranslateW(wall_status_posting_pic_reading);
+      Result.Text := TranslateW(wall_status_posting_pic_reading);
 		  if Dialog <> 0 then
-		     SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(ResultText));
+		     SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
 		  PictureFile := TFileStream.Create(sFileName, fmOpenRead);
 		  SetLength(szData, PictureFile.Size);
 		  PictureFile.Read(szData[1], PictureFile.Size);
@@ -859,9 +853,9 @@ begin
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... file has been read, generating base64 hash...'));
 			  // generating Base64
-        ResultText := TranslateW(wall_status_posting_pic_base64);
+        Result.Text := TranslateW(wall_status_posting_pic_base64);
 		    if Dialog <> 0 then
-		       SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(ResultText));
+		       SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
 			  FillChar(nbd, SizeOf(nbd), 0);
 			  nbd.pbDecoded := PByte(PChar(szData));
 			  nbd.cbDecoded := Length(szData)+1;
@@ -874,9 +868,9 @@ begin
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... base64 hash has been generated, calculating md5...'));
 				  // generating MD5 for first 1024 bytes
-          ResultText := TranslateW(wall_status_posting_pic_md5);
+          Result.Text := TranslateW(wall_status_posting_pic_md5);
 		      if Dialog <> 0 then
-		         SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(ResultText));
+		         SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
 				  FillChar(mdi, SizeOf(mdi), 0);
 				  mdi.cbSize := SizeOf(mdi);
 				  PluginLink^.CallService(MS_SYSTEM_GET_MD5I, 0, Windows.lParam(@mdi));
@@ -914,11 +908,11 @@ begin
 								  #10 + #10;
 					  FileTrailer := #10 + '--' + Boundary + '--';
 					  szDataFinal := FileHeader + szData + FileTrailer;
-            ResultText := TranslateW(wall_status_posting_pic_sending);
+            Result.Text := TranslateW(wall_status_posting_pic_sending);
 		        if Dialog <> 0 then
-		           SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(ResultText));
+		           SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
 
-					  HTML := HTTP_NL_PostPicture(Format(vk_url_wall_postpic_upload, [ContactID]), szDataFinal, Boundary);
+					  HTML := HTTP_NL_PostPicture(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic_upload, [ContactID]), szDataFinal, Boundary);
             if Trim(HTML) <> '' then
             begin
               if HTML <> 'Security Breach. Sorry.' then
@@ -926,88 +920,147 @@ begin
                 Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... the file has been uploaded successfully, getting details...'));
                 HTML := TextBetween(HTML, 'var params = {', '}');
                 StrTemp := TextBetween(HTML, 'to_id: ''', '''');
-                Hash := TextBetween(HTML, 'wall_hash: ''', '''');
+                Hash := DecodeWallHash(TextBetween(HTML, 'wall_hash: decodehash(''', ''')'));
                 MsgID := TextBetween(HTML, 'message: ''', '''');
                 Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... message details: grid '+MsgId+', hash '+Hash));
 
-                ResultText := TranslateW(wall_status_posting_pic_id) + ' (' + MsgID + ')';
+                Result.Text := TranslateW(wall_status_posting_pic_id) + ' (' + MsgID + ')';
 		            if Dialog <> 0 then
-		              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(ResultText));
+		              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
 
-                if TryStrToInt64(StrTemp, FullContactID) and (Trim(Hash) <> '') and (Trim(MsgID) <> '') then
+                if TryStrToInt64(StrTemp, FullContactID) and (Length(Hash) = 32) and (Trim(MsgID) <> '') then
                 begin
                   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting picture id '+MsgID+'...'));
-                  ResultText := TranslateW(wall_status_posting_pic_posting);
-                  HTML := HTTP_NL_Get(Format(vk_url_wall_postpic, [MsgID, FullContactID, Hash, MsgID]));
+                  Result.Text := TranslateW(wall_status_posting_pic_posting);
+                  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic, [MsgID, FullContactID, Hash, MsgID]));
                   if HTML <> '' then // contains some strange symbols, so assume if not empty, then OK
                   begin
-                    Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting successful'));
-                    ResultText := TranslateW(wall_status_posting_pic_succ);
-                    Result := 0; // successful
+                    if Pos('captcha_sid', HTML) > 0 then // captcha!
+                    begin
+                      Result.Text := TranslateW(wall_status_captcha_required);
+                      Result.Code := 1; // not successful yet
+                      if Dialog <> 0 then
+                        SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+                      if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha input is required, getting it...'));
+                      CaptchaId := TextBetween(HTML, '"captcha_sid":"', '"');
+                      CaptchaURL := 'captcha.php?s=1&sid=' + CaptchaId;
+                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha id is ' + CaptchaId));
+                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha URL is ' + CaptchaURL));
+                      if (CaptchaId <> '') and (CaptchaURL <> '') then
+                      begin
+                        CaptchaURL := vk_url_prefix + vk_url_host + '/' + CaptchaURL;
+                        SetString(TempDir, Buf, GetTempPath(Sizeof(Buf)-1, Buf)); // getting path to Temp directory
+                        TempFile := TempDir + 'vk_captcha.jpg';
+                        if HTTP_NL_GetPicture(CaptchaURL, TempFile) then
+                        begin // file downloaded successfully
+                          Result.Text := TranslateW(wall_status_captcha_input);
+                          Result.Code := 1;
+                          if Dialog <> 0 then
+                            SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+                          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha downloaded successfully and saved to ' + TempDir));
+                          // ask user to input the value
+                          DialogBoxParamW(hInstance, MAKEINTRESOURCEW(WideString('VK_CAPTCHA')), 0, @DlgCaptcha, Windows.lParam(TempFile));
+                          HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic_captcha, [MsgId, FullContactID, Hash, MsgId, CaptchaId, CaptchaValue]), REQUEST_GET);
+                          if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
+                          begin
+                            Result.Text := TranslateW(wall_status_succ);
+                            Result.Code := 0;
+                            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... picture posted successfully'));
+                            if Dialog <> 0 then
+                              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+                            if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+                          end
+                          else
+                          begin
+                            Result.Text := TranslateW(wall_status_failed);
+                            Result.Code := 1;
+                            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... picture posting failed'));
+                            if Dialog <> 0 then
+                              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+                            if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 1, False);
+                          end;
+                        end else
+                        begin
+                          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to download captcha'));
+                          Result.Text := TranslateW(wall_status_captcha_failed);
+                          Result.Code := 1;
+                          if Dialog <> 0 then
+                            SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+                          if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+                        end;
+                      end;
+                    end
+                    else
+                    begin
+                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting successful'));
+                      Result.Text := TranslateW(wall_status_posting_pic_succ);
+                      Result.Code := 0; // successful
+                    end;
                   end
                   else
                   begin
                     Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting of the picture failed'));
-                    ResultText := TranslateW(wall_status_posting_pic_failed_unknown);
+                    Result.Text := TranslateW(wall_status_posting_pic_failed_unknown);
                   end;
                 end
                 else
                 begin
                   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed, unable to get details'));
-                  ResultText := TranslateW(wall_status_posting_pic_id_failed);
+                  Result.Text := TranslateW(wall_status_posting_pic_id_failed);
                 end;
               end
               else
               begin
                 Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed, security violation'));
-                ResultText := TranslateW(wall_status_posting_pic_sending_failed_security);
+                Result.Text := TranslateW(wall_status_posting_pic_sending_failed_security);
               end;
             end
             else
             begin
               Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed'));
-              ResultText := TranslateW(wall_status_posting_pic_sending_failed_unknown);
+              Result.Text := TranslateW(wall_status_posting_pic_sending_failed_unknown);
             end;
           end
           else
           begin
             Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to calculate md5, posting failed'));
-            ResultText := TranslateW(wall_status_posting_pic_md5_failed);
+            Result.Text := TranslateW(wall_status_posting_pic_md5_failed);
           end;
         end
         else
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to calculate base64 hash, posting failed'));
-          ResultText := TranslateW(wall_status_posting_pic_base64_failed);
+          Result.Text := TranslateW(wall_status_posting_pic_base64_failed);
         end;
         FreeMem(PicBase64);
       end
       else
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to read picture file, posting failed'));
-        ResultText := TranslateW(wall_status_posting_pic_reading_failed);
+        Result.Text := TranslateW(wall_status_posting_pic_reading_failed);
       end;
     end
     else
     begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... picture file not found, posting failed'));
-      ResultText := TranslateW(wall_status_posting_pic_failed_not_found);
+      Result.Text := TranslateW(wall_status_posting_pic_failed_not_found);
     end;
   end
   else
   begin
-    ResultText := TranslateW(wall_status_posting_pic_failed_incorrect_details);
+    Result.Text := TranslateW(wall_status_posting_pic_failed_incorrect_details);
   end;
 
   if PopupsShowStatus then
-    if Result = 0 then
-      ShowPopupMsg(0, ResultText, 1, False) // successful
+    if Result.Code = 0 then
+      ShowPopupMsg(0, Result.Text, 1, False) // successful
     else
-      ShowPopupMsg(0, ResultText, 2, False); // failed
+      ShowPopupMsg(0, Result.Text, 2, False); // failed
 
   if Dialog <> 0 then
   begin
-	  SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(ResultText));
+	  SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
     DlgWallPicEnable(Dialog); // enable all dialog elements
   end;
 
@@ -1020,7 +1073,7 @@ end;
 // function to post message on the wall
 // (just another (overload) version of the function above)
 // -----------------------------------------------------------------------------
-function vk_WallPostPicture(ID: Integer; const MessageText: WideString; Wnd: HWnd): Integer; overload;
+function vk_WallPostPicture(ID: Integer; const MessageText: WideString; Wnd: HWnd): TResultDetailed; overload;
 var
   MsgDetails: PMsgDetails;
 begin
@@ -1030,7 +1083,6 @@ begin
   MsgDetails^.Wnd := Wnd;
   Result := vk_WallPostPicture(MsgDetails);
 end;
-
 
 // =============================================================================
 // procedure to get messages from the wall of given contact
@@ -1046,7 +1098,7 @@ var
   sSenderName,
   sSenderNameFull,
   sMsgText: WideString;
-  sTemp, sTemp2, sMsgAudioUrl: WideString;
+  sTemp, sMsgAudioUrl: WideString;
   MsgDate: TDateTime;
   iSenderStatus,
   iSenderID,
@@ -1055,7 +1107,7 @@ var
   TempFriend: Integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) Getting wall messages for id ' + IntToStr(ID) + '...'));
-  HTML := HTTP_NL_Get(Format(vk_url_wall_id, [ID]));
+  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ID]));
   if Trim(HTML) <> '' then
   begin
     sWallPage := TextBetweenTagsAttrInc(HTML, 'div', 'id', 'wallpage');
@@ -1071,15 +1123,14 @@ begin
           if iMsgID > DBGetContactSettingDWord(0, piShortName, opt_WallLastPostID, 0) then
           begin
 						sSenderID := TextBetween(sWallPost, 'href="/id', '"');
-            sSenderName := Trim(HTMLDecodeW(TextBetween(sWallPost, 'style=''font-weight: bold;''>', '</a>')));
+            sSenderName := Trim(TextBetween(sWallPost, '<a class="memLink" ' + 'href="/id' + sSenderID + '">', '</a>'));
             if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
             begin // getting message in the separate contact, so get details of sender
-          		sSenderNameFull := Trim(TextBetween(sWallPost, '<div class="header">', '<br />'));
-              sSenderNameFull := StringReplace(sSenderNameFull, '"  style=''font-weight: bold;', '', [rfReplaceAll, rfIgnoreCase]);
+          		sSenderNameFull := '<a ' + Trim(TextBetween(sWallPost, '<a class="memLink" ', '<br />'));
               sSenderNameFull := ReplaceLink(sSenderNameFull);
               sSenderNameFull := Trim(HTMLRemoveTags(HTMLDecodeW(sSenderNameFull)));
             end;
-            if Pos('<div style=''color:#aaa;margin:4px 0px 0px 10px;''>Online</div>', sWallPost) > 0 then
+            if Pos('<div class="wallOnline">Online</div>', sWallPost) > 0 then
               iSenderStatus := ID_STATUS_ONLINE
             else
               iSenderStatus := ID_STATUS_OFFLINE;
@@ -1094,18 +1145,11 @@ begin
 						  // operateWall(60833648,4210,6114921,'3c8680515484',249) -->
 						  // http://cs4210.vkontakte.ru/u6114921/audio/3c8680515484.mp3
 						  sTemp := TextBetween(sMsgText, 'operateWall(', ')');
-						  sMsgAudioUrl := 'http://cs' +
-										  TextBetween(sTemp, ',', ',') +
-										  '.' + vk_url_host + '/u';
+						  sMsgAudioUrl := TextBetween(sTemp, ',', ',');
+              // fix sMsgAudioUrl - remove quotes
+             if (sMsgAudioUrl[1] = '"') or (sMsgAudioUrl[1] = '''') then
+               sMsgAudioUrl := Copy(sMsgAudioUrl, 2, Length(sMsgAudioUrl)-2);
 						  Delete(sTemp, 1, Pos(',', sTemp) + 1);
-              sTemp2 := TextBetween(sTemp, ',', ',');
-              while Length(sTemp2) < 5 do
-                sTemp2 := '0' + sTemp2;
-						  sMsgAudioUrl := sMsgAudioUrl +
-										  sTemp2 +
-										  '/audio/' +
-										  TextBetween(sTemp, '''', '''') +
-										  '.mp3';
               sMsgText := Trim(HTMLRemoveTags(sMsgText));
 						  sMsgText := Trim(sMsgText) + ' (' + sMsgAudioUrl + ')';
               sMsgText := StringReplace(sMsgText, #$A, '', [rfReplaceAll, rfIgnoreCase]);
@@ -1114,19 +1158,19 @@ begin
 						if Pos('"feedVideos"', sMsgText) > 0 then
 						begin
 						  sTemp := TextBetween(sMsgText, 'href="/video', '"');
-						  sMsgText := sMsgText + ' (' + 'http://' + vk_url_host + '/video' + sTemp + ')';
+						  sMsgText := sMsgText + ' (' + vk_url_prefix + vk_url_host + '/video' + sTemp + ')';
 						end;
 						// - graffiti
 						if Pos('''Graffiti''', sMsgText) > 0 then
 						begin
 						  sTemp := TextBetween(sMsgText, 'href=''/graffiti', '''');
-						  sMsgText := Translate('Graffiti') + ' (' + 'http://' + vk_url_host + '/graffiti' + sTemp + ')';
+						  sMsgText := Translate('Graffiti') + ' (' + vk_url_prefix + vk_url_host + '/graffiti' + sTemp + ')';
 						end;
 						// - photo
-						if Pos('"feedPhotos"', sMsgText) > 0 then
+						if Pos('''feedPhotos''', sMsgText) > 0 then
 						begin
-						  sTemp := TextBetween(sMsgText, 'href="/photo', '"');
-						  sMsgText := sMsgText + ' (' + 'http://' + vk_url_host + '/photo' + sTemp + ')';
+						  sTemp := TextBetween(sMsgText, 'href=''/photos.php?act=', '''');
+						  sMsgText := sMsgText + ' (' + vk_url_prefix + vk_url_host + '/photos.php?act=' + sTemp + ')';
 						end;
             // - contains url
             while Pos('away.php', sMsgText) > 0 do
@@ -1139,6 +1183,9 @@ begin
 						sMsgText := Trim(HTMLRemoveTags(sMsgText));
 
 						sMsgTime := Trim(TextBetween(sWallPost, '<small>', '</small>'));
+
+            // fix sMsgTime - remove letter 'в'
+            Delete(sMsgTime, Pos('в', sMsgTime), 2);
 
             try
               if DBGetContactSettingByte(0, piShortName, opt_WallUseLocalTime, 0) = 0 then
