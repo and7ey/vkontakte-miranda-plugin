@@ -23,27 +23,26 @@ library VKontakte;
 uses
   m_globaldefs in 'api\m_globaldefs.pas',
   m_api in 'api\m_api.pas',
-
-  vk_global, // module with global variables and constant used
-  vk_http, // module to connect with the site
-  vk_core, // module with core functions
-  vk_menu, // module to work with menus
-  vk_msgs, // module to send/receive messages
-  vk_auth, // module to support authorization process
-  vk_avatars, // module to support avatars
-  vk_xstatus, // module to support additional status
-  vk_info, // module to get contact's info
-  vk_folders, // module to support custom folders
-  vk_search, // module to support search functionality
-  vk_popup, // module to support popups
-  vk_wall, // module to work with the wall
-
-  vk_opts, // unit to work with options
-
+  vk_global,
+  vk_http,
+  vk_core,
+  vk_menu,
+  vk_msgs,
+  vk_auth,
+  vk_avatars,
+  vk_xstatus,
+  vk_info,
+  vk_folders,
+  vk_search,
+  vk_popup,
+  vk_wall,
+  vk_opts,
   Windows,
   SysUtils,
+  uLkJSON in 'inc\uLkJSON.pas',
+  htmlparse in 'htmlparse.pas';
 
-  uLkJSON in 'inc\uLkJSON.pas'; // module to parse data from feed2.php (in JSON format)
+// module to parse data from feed2.php (in JSON format)
 
 const
 
@@ -90,7 +89,6 @@ var
   vk_hkOptInitialise,
   vk_hkHookShutdown,
   vk_hkHookOkToExit: THandle;
-
 
   // ccs: PCCSDATA;
 
@@ -302,6 +300,14 @@ end;
 // -----------------------------------------------------------------------------
 function OnModulesLoad(wParam{0}, lParam{0}: DWord): Integer; cdecl;
 begin
+
+  // get preferred VK host
+  case DBGetContactSettingByte(0, piShortName, opt_UserPreferredHost, 1) of
+    1: vk_url_host := 'vkontakte.ru';
+    2: vk_url_host := 'vk.com';
+    else vk_url_host := 'vkontakte.ru';
+  end;
+
   // code to identify Options function
   vk_hkOptInitialise := pluginLink^.HookEvent(ME_OPT_INITIALISE, @OnOptInitialise);
 
@@ -372,7 +378,6 @@ begin
     DBWriteContactSettingByte(0, piShortName, opt_UserNonFriendsStatusSupport, DBGetContactSettingByte(0, piShortName, 'UserNonFriendsStatusSupport', 0));
   DBDeleteContactSetting(0, piShortName, 'UserNonFriendsStatusSupport');
   DBDeleteContactSetting(0, piShortName, 'UserNewMessagesFreqSecs');
-
 
   // ask to join plugin's group
   if DBGetContactSettingByte(0, piShortName, opt_GroupPluginJoined, 0) = 0 then // never asked before

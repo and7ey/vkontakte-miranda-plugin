@@ -25,8 +25,7 @@
  Module to send and receive messages
 
  [ Known Issues ]
- - current date and time is always used in incoming msgs since 0.3.0.6,
-   look for TEMP in vk_GetMsgsFriendsEtc
+ None
 
  Contributors: LA
 -----------------------------------------------------------------------------}
@@ -38,6 +37,8 @@ interface
   procedure MsgsDestroy();
   procedure vk_GetMsgsFriendsEtc();
   procedure vk_GetNews();
+  procedure vk_GetGroupsNews();
+  procedure vk_GetCommentsNews();
   function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; MsgDate: TDateTime): Boolean;  
 
 implementation
@@ -80,6 +81,8 @@ type // type to keep news
   end;
 
 type TNewsRecords = array of TNewsRecord;
+
+type TNewsRecords2 = array of TNewsRecord;
 
 type
   VK_PCCSDATA = ^VK_TCCSDATA;
@@ -194,10 +197,11 @@ var HTML: AnsiString; // html content of the pages received
     FriendsCount: Integer; // temp variable to keep number of new authorization requests received
     MsgID: String;
     MsgUrl: String;
+    MsgDateStr, MsgTimeStr: String;
     MsgText: WideString;
     MsgSenderName: WideString;
     i, ii, temppos: Integer;
-    MsgDate: TDateTime;
+    MsgDate, MsgTime: TDateTime;
     MsgSender: Integer;
   	ccs_chain: TCCSDATA;
 
@@ -209,11 +213,13 @@ var HTML: AnsiString; // html content of the pages received
 
     FeedRoot, FeedMsgs, FeedMsgsItems: TlkJSONobject; // objects to keep parsed JSON data
 
+    fSettings: TFormatSettings;
+
 begin
  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Checking for new incoming messages, new authorization requests (friends) etc...'));
 
   // check for presence of new messages, friends etc. via the feed
- HTML := HTTP_NL_Get(vk_url_feed2);
+ HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed2);
 
  // correct json text
  for i:=1 to length(HTML)-2 do // don't check first and last symbols
@@ -258,11 +264,19 @@ begin
             // get msg details
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', getting details'));
             HTML := HTTP_NL_Get(MsgUrl);
-            // date of message
-            { // TEMP!!!
+            // date and time of message
             if DBGetContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, 0) = 0 then
-              MsgDate := RusDateToDateTime(TextBetween(Utf8ToAnsi(HTML), '<span class="label">Дата:</span> ', '<br/>'), false)
-            else}
+            begin
+              MsgDateStr := TextBetween(Utf8ToAnsi(HTML), '<span class="label">Дата:</span> ', ' в ');
+              if MsgDateStr = 'сегодня' then MsgDate := Date else
+                if MsgDateStr = 'вчера' then MsgDate := Date - 1 else
+                  MsgDate := RusDateToDateTime(MsgDateStr, true);
+              MsgTimeStr := TextBetween(Utf8ToAnsi(HTML), '<span class="label">Дата:</span> ' + MsgDateStr + ' в ', '<br/>');
+              GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, fSettings);
+              fSettings.TimeSeparator := ':';
+              TryStrToTime(MsgTimeStr, MsgTime, fSettings);
+              MsgDate := MsgDate + MsgTime;
+            end else
               MsgDate := Now; // use local time, if requested in the settings
             // from
             If Not TryStrToInt(TextBetween(HTML, 'name="to_id" value="', '"/>'), MsgSender) Then
@@ -589,7 +603,7 @@ begin
       while NewsPosStart > 0 do
       begin
         nNType := 'unknown';
-        nIDstr := TextBetween(HTMLDay, 'a href=''id', '''');
+        nIDstr := TextBetween(HTMLDay, 'href="/id', '">');
         nText := TextBetweenInc(HTMLDay, '<a', '<span class="stTime">');
         nText := StringReplace(nText, #10, '', [rfReplaceAll]);
         nText := StringReplace(nText, Chr(9), '', [rfReplaceAll]);
@@ -637,44 +651,52 @@ var DayWrapPosStart, feedTablePosStart: Integer;
 
     fSettings: TFormatSettings;
 
+    HasNews: Boolean;
+
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) Receiving news...'));
 
-  HTML := HTTP_NL_Get(vk_url_news);
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news);
 
   If Trim(HTML) <> '' Then
   begin
 
+    HasNews := true;
+
     DayWrapPosStart := Pos('feedDayWrap', HTML);
-    While DayWrapPosStart > 0 Do
+    While HasNews and (DayWrapPosStart > 0) Do
     Begin
-      HTMLDate := TextBetween(HTML, '<div class=''feedDay''>', '</div>');
-      if HTMLDate = 'Сегодня' then DayTime := Date else
-        if HTMLDate = 'Вчера' then DayTime := Date - 1 else
+      HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
+      if HTMLDate = 'сегодня' then DayTime := Date else
+        if HTMLDate = 'вчера' then DayTime := Date - 1 else
            DayTime := RusDateToDateTime(HTMLDate, true);
 
-      HTMLDay := TextBetweenTagsAttrInc(HTML, 'div', 'style', 'padding:10px 10px 20px 10px;');
-      feedTablePosStart := Pos('<table class="feedTable"', HTMLDay);
-      While feedTablePosStart > 0 Do
+      HTMLDay := TextBetweenTagsAttrInc(HTML, 'div', 'class', 'items_wrap');
+      feedTablePosStart := Pos('<table class="feedTable', HTMLDay);
+      While HasNews and (feedTablePosStart > 0) Do
       Begin
-        HTMLNews := TextBetweenTagsAttrInc(HTMLDay, 'table', 'class', 'feedTable');
-        nNType := TextBetween(HTMLNews, 'images/icons/', '.gif"');
-        nIDstr := TextBetween(HTMLNews, 'a href=''/id', '''');
+        HTMLNews := TextBetweenTagsInc(HTMLDay, 'table');
+        // support of new icon names
+        nNType := TextBetween(HTMLNews, 'images/icons/', '_s.gif?2"');
+        // support of old icon names
+        if nNType = '' then nNType := TextBetween(HTMLNews, 'images/icons/', '_icon.gif?2"');
+        // support of apps icons
+        if Pos('x.gif', HTMLNews) > 0 then nNType := 'apps';
+        nIDstr := TextBetween(HTMLNews, 'href="/id', '">');
         nText := TextBetweenInc(HTMLNews, '<td class="feedStory', '</td>');
         // remove images
-        ImgStart := Pos('<div class=''feedFriendImg''>', nText);
+        ImgStart := Pos('<div class="feedFriendImg">', nText);
         while ImgStart > 0 do
         begin
           ImgEnd := PosEx('</div>', nText, ImgStart) + 6;
           Delete(nText, ImgStart, ImgEnd-ImgStart+1);
-          ImgStart := Pos('<div class=''feedFriendImg''>', nText);
+          ImgStart := Pos('<div class="feedFriendImg">', nText);
         end;
         nText := StringReplace(nText, #10, '', [rfReplaceAll]);
         nText := StringReplace(nText, Chr(9), '', [rfReplaceAll]);
         nText := StringReplace(nText, '<br/>', ' ', [rfReplaceAll, rfIgnoreCase]);
         // remove extra spaces (when contact added more than 1 friend)
-        nText := StringReplace(nText, '</small></a>       </div></div><div class=''feedFriend''>', '</small></a>       </div></div>, <div class=''feedFriend''>', [rfReplaceAll]);
-        nText := StringReplace(nText, '       ', ' ', [rfReplaceAll]);
+        nText := StringReplace(nText, '<div class="feedFriend">    <div class="feedFriendText">    ', '<div class="feedFriend"><div class="feedFriendText">', [rfReplaceAll]);
         nText := Trim(HTMLDecodeW(nText));
         // nText := LeftStr(nText, Length(nText)-1); // remove trailing dot - doesn't work correctly when contact added more than 1 friend
         nNTimestr := TextBetweenInc(HTMLNews, '<td class="feedTime', '</td>');
@@ -693,9 +715,15 @@ begin
           Result[High(Result)].NText := nText;
         end;
 
-        feedTablePosStart := Pos('<table class="feedTable"', HTMLDay);
+        // small optimization trick: checking if we have news or not
+        if DateTimeToFileDate(nNTime) > DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600) then
+          HasNews := true
+        else
+          HasNews := false;
+
+        feedTablePosStart := Pos('<table class="feedTable ', HTMLDay);
         Delete(HTMLDay, 1, feedTablePosStart + 1);
-        feedTablePosStart := Pos('<table class="feedTable"', HTMLDay);
+        feedTablePosStart := Pos('<table class="feedTable ', HTMLDay);
 
       end;
       DayWrapPosStart := Pos('feedDayWrap', HTML);
@@ -721,16 +749,16 @@ begin
   if DBGetContactSettingByte(0, piShortName, opt_NewsMin, 0) = 1 then
     NewsAll := vk_GetNewsMinimal()
   else
-    NewsAll := vk_GetNewsFull;
+    NewsAll := vk_GetNewsFull();
 
   if High(NewsAll) > -1 then // received news
   begin
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) Verifying '+IntToStr(High(NewsAll))+' received news...'));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) Verifying '+IntToStr(High(NewsAll)+1)+' received news...'));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... last news received, date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600)))));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... current local date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', Now)));
-    for CurrNews:=0 to High(NewsAll)-1 do
+    for CurrNews:=0 to High(NewsAll) do
     begin
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... checking news '+IntToStr(CurrNews+1)+' (of '+IntToStr(High(NewsAll))+')...'));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... checking news '+IntToStr(CurrNews+1)+' (of '+IntToStr(High(NewsAll)+1)+')...'));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
       // validate date & time of message (if never was shown before)
       if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600) then
@@ -740,33 +768,31 @@ begin
         // filter news, if not minimal news chosen
         if DBGetContactSettingByte(0, piShortName, opt_NewsMin, 0) = 0 then
         begin
-          if (NewsAll[CurrNews].NType = 'add_photo_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPhotos, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'photos') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPhotos, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'movie_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterVideos, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'video') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterVideos, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'add_item_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterNotes, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'notesplus') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterNotes, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'q_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterQuestions, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'topics') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterThemes, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'post_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterThemes, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'friends') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterFriends, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'plus_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterFriends, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'peoples') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterStatuses, 0) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'person_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterStatuses, 0) = 0) Then
+          if (NewsAll[CurrNews].NType = 'groups') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterGroups, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'group_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterGroups, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'events') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterMeetings, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'event_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterMeetings, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'audio') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterAudio, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'audio_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterAudio, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'pages') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPersonalData, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'record_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterPersonalData, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'tags') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterTags, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'add_tag_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterTags, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'apps') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterApps, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'app_icon') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterApps, 1) = 0) Then
-            ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'gift') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterGifts, 1) = 0) Then
+          if (NewsAll[CurrNews].NType = 'gifts') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterGifts, 1) = 0) Then
             ValidNews := False;
         end;
         if ValidNews then
@@ -793,6 +819,8 @@ begin
             NewsText := RemoveDuplicates(NewsText);
           end;
           NewsText := HTMLRemoveTags(NewsText);
+          // cleanup NewsText - remove leading spaces
+		      while NewsText[1]=' ' do Delete(NewsText, 1, 1);
           // display news
           vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
         end;
@@ -805,6 +833,358 @@ begin
   end;
 end;
 
+// =============================================================================
+// procedure to parse groups news
+// -----------------------------------------------------------------------------
+function vk_ParseGroupsNews(): TNewsRecords;
+var DayWrapPosStart, feedTablePosStart: Integer;
+    DayTime: TDateTime;
+    HTML, HTMLDay, HTMLNews, HTMLDate: String;
+
+    nNType, nNTimestr: String;
+    nText: WideString;
+
+    nID: Integer;
+    nNTime: TDateTime;
+
+    fSettings: TFormatSettings;
+
+    HasNews: Boolean;
+
+begin
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) Receiving groups news...'));
+
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news_groups);
+
+  If Trim(HTML) <> '' Then
+  begin
+
+    HasNews := true;
+
+    DayWrapPosStart := Pos('feedDayWrap', HTML);
+    While HasNews and (DayWrapPosStart > 0) Do
+    Begin
+      HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
+      if HTMLDate = 'сегодня' then DayTime := Date else
+        if HTMLDate = 'вчера' then DayTime := Date - 1 else
+           DayTime := RusDateToDateTime(HTMLDate, true);
+
+      HTMLDay := TextBetweenTagsAttrInc(HTML, 'div', 'class', 'items_wrap');
+
+      feedTablePosStart := Pos('<table class="feedTable', HTMLDay);
+      While HasNews and (feedTablePosStart > 0) Do
+      Begin
+        HTMLNews := TextBetweenTagsInc(HTMLDay, 'table');
+        nNType := TextBetween(HTMLNews, 'images/icons/', '_s.gif?2"');
+        nText := TextBetweenInc(HTMLNews, '<td class="feedStory', '</td>');
+        nText := StringReplace(nText, #10, '', [rfReplaceAll]);
+        nText := StringReplace(nText, Chr(9), '', [rfReplaceAll]);
+        nText := StringReplace(nText, '<br/>', ' ', [rfReplaceAll, rfIgnoreCase]);
+        nText := Replace(nText, '<br><br>', #10#10);
+        nText := Replace(nText, '<br>', #10);
+        nText := Trim(HTMLDecodeW(nText));
+        nNTimestr := TextBetweenInc(HTMLNews, '<td class="feedTime', '</td>');
+        nNTimestr := Trim(HTMLRemoveTags(nNTimestr));
+        GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, fSettings);
+        fSettings.TimeSeparator := ':';
+
+        nID := 0;
+
+        if (nText <> '') and (nNType <> '') and (TryStrToTime(nNTimestr, nNTime, fSettings)) then
+        begin
+          // data seems to be correct
+          nNTime := DayTime + nNTime;
+          SetLength(Result, High(Result)+2);
+          Result[High(Result)].NTime := nNTime;
+          Result[High(Result)].ID := nID;
+          Result[High(Result)].NType := nNType;
+          Result[High(Result)].NText := nText;
+        end;
+
+        // small optimization trick: checking if we have news or not
+        if DateTimeToFileDate(nNTime) > DBGetContactSettingDWord(0, piShortName, opt_GroupsLastNewsDateTime, 539033600) then
+          HasNews := true
+        else
+          HasNews := false;
+
+        feedTablePosStart := Pos('<table class="feedTable ', HTMLDay);
+        Delete(HTMLDay, 1, feedTablePosStart + 1);
+        feedTablePosStart := Pos('<table class="feedTable ', HTMLDay);
+
+      end;
+      DayWrapPosStart := Pos('feedDayWrap', HTML);
+      Delete(HTML, 1, DayWrapPosStart + 1);
+      DayWrapPosStart := Pos('feedDayWrap', HTML);
+      Delete(HTML, 1, DayWrapPosStart - 1);
+    end;
+  end;
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) ... receiving groups news finished'));
+end;
+
+// =============================================================================
+// procedure to get & display groups news
+// -----------------------------------------------------------------------------
+procedure vk_GetGroupsNews();
+var NewsAll: TNewsRecords;
+    CurrNews: Integer;
+    ValidNews: Boolean;
+    NewsText: WideString;
+    ContactID: THandle;
+begin
+  NewsAll := vk_ParseGroupsNews();
+
+  if High(NewsAll) > -1 then // received news
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetGroupsNews) Verifying '+IntToStr(High(NewsAll)+1)+' received groups news...'));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetGroupsNews) ... last groups news received, date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_GroupsLastNewsDateTime, 539033600)))));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetGroupsNews) ... current local date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', Now)));
+    for CurrNews:=0 to High(NewsAll) do
+    begin
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetGroupsNews) ... checking groups news '+IntToStr(CurrNews+1)+' (of '+IntToStr(High(NewsAll)+1)+')...'));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetGroupsNews) ... groups news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
+      // validate date & time of message (if never was shown before)
+      if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_GroupsLastNewsDateTime, 539033600) then
+      begin
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetGroupsNews) ... groups news ' +IntToStr(CurrNews+1)+' identified as not shown before'));
+
+        ValidNews := True;
+
+        if (NewsAll[CurrNews].NType = 'photos') And (DBGetContactSettingByte(0, piShortName, opt_GroupsFilterPhotos, 1) = 0) Then
+          ValidNews := False;
+        if (NewsAll[CurrNews].NType = 'video') And (DBGetContactSettingByte(0, piShortName, opt_GroupsFilterVideos, 1) = 0) Then
+          ValidNews := False;
+        if (NewsAll[CurrNews].NType = 'topics') And (DBGetContactSettingByte(0, piShortName, opt_GroupsFilterThemes, 1) = 0) Then
+          ValidNews := False;
+        if (NewsAll[CurrNews].NType = 'audio') And (DBGetContactSettingByte(0, piShortName, opt_GroupsFilterAudio, 1) = 0) Then
+          ValidNews := False;
+        if (NewsAll[CurrNews].NType = 'pages') And (DBGetContactSettingByte(0, piShortName, opt_GroupsFilterNews, 1) = 0) Then
+          ValidNews := False;
+
+        if ValidNews then
+        begin
+          NewsText := NewsAll[CurrNews].NText;
+
+          // display news in a separate contact
+          ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234), // separate contact ID, 1234 by default
+                                    DBReadUnicode(0, piShortName, opt_NewsSeparateContactName, TranslateW('News')), // separate contact nick, translated 'News' by default
+                                    ID_STATUS_OFFLINE, // status
+                                    1); // friend = yes
+
+          // re-format news text
+          if DBGetContactSettingByte(0, piShortName, opt_GroupsLinks, 1) = 1 then
+          begin
+            NewsText := ReplaceLink(NewsText);
+            NewsText := RemoveDuplicates(NewsText);
+          end;
+          NewsText := HTMLRemoveTags(NewsText);
+          // cleanup NewsText - remove leading spaces
+		      while NewsText[1]=' ' do Delete(NewsText, 1, 1);
+          // display news
+          vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
+        end;
+      end;
+    end;
+  end;
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetGroupsNews) ... verification of received groups news finished'));
+  // write into DB date of last news we've received (in order to not display the same news
+  // with next update)
+  DBWriteContactSettingDWord(0, piShortName, opt_GroupsLastNewsDateTime, DateTimeToFileDate(NewsAll[0].NTime));
+end;
+
+// =============================================================================
+// procedure to parse comments news
+// -----------------------------------------------------------------------------
+function vk_ParseCommentsNews(): TNewsRecords;
+var DayWrapPosStart, feedTablePosStart, commentItemPosStart: Integer;
+    DayTime: TDateTime;
+    HTML, HTMLDay, HTMLNews, HTMLDate: String;
+
+    nNType, nNTimestr: String;
+    nTitle: String;
+    nText: WideString;
+
+    nID: Integer;
+    nNTime: TDateTime;
+
+    ImgStart, ImgEnd: Integer;
+
+    fSettings: TFormatSettings;
+
+    HasNews: Boolean; // will be true if we have got some news, else false
+
+    dtStamp: TDateTime; // DateTime stamp of very *NEW* news (to get rid of dublicates)
+
+begin
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) Receiving comments news...'));
+
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news_comments);
+
+  If Trim(HTML) <> '' Then
+  begin
+
+    HasNews := true;
+    dtStamp := FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_CommentsLastNewsDateTime, 539033600));
+
+    DayWrapPosStart := Pos('feedDayWrap', HTML);
+    While HasNews and (DayWrapPosStart > 0) Do
+    Begin
+      HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
+      if HTMLDate = 'сегодня' then DayTime := Date else
+        if HTMLDate = 'вчера' then DayTime := Date - 1 else
+           DayTime := RusDateToDateTime(HTMLDate, true);
+
+      HTMLDay := TextBetweenTagsAttrInc(HTML, 'div', 'class', 'items_wrap');
+
+      feedTablePosStart := Pos('<div class=''feedTable ', HTMLDay);
+      While HasNews and (feedTablePosStart > 0) Do
+      Begin
+        HTMLNews := TextBetweenInc(HTMLDay, '<div class=''feedTable', '<div class=''feedSeparator');
+        nNType := TextBetween(HTMLNews, 'images/icons/', '_s.gif?2"');
+        nTitle := TextBetweenInc(HTMLNews, '<td class="feedStory', '</td>');
+        nTitle := Trim(HTMLDecodeW(nTitle));
+
+        commentItemPosStart := Pos('<table class="commentItem">', HTMLNews);
+        while HasNews and (commentItemPosStart > 0) do
+        begin
+          nText := TextBetweenTagsAttrInc(HTMLNews, 'table', 'class', 'commentItem');
+          // remove images
+          ImgStart := Pos('<div class="userpic">', nText);
+          while ImgStart > 0 do
+          begin
+            ImgEnd := PosEx('</div>', nText, ImgStart) + 5;
+            Delete(nText, ImgStart, ImgEnd-ImgStart+1);
+            ImgStart := Pos('<div class="userpic">', nText);
+          end;
+          nText := StringReplace(nText, #10, '', [rfReplaceAll]);
+          nText := StringReplace(nText, Chr(9), '', [rfReplaceAll]);
+          nText := StringReplace(nText, '<br/>', ' ', [rfReplaceAll, rfIgnoreCase]);
+          nText := StringReplace(nText, '  <div class="commentBody">', '<div class="commentBody">', [rfReplaceAll, rfIgnoreCase]);
+          nText := Replace(nText, '<br><br>', #10#10);
+          nText := Replace(nText, '<br>', #10);
+          nText := Trim(HTMLDecodeW(nText));
+          nNTimestr := TextBetweenTagsAttrInc(nText, 'div', 'class', 'commentHeader');
+          nNTimestr := Trim(HTMLRemoveTags(nNTimestr));
+
+          if nNTimestr[Length(nNTimestr)-4]=' ' then
+            nNTimestr := Copy(nNTimestr, Length(nNTimestr)-3, 4)
+          else
+            nNTimestr := Copy(nNTimestr, Length(nNTimestr)-4, 5);
+
+          GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, fSettings);
+          fSettings.TimeSeparator := ':';
+
+          nID := 0;
+
+          nTitle := ReplaceLink(nTitle);
+          nTitle := Trim(HTMLRemoveTags(nTitle));
+          nText := Replace(nText, ' в ' + nNTimestr, ':' + #10);
+
+          if (nText <> '') and (nNType <> '') and (TryStrToTime(nNTimestr, nNTime, fSettings)) then
+          begin
+            // data seems to be correct
+            nNTime := DayTime + nNTime;
+            SetLength(Result, High(Result)+2);
+            Result[High(Result)].NTime := nNTime;
+            Result[High(Result)].ID := nID;
+            Result[High(Result)].NType := nNType;
+            Result[High(Result)].NText := nTitle + nText;
+          end;
+
+          if dtStamp < nNTime then dtStamp := nNTime;
+
+          commentItemPosStart := Pos('<table class="commentItem">', HTMLNews);
+          Delete(HTMLNews, 1, commentItemPosStart + 1);
+          commentItemPosStart := Pos('<table class="commentItem">', HTMLNews);
+        end;
+
+        // small optimization trick: checking if we have news or not
+        if DateTimeToFileDate(dtStamp) > DBGetContactSettingDWord(0, piShortName, opt_CommentsLastNewsDateTime, 539033600) then
+          HasNews := true
+        else
+          HasNews := false;
+
+        feedTablePosStart := Pos('<div class=''feedTable ', HTMLDay);
+        Delete(HTMLDay, 1, feedTablePosStart + 1);
+        feedTablePosStart := Pos('<div class=''feedTable ', HTMLDay);
+
+      end;
+      DayWrapPosStart := Pos('feedDayWrap', HTML);
+      Delete(HTML, 1, DayWrapPosStart + 1);
+      DayWrapPosStart := Pos('feedDayWrap', HTML);
+      Delete(HTML, 1, DayWrapPosStart - 1);
+    end;
+  end;
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) ... receiving comments news finished'));
+end;
+
+
+// =============================================================================
+// procedure to get & display comments news
+// -----------------------------------------------------------------------------
+procedure vk_GetCommentsNews();
+var NewsAll: TNewsRecords;
+    CurrNews: Integer;
+    ValidNews: Boolean;
+    NewsText: WideString;
+    ContactID: THandle;
+    dtStamp: TDateTime; // DateTime stamp of very *NEW* news (to get rid of dublicates)
+begin
+  NewsAll := vk_ParseCommentsNews();
+  dtStamp := FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_CommentsLastNewsDateTime, 539033600));
+
+  if High(NewsAll) > -1 then // received news
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) Verifying '+IntToStr(High(NewsAll)+1)+' received comments news...'));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... last comments news received, date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_CommentsLastNewsDateTime, 539033600)))));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... current local date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', Now)));
+    for CurrNews:=0 to High(NewsAll) do
+    begin
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... checking comments news '+IntToStr(CurrNews+1)+' (of '+IntToStr(High(NewsAll)+1)+')...'));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... comments news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
+      // validate date & time of message (if never was shown before)
+      if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_CommentsLastNewsDateTime, 539033600) then
+      begin
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... groups news ' +IntToStr(CurrNews+1)+' identified as not shown before'));
+
+        if dtStamp < NewsAll[CurrNews].NTime then dtStamp := NewsAll[CurrNews].NTime;
+        ValidNews := True;
+
+        if (NewsAll[CurrNews].NType = 'photos') And (DBGetContactSettingByte(0, piShortName, opt_CommentsFilterPhotos, 1) = 0) Then
+          ValidNews := False;
+        if (NewsAll[CurrNews].NType = 'video') And (DBGetContactSettingByte(0, piShortName, opt_CommentsFilterVideos, 1) = 0) Then
+          ValidNews := False;
+        if (NewsAll[CurrNews].NType = 'topics') And (DBGetContactSettingByte(0, piShortName, opt_CommentsFilterThemes, 1) = 0) Then
+          ValidNews := False;
+        if (NewsAll[CurrNews].NType = 'notes') And (DBGetContactSettingByte(0, piShortName, opt_CommentsFilterNotes, 1) = 0) Then
+          ValidNews := False;
+
+        if ValidNews then
+        begin
+          NewsText := NewsAll[CurrNews].NText;
+
+          // display news in a separate contact
+          ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234), // separate contact ID, 1234 by default
+                                    DBReadUnicode(0, piShortName, opt_NewsSeparateContactName, TranslateW('News')), // separate contact nick, translated 'News' by default
+                                    ID_STATUS_OFFLINE, // status
+                                    1); // friend = yes
+
+          // re-format news text
+          if DBGetContactSettingByte(0, piShortName, opt_CommentsLinks, 1) = 1 then
+            NewsText := ReplaceLink(NewsText);
+          NewsText := HTMLRemoveTags(NewsText);
+          // cleanup NewsText - remove leading spaces
+		      while NewsText[1]=' ' do Delete(NewsText, 1, 1);
+          // display news
+          vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
+        end;
+      end;
+    end;
+  end;
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... verification of received comments news finished'));
+  // write into DB date of last news we've received (in order to not display the same news
+  // with next update)
+  DBWriteContactSettingDWord(0, piShortName, opt_CommentsLastNewsDateTime, DateTimeToFileDate(dtStamp));
+end;
 
 begin
 end.

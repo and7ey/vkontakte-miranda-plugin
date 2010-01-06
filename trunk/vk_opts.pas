@@ -60,6 +60,8 @@ function DlgProcOptionsAcc(Dialog: HWnd; Message, wParam, lParam: DWord): Boolea
 function DlgProcOptionsAdv(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsAdv2(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsNews(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+function DlgProcOptionsGroups(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+function DlgProcOptionsComments(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsPopup(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function DlgProcOptionsIgnore(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function OnOptInitialise(wParam, lParam: DWord): Integer; cdecl;
@@ -86,25 +88,35 @@ begin
   odp.hInstance := hInstance;
   odp.szGroup.a := 'Network'; // identifies where plugin's options should appear
   odp.szTitle.a := Translate(piShortName); // // translate plugin's title
- 
+
   odp.szTab.a := 'Account';
   odp.pszTemplate := 'SETTINGS_LOGIN'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsAcc;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
- 
+
   odp.szTab.a := 'Advanced';
   odp.pszTemplate := 'SETTINGS_ADVANCED'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsAdv;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
- 
+
   odp.szTab.a := 'Advanced (continued)';
   odp.pszTemplate := 'SETTINGS_ADVANCED2';
   odp.pfnDlgProc := @DlgProcOptionsAdv2;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
- 
+
   odp.szTab.a := 'News';
   odp.pszTemplate := 'SETTINGS_NEWS'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsNews;
+  PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
+
+  odp.szTab.a := 'Groups';
+  odp.pszTemplate := 'SETTINGS_GROUPS'; // identifies template from res file
+  odp.pfnDlgProc := @DlgProcOptionsGroups;
+  PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
+
+  odp.szTab.a := 'Comments';
+  odp.pszTemplate := 'SETTINGS_COMMENTS'; // identifies template from res file
+  odp.pfnDlgProc := @DlgProcOptionsComments;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
 
   odp.szTab.a := 'Ignore';
@@ -515,12 +527,12 @@ begin
       case Word(wParam) of
          VK_OPT_NEWID: // create new account
             begin
-              ShellAPI.ShellExecute(0, 'open', vk_url_register, nil, nil, 0);
+              ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
               Result := True;
             end;
          VK_OPT_PASSLOST: // retrieve lost password
             begin
-              ShellAPI.ShellExecute(0, 'open', vk_url_forgot, nil, nil, 0);
+              ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_forgot), nil, nil, 0);
               Result := True;
             end;
       end;
@@ -565,7 +577,7 @@ begin
       begin
         // translate all dialog texts
         TranslateDialogDefault(Dialog);
- 
+
         val := DBGetContactSettingDWord(0, piShortName, opt_UserKeepOnline, 900);
         SetDlgItemText(dialog, VK_OPT_KEEPONLINE_SEC, PChar(IntToStr(val))); // send online msg each ... secs
  
@@ -592,10 +604,17 @@ begin
  
         val := DBGetContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, 1);
         CheckDlgButton(dialog, VK_OPT_AVATARSUPDWHENGETINFO, val);
- 
+
+        val := DBGetContactSettingByte(0, piShortName, opt_UserPreferredHost, 1); // choose preferred VK host
+        case val of
+          1: CheckRadioButton(dialog, VK_OPT_HOSTRU, VK_OPT_HOSTCOM, VK_OPT_HOSTRU);
+          2: CheckRadioButton(dialog, VK_OPT_HOSTRU, VK_OPT_HOSTCOM, VK_OPT_HOSTCOM);
+          else CheckRadioButton(dialog, VK_OPT_HOSTRU, VK_OPT_HOSTCOM, VK_OPT_HOSTRU);
+        end;
+
         // send Changed message - make sure we can save the dialog
         SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
- 
+
         Result:=True;
       end;
     // code is executed, when user clicks on link in the Options
@@ -611,26 +630,37 @@ begin
           begin
             val := GetDlgInt(dialog, VK_OPT_KEEPONLINE_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_UserKeepOnline, val);
- 
+
             val := GetDlgInt(dialog, VK_OPT_CHECKNEWMSG_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_UserCheckNewMessages, val);
- 
+
             val := GetDlgInt(dialog, VK_OPT_CHECKFRSTATUS_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_UserUpdateFriendsStatus, val);
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_UserGetMinInfo, Byte(IsDlgButtonChecked(dialog, VK_OPT_GETMININFO)));
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_UserRemoveEmptySubj, Byte(IsDlgButtonChecked(dialog, VK_OPT_REMOVEEMTPYSUBJ)));
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_UserUpdateAddlStatus, Byte(IsDlgButtonChecked(dialog, VK_OPT_ADDLSTATUSSUPPORT)));
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_UserAvatarsSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_AVATARSSUPPORT)));
- 
+
             val := GetDlgInt(dialog, VK_OPT_AVATARSUPD_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_UserAvatarsUpdateFreq, val);
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, Byte(IsDlgButtonChecked(dialog, VK_OPT_AVATARSUPDWHENGETINFO)));
- 
+
+            if IsDlgButtonChecked(dialog, VK_OPT_HOSTCOM) = BST_CHECKED then
+            begin
+              DBWriteContactSettingDWord (0, piShortName, opt_UserPreferredHost, 2);  // vk.com
+              vk_url_host := 'vk.com';
+            end
+            else
+            begin
+              DBWriteContactSettingDWord (0, piShortName, opt_UserPreferredHost, 1); // vkontakte.ru
+              vk_url_host := 'vkontakte.ru';
+            end;
+
             Result:=True;
           end;
       end;
@@ -679,7 +709,7 @@ begin
  
         val := DBGetContactSettingByte(0, piShortName, opt_WallUseLocalTime, 0);
         CheckDlgButton(dialog, VK_OPT_WALL_USELOCALTIME, val);
- 
+
         // send Changed message - make sure we can save the dialog
         SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
  
@@ -731,31 +761,29 @@ var
   val: Integer;
 begin
   Result:=False;
- 
+
   case message of
     // code is executed, when options are initialized
     WM_INITDIALOG:
       begin
         // translate all dialog texts
         TranslateDialogDefault(Dialog);
- 
+
         val := DBGetContactSettingByte(0, piShortName, opt_NewsSupport, 1);
         CheckDlgButton(dialog, VK_OPT_NEWSSUPPORT, val);
- 
+
         val := DBGetContactSettingDWord(0, piShortName, opt_NewsSecs, 300);
         SetDlgItemText(dialog, VK_OPT_NEWS_SEC, PChar(IntToStr(val))); // check news each ... secs
- 
+
         val := DBGetContactSettingByte(0, piShortName, opt_NewsMin, 0);
         CheckDlgButton(dialog, VK_OPT_NEWS_MINIMAL, val);
- 
+
         val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterPhotos, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_PHOTO, val);
         val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterVideos, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_VIDEO, val);
         val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterNotes, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_NOTE, val);
-        val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterQuestions, 1);
-        CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_QUESTION, val);
         val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterThemes, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_SUBJ, val);
         val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterFriends, 1);
@@ -776,16 +804,16 @@ begin
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_GIFTS, val);
         val := DBGetContactSettingByte(0, piShortName, opt_NewsFilterApps, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_FILTER_APPS, val);
- 
+
         val := DBGetContactSettingByte(0, piShortName, opt_NewsLinks, 1);
         CheckDlgButton(dialog, VK_OPT_NEWS_SUPPORTLINKS, val);
- 
+
         val := DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0);
         CheckDlgButton(dialog, VK_OPT_NEWS_SEPARATE_CONTACT, val);
- 
+
         // send Changed message - make sure we can save the dialog
         SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
- 
+
         Result:=True;
       end;
     // code is executed, when user clicks on link in the Options
@@ -801,16 +829,15 @@ begin
           begin
             // save settings
             DBWriteContactSettingByte (0, piShortName, opt_NewsSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWSSUPPORT)));
- 
+
             val := GetDlgInt(dialog, VK_OPT_NEWS_SEC);
             DBWriteContactSettingDWord (0, piShortName, opt_NewsSecs, val);
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_NewsMin, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_MINIMAL)));
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterPhotos, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_PHOTO)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterVideos, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_VIDEO)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterNotes, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_NOTE)));
-            DBWriteContactSettingByte (0, piShortName, opt_NewsFilterQuestions, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_QUESTION)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterThemes, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_SUBJ)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterFriends, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_FRIEND)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterStatuses, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_STATUS)));
@@ -821,17 +848,151 @@ begin
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterTags, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_TAGS)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterApps, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_APPS)));
             DBWriteContactSettingByte (0, piShortName, opt_NewsFilterGifts, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_FILTER_GIFTS)));
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_NewsLinks, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_SUPPORTLINKS)));
- 
+
             DBWriteContactSettingByte (0, piShortName, opt_NewsSeparateContact, Byte(IsDlgButtonChecked(dialog, VK_OPT_NEWS_SEPARATE_CONTACT)));
- 
+
             Result:=True;
           end;
       end;
   end;
 end;
- 
+
+function DlgProcOptionsGroups(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+var
+  val: Integer;
+begin
+  Result:=False;
+
+  case message of
+    // code is executed, when options are initialized
+    WM_INITDIALOG:
+      begin
+        // translate all dialog texts
+        TranslateDialogDefault(Dialog);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_GroupsSupport, 1);
+        CheckDlgButton(dialog, VK_OPT_GROUPSSUPPORT, val);
+
+        val := DBGetContactSettingDWord(0, piShortName, opt_GroupsSecs, 300);
+        SetDlgItemText(dialog, VK_OPT_GROUPS_SEC, PChar(IntToStr(val))); // check news each ... secs
+
+        val := DBGetContactSettingByte(0, piShortName, opt_GroupsFilterPhotos, 1);
+        CheckDlgButton(dialog, VK_OPT_GROUPS_FILTER_PHOTO, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_GroupsFilterVideos, 1);
+        CheckDlgButton(dialog, VK_OPT_GROUPS_FILTER_VIDEO, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_GroupsFilterNews, 1);
+        CheckDlgButton(dialog, VK_OPT_GROUPS_FILTER_NEWS, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_GroupsFilterThemes, 1);
+        CheckDlgButton(dialog, VK_OPT_GROUPS_FILTER_SUBJ, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_GroupsFilterAudio, 1);
+        CheckDlgButton(dialog, VK_OPT_GROUPS_FILTER_AUDIO, val);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_GroupsLinks, 1);
+        CheckDlgButton(dialog, VK_OPT_GROUPS_SUPPORTLINKS, val);
+
+        // send Changed message - make sure we can save the dialog
+        SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
+
+        Result:=True;
+      end;
+    // code is executed, when user clicks on link in the Options
+    WM_COMMAND:
+     begin
+       SendMessage(GetParent(dialog), PSM_CHANGED, dialog, 0);
+     end;
+    // code is executed, when user pressed OK or Apply
+    WM_NOTIFY:
+      begin
+        // if user pressed Apply
+        if PNMHdr(lParam)^.code = PSN_APPLY then
+          begin
+            // save settings
+            DBWriteContactSettingByte (0, piShortName, opt_GroupsSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_GROUPSSUPPORT)));
+
+            val := GetDlgInt(dialog, VK_OPT_GROUPS_SEC);
+            DBWriteContactSettingDWord (0, piShortName, opt_GroupsSecs, val);
+
+            DBWriteContactSettingByte (0, piShortName, opt_GroupsFilterPhotos, Byte(IsDlgButtonChecked(dialog, VK_OPT_GROUPS_FILTER_PHOTO)));
+            DBWriteContactSettingByte (0, piShortName, opt_GroupsFilterVideos, Byte(IsDlgButtonChecked(dialog, VK_OPT_GROUPS_FILTER_VIDEO)));
+            DBWriteContactSettingByte (0, piShortName, opt_GroupsFilterNews, Byte(IsDlgButtonChecked(dialog, VK_OPT_GROUPS_FILTER_NEWS)));
+            DBWriteContactSettingByte (0, piShortName, opt_GroupsFilterThemes, Byte(IsDlgButtonChecked(dialog, VK_OPT_GROUPS_FILTER_SUBJ)));
+            DBWriteContactSettingByte (0, piShortName, opt_GroupsFilterAudio, Byte(IsDlgButtonChecked(dialog, VK_OPT_GROUPS_FILTER_AUDIO)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_GroupsLinks, Byte(IsDlgButtonChecked(dialog, VK_OPT_GROUPS_SUPPORTLINKS)));
+
+            Result:=True;
+          end;
+      end;
+  end;
+end;
+
+function DlgProcOptionsComments(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+var
+  val: Integer;
+begin
+  Result:=False;
+
+  case message of
+    // code is executed, when options are initialized
+    WM_INITDIALOG:
+      begin
+        // translate all dialog texts
+        TranslateDialogDefault(Dialog);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_CommentsSupport, 1);
+        CheckDlgButton(dialog, VK_OPT_COMMENTSSUPPORT, val);
+
+        val := DBGetContactSettingDWord(0, piShortName, opt_CommentsSecs, 300);
+        SetDlgItemText(dialog, VK_OPT_COMMENTS_SEC, PChar(IntToStr(val))); // check news each ... secs
+
+        val := DBGetContactSettingByte(0, piShortName, opt_CommentsFilterPhotos, 1);
+        CheckDlgButton(dialog, VK_OPT_COMMENTS_FILTER_PHOTO, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_CommentsFilterVideos, 1);
+        CheckDlgButton(dialog, VK_OPT_COMMENTS_FILTER_VIDEO, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_CommentsFilterNotes, 1);
+        CheckDlgButton(dialog, VK_OPT_COMMENTS_FILTER_NOTES, val);
+        val := DBGetContactSettingByte(0, piShortName, opt_CommentsFilterThemes, 1);
+        CheckDlgButton(dialog, VK_OPT_COMMENTS_FILTER_SUBJ, val);
+
+        val := DBGetContactSettingByte(0, piShortName, opt_CommentsLinks, 1);
+        CheckDlgButton(dialog, VK_OPT_COMMENTS_SUPPORTLINKS, val);
+
+        // send Changed message - make sure we can save the dialog
+        SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
+
+        Result:=True;
+      end;
+    // code is executed, when user clicks on link in the Options
+    WM_COMMAND:
+     begin
+       SendMessage(GetParent(dialog), PSM_CHANGED, dialog, 0);
+     end;
+    // code is executed, when user pressed OK or Apply
+    WM_NOTIFY:
+      begin
+        // if user pressed Apply
+        if PNMHdr(lParam)^.code = PSN_APPLY then
+          begin
+            // save settings
+            DBWriteContactSettingByte (0, piShortName, opt_CommentsSupport, Byte(IsDlgButtonChecked(dialog, VK_OPT_COMMENTSSUPPORT)));
+
+            val := GetDlgInt(dialog, VK_OPT_COMMENTS_SEC);
+            DBWriteContactSettingDWord (0, piShortName, opt_CommentsSecs, val);
+
+            DBWriteContactSettingByte (0, piShortName, opt_CommentsFilterPhotos, Byte(IsDlgButtonChecked(dialog, VK_OPT_COMMENTS_FILTER_PHOTO)));
+            DBWriteContactSettingByte (0, piShortName, opt_CommentsFilterVideos, Byte(IsDlgButtonChecked(dialog, VK_OPT_COMMENTS_FILTER_VIDEO)));
+            DBWriteContactSettingByte (0, piShortName, opt_CommentsFilterNotes, Byte(IsDlgButtonChecked(dialog, VK_OPT_COMMENTS_FILTER_NOTES)));
+            DBWriteContactSettingByte (0, piShortName, opt_CommentsFilterThemes, Byte(IsDlgButtonChecked(dialog, VK_OPT_COMMENTS_FILTER_SUBJ)));
+
+            DBWriteContactSettingByte (0, piShortName, opt_CommentsLinks, Byte(IsDlgButtonChecked(dialog, VK_OPT_COMMENTS_SUPPORTLINKS)));
+
+            Result:=True;
+          end;
+      end;
+  end;
+end;
 
 function DlgProcOptionsPopup(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 var
@@ -840,17 +1001,17 @@ var
   popupDelayOption: Byte;
 begin
   Result:=False;
- 
+
   case message of
     // code is executed, when options are initialized
     WM_INITDIALOG:
       begin
         // translate all dialog texts
         TranslateDialogDefault(Dialog);
- 
+
         val := DBGetContactSettingByte(0, piShortName, opt_PopupsEnabled, 1);
         CheckDlgButton(dialog, VK_POPUPS_ENABLED, val);
- 
+
         // color
         case DBGetContactSettingByte(0, piShortName, opt_PopupsColorOption, 0) of
           0: CheckDlgButton(dialog, VK_POPUPS_COLORDEF, BST_CHECKED);
@@ -864,7 +1025,7 @@ begin
               EnableWindow(GetDlgItem(Dialog, VK_POPUPS_COLOR_INF_FORE), true);
             end;
         end;
- 
+
         // delay
         val := DBGetContactSettingDWord(0, piShortName, opt_PopupsDelaySecs, 0);
         if val <> 0 then
@@ -878,7 +1039,7 @@ begin
               EnableWindow(GetDlgItem(dialog, VK_POPUPS_DELAY_SEC), true);
             end;
         end;
- 
+
         val := DBGetContactSettingDWord(0, piShortName, opt_PopupsColorErrorBackground, GetSysColor(COLOR_BTNFACE));
         SendDlgItemMessage(dialog, VK_POPUPS_COLOR_ERR_BACK, CPM_SETCOLOUR, 0, val);
         SendDlgItemMessage(dialog, VK_POPUPS_COLOR_ERR_BACK, CPM_SETDEFAULTCOLOUR, 0, GetSysColor(COLOR_BTNFACE));
@@ -1006,7 +1167,7 @@ begin
                 DBWriteContactSettingDWord (0, piShortName, opt_PopupsDelaySecs, val);
             end;
             DBWriteContactSettingByte(0, piShortName, opt_PopupsProtoIcon, Byte(IsDlgButtonChecked(dialog, VK_POPUPS_PROTO_ICON)));
- 
+
             Result := True;
           end;
       end;

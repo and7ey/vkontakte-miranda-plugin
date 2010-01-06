@@ -155,7 +155,7 @@ begin
          case wParam of
            VK_ACCMGR_NEWID:
              begin
-               ShellAPI.ShellExecute(0, 'open', vk_url_register, nil, nil, 0);
+               ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
                Result := True;
              end;
          end;
@@ -221,7 +221,7 @@ begin
              end;
            VK_LOGIN_NEWID:
              begin
-               ShellAPI.ShellExecute(0, 'open', vk_url_register, nil, nil, 0);
+               ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
                Result := True;
              end;
          end;
@@ -375,7 +375,7 @@ begin
     DBWriteContactSettingUnicode(hContactNew, piShortName, 'Nick', PWideChar(frNick));
     DBWriteContactSettingByte(hContactNew, piShortName, 'Friend', frFriend);
     if DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0) = 1 then
-      DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url_friend,[frID])));
+      DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url_prefix + vk_url_host + vk_url_friend,[frID])));
 
     // assign group for contact, if given in settings
     DefaultGroup := DBReadUnicode(0, piShortName, opt_UserDefaultGroup, nil);
@@ -429,7 +429,7 @@ begin
   end
   else // ID_STATUS_INVISIBLE
   begin
-    HTML := HTTP_NL_Get(Format(vk_url_searchbyid, [ContactID]));  // 3 Kb
+    HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_searchbyid, [ContactID]));  // 3 Kb
     if Trim(HTML) <> '' then
     begin
 	    if Pos('<span class=''bbb''>Online</span>', HTML) > 0 then
@@ -473,7 +473,7 @@ begin
   // get friends online
   // status of friends is read only
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends from the server...'));
-  HTML := HTTP_NL_Post(vk_url_feed_friendsonline, '', '');
+  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friendsonline, '', '');
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
@@ -523,8 +523,8 @@ begin
 
   // get full list of friends
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
-  // HTML := HTTP_NL_Get(vk_url_feed_friends);
-  HTML := HTTP_NL_Post(vk_url_feed_friends, '', '');
+  // HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed_friends);
+  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friends, '', '');
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
@@ -656,7 +656,7 @@ end;
 // -----------------------------------------------------------------------------
 procedure vk_DeleteFriend(FriendID: Integer);
 begin
-  HTTP_NL_Get(Format(vk_url_frienddelete, [FriendID]), REQUEST_HEAD)   // GAP (?): result is not validated
+  HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_frienddelete, [FriendID]), REQUEST_HEAD)   // GAP (?): result is not validated
 end;
 
 // =============================================================================
@@ -677,7 +677,7 @@ var UserName, UserID: String;
     HTML: String;
 begin
   // {"user": {"id": 999999, "name": "Name Nick Surname"}, ...
-  HTML := HTTP_NL_Get(vk_url_username);
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_username);
   UserID := TextBetween(HTML, '"id":', ',');
   UserName := TextBetween(HTML, '"name":"', '"');
 
@@ -954,12 +954,6 @@ begin
               vk_AvatarsGet();
           end;
         end;
-        if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // one more time...
-           (ThrIDDataUpdate.Terminated) then  // miranda is being closed
-        begin
-          Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... miranda is being terminated, updates finished, point 4 (after avatars update)'));
-          break;
-        end;
 
         // getting news, if required
         if DBGetContactSettingByte(0, piShortName, opt_NewsSupport, 1) = 1 then
@@ -982,6 +976,31 @@ begin
           if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
             SetContactStatus(ContactIDNews, ID_STATUS_OFFLINE);
         end;
+        if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // one more time...
+           (ThrIDDataUpdate.Terminated) then  // miranda is being closed
+        begin
+          Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... miranda is being terminated, updates finished, point 5 (after news receiving)'));
+          break;
+        end;
+
+        // getting groups news, if required
+        if DBGetContactSettingByte(0, piShortName, opt_GroupsSupport, 1) = 1 then
+          if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_GroupsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_GroupsSecs, 300)) / SecsPerDay then
+          begin
+            // write new value of last date & time of new message received
+            DBWriteContactSettingDWord (0, piShortName, opt_GroupsLastUpdateDateTime, DateTimeToFileDate(Now));
+            vk_GetGroupsNews();
+          end;
+
+        // getting comment news, if required
+        if DBGetContactSettingByte(0, piShortName, opt_CommentsSupport, 1) = 1 then
+          if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_CommentsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_CommentsSecs, 300)) / SecsPerDay then
+          begin
+            // write new value of last date & time of new message received
+            DBWriteContactSettingDWord (0, piShortName, opt_CommentsLastUpdateDateTime, DateTimeToFileDate(Now));
+            vk_GetCommentsNews();
+          end;
+
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // one more time...
            (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin
