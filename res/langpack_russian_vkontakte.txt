@@ -1,15 +1,19 @@
 ; Miranda Language Pack Version 1
 ; Language: Russian
 ; Locale: 0419
-; Authors: LA
+; Authors: LA, CJ Flash
 ; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.3.0.2
+; ** VKontakte Protocol 0.3.0.7
 ; ** Russian translation
 
 [VKontakte Protocol]
 Протокол ВКонтакте
 [VKontakte]
 ВКонтакте
+[Hint: If you don't enter your password here, Miranda will ask for the password everytime you try to go online.]
+Подсказка: если Вы не укажете здесь пароль, Miranda будет запрашивать его при каждом подключении.
+[Password:]
+Пароль:
 [Protocol Icon]
 Значок протокола
 [New note]
@@ -22,8 +26,12 @@
 Регистрация на сайте ВКонтакте
 [Retrieve a lost password or VKontakte number]
 Восстановить забытый пароль
+[Advanced]
+Дополнительно
 [Connection settings]
 Настройки подключения
+[Preferred host]
+Предпочитаемый хост
 [Other settings]
 Дополнительные настройки
 [Send 'Keep-online' message each]
@@ -126,8 +134,6 @@
 Видео
 [Notes]
 Заметки
-[Questions]
-Вопросы
 [Themes]
 Темы
 [Friends]
@@ -142,10 +148,62 @@
 Аудио
 [Personal data]
 Личные данные
+[Tags]
+Отметки
+[Gifts]
+Подарки
+[Applications]
+Приложения
 [Display news in the separate contact]
 Отображать новости в отдельном контакте
 [Display links in the news]
 Отображать ссылки в новостях
+[Groups]
+Группы
+[Groups news support settings]
+Настройки новостеq групп
+[Receive groups news]
+Получать новости групп
+[Check for groups news each]
+Проверять наличие новостей каждые
+[Filters]
+Фильтры
+[Display groups news of the following types only]
+Отображать новости групп только следующих типов
+[Photos]
+Фотографии
+[Videos]
+Видео
+[News]
+Новости
+[Audio]
+Аудио
+[Themes]
+Темы
+[Display links in the groups news]
+Отображать ссылки в новостях групп
+[Comments]
+Комментарии
+[Comments news support settings]
+Настройки новостей комментариев
+[Receive comments news]
+Получать новости комментариев
+[Check for comments news each]
+Проверять наличие новостей каждые
+[Filters]
+Фильтры
+[Display comments news of the following types only]
+Отображать новости комментариев только следующих типов
+[Photos]
+Фотографии
+[Videos]
+Видео
+[Notes]
+Заметки
+[Themes]
+Темы
+[Display links in the comments news]
+Отображать ссылки в новостях комментариев
 [Error: Cannot connect to the server]
 Ошибка: Невозможно подключиться к серверу
 [Error: Your e-mail or password was rejected]
@@ -453,13 +511,13 @@
 [Read messages from the wall]
 Считывать новые сообщения со стены
 [Read messages each]
-Считывать сообщение каждые
+Считывать сообщения каждые
 [Graffiti]
 Граффити
 [Don't delete contacts from the server]
 Не удалять контакты с сервера при удалении из списка
 [Update status for non-friend contacts]
-Обновлять статус контактов не-друзей
+Обновлять статус контактов, не являющихся друзьями
 [Use local time for messages from the wall]
 Использовать локальное время для сообшений со стены
 [Display wall messages in the separate contact]
