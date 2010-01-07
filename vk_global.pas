@@ -54,19 +54,30 @@ const
 const
   // URLs
   vk_url_prefix = 'http://';
+  // pda url const section
   vk_url_pda = 'http://pda.vkontakte.ru';
+  vk_url_pda_inbox = vk_url_pda + '/inbox';
   vk_url_pda_login = 'http://vkontakte.ru/login.php?pda=index&email=%s&pass=%s&expire=0';
+  vk_url_pda_logout = vk_url_pda + 'logout';
+  vk_url_pda_forgot = vk_url_pda + '/forgot';
+  vk_url_pda_sendmsg_secureid = 'http://pda.vkontakte.ru/?act=write&to=%d';
+  vk_url_pda_sendmsg = vk_url_pda + '/mailsent?pda=1&to_reply=0&to_id=%d&chas=%s&message=%s';
+  vk_url_pda_friend = vk_url_pda + '/id%d';
+  vk_url_pda_keeponline = vk_url_pda + '/profile.php';   // leads to online-on-site
+  vk_url_pda_msg = vk_url_pda + '/letter%d?';
+  vk_url_pda_setstatus_securityhash = vk_url_pda + '/setstatus?pda=1';
+  vk_url_pda_setstatus = vk_url_pda + '/setstatus?pda=1&activityhash=%s&setactivity=%s';
+  vk_url_pda_statusdelete = vk_url_pda + '/setstatus?pda=1&activityhash=%s&clearactivity=1';
+  vk_url_pda_news = vk_url_pda + '/news';
+  vk_url_pda_group_join = vk_url_pda + '/groupenter?pda=1&gid=%d';
+  // general url const section
   vk_url_feed_friendsonline = '/friends.php?id=0&filter=online';
   vk_url_feed_friends = '/friends.php?id=0';
   // vk_url_feed_friendsonline = '/friendJS.php?act=online';
   // vk_url_feed_friends = vk_url + '/friendJS.php';
-  vk_url_pda_logout = vk_url_pda + 'logout';
-  vk_url_pda_forgot = vk_url_pda + '/forgot';
   // vk_url_friends_all = 'http://vkontakte.ru/friend.php';
   vk_url_register = '/reg0';
   vk_url_forgot = '/login.php?op=forgot';
-  vk_url_pda_sendmsg_secureid = 'http://pda.vkontakte.ru/?act=write&to=%d';
-  vk_url_pda_sendmsg = vk_url_pda + '/mailsent?pda=1&to_reply=0&to_id=%d&chas=%s&message=%s';
   vk_url_friend = '/id%d';    // leads to online-on-site, used in get info
   vk_url_photos = '/photos.php?id=%d';
   vk_url_friends = '/friend.php?id=%d';
@@ -81,20 +92,13 @@ const
   vk_url_search_suffix = '&st=%d';
   // vk_url_searchbyanydata = 'http://vkontakte.ru/search.php?q=%s&act=quick';
   vk_url_searchbyid = '/search.php?id=%d';
-  vk_url_pda_friend = vk_url_pda + '/id%d';
-  vk_url_pda_keeponline = vk_url_pda + '/profile.php';   // leads to online-on-site
   vk_url_feed2 = '/feed2.php?mask=mf';
-  vk_url_pda_msg = vk_url_pda + '/letter%d?';
   vk_url_username = '/feed2.php?mask=u';  // http://vkontakte.ru/feed2.php?mask=ufpvmge
   vk_url_auth_securityid = '/friend.php?act=a_add_form&fid=%d';
   vk_url_authrequestsend = '/friend.php?act=addFriend&fid=%d&h=%s&message=%s';  // http://vkontakte.ru/friend.php?act=add&id=123456&h=8e30f2fe
   // vk_url_authrequestreceivedallow = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=1';
   // vk_url_authrequestreceiveddeny = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=0';
   vk_url_authrequestreceived_requestid = 'http://pda.vkontakte.ru/friendsrequests';
-  vk_url_pda_setstatus_securityhash = vk_url_pda + '/setstatus?pda=1';
-  vk_url_pda_setstatus = vk_url_pda + '/setstatus?pda=1&activityhash=%s&setactivity=%s';
-  vk_url_pda_statusdelete = vk_url_pda + '/setstatus?pda=1&activityhash=%s&clearactivity=1';
-  vk_url_pda_news = vk_url_pda + '/news';
   vk_url_news = '/news.php?act=friends';
   vk_url_news_groups = '/newsfeed.php?section=groups';
   vk_url_news_comments = '/newsfeed.php?section=comments';
@@ -108,8 +112,8 @@ const
   vk_url_wall_postpic_getlast = '/graffiti.php?act=last';
   vk_url_wall_postpic = '/wall.php?act=sent&grid=%s&to_id=%d&wall_hash=%s&message=%s';
   vk_url_wall_postpic_captcha = '/wall.php?act=sent&grid=%s&to_id=%d&wall_hash=%s&message=%s&captcha_sid=%s&captcha_key=%s';
-  vk_url_pda_group_join = vk_url_pda + '/groupenter?pda=1&gid=%d';
-  vk_url_activityhistory = '/profile.php?id=%d&activityhistory=1';
+  vk_url_activityhistory = '/profile.php?id=%d&activityhistory=1'; // for future usage
+  vk_url_currentactivity = '/feed2.php?act=activity'; // for future usage
 
 const
   // error messages
