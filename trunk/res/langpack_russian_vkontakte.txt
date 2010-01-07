@@ -10,10 +10,6 @@
 Протокол ВКонтакте
 [VKontakte]
 ВКонтакте
-[Hint: If you don't enter your password here, Miranda will ask for the password everytime you try to go online.]
-Подсказка: если Вы не укажете здесь пароль, Miranda будет запрашивать его при каждом подключении.
-[Password:]
-Пароль:
 [Protocol Icon]
 Значок протокола
 [New note]
@@ -26,8 +22,6 @@
 Регистрация на сайте ВКонтакте
 [Retrieve a lost password or VKontakte number]
 Восстановить забытый пароль
-[Advanced]
-Дополнительно
 [Connection settings]
 Настройки подключения
 [Preferred host]
@@ -164,11 +158,11 @@
 Настройки новостеq групп
 [Receive groups news]
 Получать новости групп
-[Check for groups news each]
-Проверять наличие новостей каждые
+[Check for group news each]
+Проверять наличие новостей групп каждые
 [Filters]
 Фильтры
-[Display groups news of the following types only]
+[Display groups news of the following types only
 Отображать новости групп только следующих типов
 [Photos]
 Фотографии
@@ -189,10 +183,10 @@
 [Receive comments news]
 Получать новости комментариев
 [Check for comments news each]
-Проверять наличие новостей каждые
+Проверять наличие новостей комментариев каждые
 [Filters]
 Фильтры
-[Display comments news of the following types only]
+[Display comments news of the following types only
 Отображать новости комментариев только следующих типов
 [Photos]
 Фотографии
@@ -511,13 +505,13 @@
 [Read messages from the wall]
 Считывать новые сообщения со стены
 [Read messages each]
-Считывать сообщения каждые
+Считывать сообщение каждые
 [Graffiti]
 Граффити
 [Don't delete contacts from the server]
 Не удалять контакты с сервера при удалении из списка
 [Update status for non-friend contacts]
-Обновлять статус контактов, не являющихся друзьями
+Обновлять статус контактов не-друзей
 [Use local time for messages from the wall]
 Использовать локальное время для сообшений со стены
 [Display wall messages in the separate contact]
