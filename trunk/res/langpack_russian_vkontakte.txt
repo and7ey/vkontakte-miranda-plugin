@@ -1,6 +1,10 @@
-Miranda Language Pack Version 1
-Locale: 0419
-Last-Modified-Using: Miranda IM 0.9.0 build 4
+; Miranda Language Pack Version 1
+; Language: Russian
+; Locale: 0419
+; Authors: LA, CJ Flash
+; Author-email: and7ey at gmail dot com
+; ** VKontakte Protocol 0.3.0.9
+; ** Russian translation
 
 [VKontakte Protocol]
 Протокол ВКонтакте
