@@ -89,9 +89,12 @@ var
   ThrIDConnect: TThreadConnect;
   ThrIDDataUpdate: TThreadDataUpdate;
 
+  vk_UserLangId,
+  vk_UserLangHash: String;
+
 implementation
 
-// var
+//var
 
 
 // =============================================================================
@@ -473,7 +476,7 @@ begin
   // get friends online
   // status of friends is read only
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends from the server...'));
-  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friendsonline, '', '');
+  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friendsonline, '', 'multipart/form-data', '');
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
@@ -524,7 +527,7 @@ begin
   // get full list of friends
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
   // HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed_friends);
-  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friends, '', '');
+  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friends, '', 'multipart/form-data', '');
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
@@ -650,13 +653,49 @@ begin
 
 end;
 
+// =============================================================================
+// function to get hash to delete friend
+// (full id is required for this)
+// -----------------------------------------------------------------------------
+function vk_FriendGetHash(ContactFullID: Int64): String;
+var
+  HTML,
+  Hash: String;
+begin
+  Result := '';
+
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) Getting hash of contact ' + IntToStr(ContactFullID) + '...'));
+
+  // getting encoded wall hash
+  HTML := HTTP_NL_Get(Format(vk_url_friend_hash, [ContactFullID]));
+  if Trim(HTML) <> '' then
+  begin
+    Hash := Trim(TextBetween(HTML, Format('removeFriend(%d, this, ''', [ContactFullID]), ''''));
+
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) ... hash of contact ' + IntToStr(ContactFullID) + ' is ' + Hash));
+
+    if (Hash <> '') then
+    begin // decode hash if everything is OK
+      Result := Hash;
+    end;
+  end;
+
+end;
 
 // =============================================================================
 // procedure to delete friend from the server
 // -----------------------------------------------------------------------------
 procedure vk_DeleteFriend(FriendID: Integer);
+var Hash: String;
 begin
-  HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_frienddelete, [FriendID]), REQUEST_HEAD)   // GAP (?): result is not validated
+  if FriendID <> 0 then
+  begin
+    Hash := vk_FriendGetHash(FriendID);
+    if Trim(Hash) <> '' then
+    begin
+      HTTP_NL_Get(Format(vk_url_frienddelete, [FriendID, Hash]), REQUEST_HEAD)   // GAP (?): result is not validated
+    end;
+  end;
 end;
 
 // =============================================================================
@@ -768,6 +807,7 @@ procedure TThreadConnect.Execute;
 var
   ThreadNameInfo: TThreadNameInfo;
   vk_Status_Temp: Integer;
+  HTML: String;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadConnect) Thread started...'));
 
@@ -799,17 +839,24 @@ begin
         vk_Status := vk_Connect();
       if vk_Status <> 0 Then // error occuried
       begin
-          vk_Status := ID_STATUS_OFFLINE; // need to change status to offline
-          ProtoBroadcastAck(piShortName, 0, ACKTYPE_LOGIN, ACKRESULT_FAILED, 0, ErrorCode);
-          case ErrorCode of
-            LOGINERR_WRONGPASSWORD: ShowPopupMsg(0, 'Error: Your e-mail or password was rejected', 2);
-            LOGINERR_TIMEOUT: ShowPopupMsg(0, 'Error: Unknown error during sign on', 2);
-            LOGINERR_NONETWORK: ShowPopupMsg(0, 'Error: Cannot connect to the server', 2);
-          end;
-
+        vk_Status := ID_STATUS_OFFLINE; // need to change status to offline
+        ProtoBroadcastAck(piShortName, 0, ACKTYPE_LOGIN, ACKRESULT_FAILED, 0, ErrorCode);
+        case ErrorCode of
+          LOGINERR_WRONGPASSWORD: ShowPopupMsg(0, 'Error: Your e-mail or password was rejected', 2);
+          LOGINERR_TIMEOUT: ShowPopupMsg(0, 'Error: Unknown error during sign on', 2);
+          LOGINERR_NONETWORK: ShowPopupMsg(0, 'Error: Cannot connect to the server', 2);
+        end;
       end
       else
-          vk_Status := vk_Status_Temp;
+      begin
+        vk_Status := vk_Status_Temp;
+        HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_lang_dialog);
+        if Pos('doChangeLang', HTML) > 0 then
+        begin
+          HTML := TextBetween(HTML, 'doChangeLang(', ')');
+          vk_UserLangHash := TextBetween(HTML,', ''','''');
+        end;
+      end;
     End;
 
   // really change the status

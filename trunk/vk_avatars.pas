@@ -147,7 +147,7 @@ var HTML: String;
     ID, AvatarURL: String;
     intID: Integer;
 begin
-  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friends, '', '');
+  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friends, '', 'multipart/form-data', '');
   HTML := TextBetween(HTML, 'friends'':[',']]');
   If Trim(HTML) <> '' Then
   begin

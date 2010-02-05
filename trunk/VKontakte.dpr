@@ -40,7 +40,8 @@ uses
   Windows,
   SysUtils,
   uLkJSON in 'inc\uLkJSON.pas',
-  htmlparse in 'htmlparse.pas';
+  htmlparse in 'htmlparse.pas',
+  vk_captcha in 'vk_captcha.pas';
 
 // module to parse data from feed2.php (in JSON format)
 
@@ -153,7 +154,7 @@ begin
                                          // this name will be used for ex. in BASIC SEARCH
 
     PFLAG_MAXLENOFMESSAGE:
-      Result := 2000;  // maximum length of one message
+      Result := 4096;  // maximum length of one message (site limit)
 
     PFLAG_UNIQUEIDSETTING:
       Result := Integer(PChar('ID')); // returns the DB setting name that has the ID which makes this user unique on that system
@@ -307,6 +308,10 @@ begin
     2: vk_url_host := 'vk.com';
     else vk_url_host := 'vkontakte.ru';
   end;
+
+  // reset vk_UserLangId, vk_UserLangHash vars
+  vk_UserLangId := '';
+  vk_UserLangHash := '';
 
   // code to identify Options function
   vk_hkOptInitialise := pluginLink^.HookEvent(ME_OPT_INITIALISE, @OnOptInitialise);
