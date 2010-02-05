@@ -45,15 +45,15 @@ uses
 
   procedure HTTP_NL_Init();
   function HTTP_NL_Get(szUrl: String; szRequestType: Integer = REQUEST_GET): String;
-  function HTTP_NL_Post(szUrl: String; szData: String; Boundary: String; szHeaders: String = ''): String;  
+  function HTTP_NL_Post(szUrl: String; szData: String; ContentType: String; Boundary: String; szHeaders: String = ''): String;
   function HTTP_NL_PostPicture(szUrl: String; szData: String; Boundary: String): String;
-  function HTTP_NL_GetPicture(szUrl, szFileName: String): Boolean;  
+  function HTTP_NL_GetPicture(szUrl, szFileName: String): Boolean;
 
 implementation
 
 uses
 
-  vk_core, StrUtils; // module with core functions
+  vk_core, htmlparse, StrUtils; // module with core functions
 
 // =============================================================================
 // function initiliaze connection with internet
@@ -85,7 +85,6 @@ var nlhr: TNETLIBHTTPREQUEST;
     szRedirUrl: String;
     i: Integer;
     szHost: String;
-    CookiesText: String;
 
 begin
   result := ' ';
@@ -119,7 +118,6 @@ begin
   nlhr.headers[3].szName  := 'Pragma';
   nlhr.headers[3].szValue := 'no-cache';
   nlhr.headers[4].szName  := 'Cookie';
-  CookiesText := CookiesGlobal.DelimitedText;
   nlhr.headers[4].szValue := PChar(CookiesGlobal.DelimitedText);
 
   while (Result = ' ') do
@@ -143,74 +141,73 @@ begin
       Begin
         // read cookie
         if nlhrReply.headers[i].szName = 'Set-Cookie' then
-        Begin
-          if Pos('remixlang=', nlhrReply.headers[i].szValue) > 0 Then
-            // parsing works correctly only with Russian version, so replace
-            // all other languages to Russian
-            CookiesGlobal.Add('remixlang=0;')
-          Else
-            CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
-        End;
+          CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
       End;
 
-      // if the recieved code is 200 OK
-      if (nlhrReply.resultCode = 200) then
-      begin
-        ConnectionErrorsCount := 0;
-        // save the retrieved data
-        Result := nlhrReply.pData;
-        if nlhrReply.dataLength = 0 Then
-          Result := ''; // DATA_EMPTY;
-      end
-      // if the recieved code is 302 Moved, Found, etc
-      // workaround for url forwarding
-      else if (nlhrReply.resultCode = 302) and // page moved
-              (szRequestType <> REQUEST_HEAD) then  // no need to redirect if REQUEST_HEAD
-      begin
-        ConnectionErrorsCount := 0;
-        // get the url for the new location and save it to szInfo
-        // look for the reply header "Location"
-        For i:=0 To nlhrReply.headersCount-1 Do
-        begin
-          if nlhrReply.headers[i].szName = 'Location' then
-          begin
-            // gap: the code below will not work correctly in some cases
-            // if location url doesn't contain host name, we should add it
-            szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
-            if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
-            begin
-              if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
-                szHost := szHost + '/';
-              szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
-            end
-            Else
-              szRedirUrl := nlhrReply.headers[i].szValue;
+      case nlhrReply.resultCode of
 
-            nlhr.szUrl := PChar(szRedirUrl);
+        // if the receieved code is 200 OK
+        200:  begin
+                ConnectionErrorsCount := 0;
+                // save the retrieved data
+                Result := nlhrReply.pData;
+                if nlhrReply.dataLength = 0 Then
+                  Result := ''; // DATA_EMPTY;
+              end;
 
-            if Pos('http://pda.vkontakte.ru/index', szRedirUrl) = 0 then // block this page to support invisible mode
-              Result := HTTP_NL_Get(szRedirUrl)                          // not the best solution
-            else
-              Result := 'div class="menu2"';
+        // if the receieved code is 302 Moved, Found, etc
+        // workaround for url forwarding
+        302:  begin
+                if szRequestType <> REQUEST_HEAD then  // no need to redirect if REQUEST_HEAD
+                begin
+                  ConnectionErrorsCount := 0;
+                  // get the url for the new location and save it to szInfo
+                  // look for the reply header "Location"
+                  For i:=0 To nlhrReply.headersCount-1 Do
+                  begin
+                    if nlhrReply.headers[i].szName = 'Location' then
+                    begin
+                      // gap: the code below will not work correctly in some cases
+                      // if location url doesn't contain host name, we should add it
+                      szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
+                      if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
+                      begin
+                        if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                          szHost := szHost + '/';
+                        szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
+                      end
+                      Else
+                        szRedirUrl := nlhrReply.headers[i].szValue;
 
-            CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
-            Exit;
-          end
-        end;
-      end
-      // return error code if the recieved code is neither 200 OK nor 302 Moved
-      else
-      begin
-        // change status of the protocol to offline
-        Inc(ConnectionErrorsCount);
-        if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
-        begin
-          ConnectionErrorsCount := 0;
-          vk_SetStatus(ID_STATUS_OFFLINE);
-        end;
-        // store the error code
-        Result:='Error occured! HTTP Error!';
-      end
+                      nlhr.szUrl := PChar(szRedirUrl);
+
+                      if Pos('http://pda.vkontakte.ru/index', szRedirUrl) = 0 then // block this page to support invisible mode
+                        Result := HTTP_NL_Get(szRedirUrl)                          // not the best solution
+                      else
+                        Result := 'div class="menu2"';
+
+                      CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+                      Exit;
+                    end
+                  end;
+                end;
+              end;
+
+        // return error code if the receieved code is neither 200 OK nor 302 Moved
+        else  begin
+                // change status of the protocol to offline
+                Inc(ConnectionErrorsCount);
+                if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
+                begin
+                  ConnectionErrorsCount := 0;
+                  vk_SetStatus(ID_STATUS_OFFLINE);
+                end;
+                // store the error code
+                Result := nlhrReply.pData;
+              end;
+
+      end;
+
     end
     // if the data does not downloaded successfully (ie. disconnected), then return error
     else
@@ -238,7 +235,7 @@ end;
 // TODO: enable usage of szHeaders value
 //       re-write usage of Boundary (in to order just to pass values)
 // -----------------------------------------------------------------------------
-function HTTP_NL_Post(szUrl: String; szData: String; Boundary: String; szHeaders: String = ''): String;
+function HTTP_NL_Post(szUrl: String; szData: String; ContentType: String; Boundary: String; szHeaders: String = ''): String;
 var nlhr: TNETLIBHTTPREQUEST;
     nlhrReply: PNETLIBHTTPREQUEST;
     szRedirUrl: String;
@@ -280,7 +277,7 @@ begin
   nlhr.headers[3].szName  := 'Cookie';
   nlhr.headers[3].szValue := PChar(CookiesGlobal.DelimitedText);
   nlhr.headers[4].szName  := 'Content-Type';
-  nlhr.headers[4].szValue := PChar('multipart/form-data; boundary='+Boundary);
+  nlhr.headers[4].szValue := PChar(ContentType + '; boundary=' + Boundary);
   nlhr.headers[5].szName  := 'X-Requested-With';
   nlhr.headers[5].szValue := 'XMLHttpRequest';
 
@@ -304,48 +301,52 @@ begin
           CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
       End;
 
-      // if the recieved code is 200 OK
-      if (nlhrReply.resultCode = 200) then
-      begin
-        // save the retrieved data
-        Result := nlhrReply.pData;
-        if nlhrReply.dataLength = 0 Then
-          Result := ''; // DATA_EMPTY;
-      end
-      // if the recieved code is 302 Moved, Found, etc
-      // workaround for url forwarding
-      else if (nlhrReply.resultCode = 302) then // page moved
-      begin
-        // get the url for the new location and save it to szInfo
-        // look for the reply header "Location"
-        For i:=0 To nlhrReply.headersCount-1 Do
-        begin
-          if nlhrReply.headers[i].szName = 'Location' then
-          begin
-            // if location url doesn't contain host name, we should add it
-            szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
-            if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
-            begin
-              if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
-                szHost := szHost + '/';
-              szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
-            end
-            Else
-              szRedirUrl := nlhrReply.headers[i].szValue;
-            nlhr.szUrl := PChar(szRedirUrl);
+      case nlhrReply.resultCode of
 
-            Result := HTTP_NL_Get(szRedirUrl);
-            CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
-            Exit;
-          end
-        end;
-      end
-      // return error code if the recieved code is neither 200 OK nor 302 Moved
-      else
-      begin
-        // store the error code
-        Result:='Error occured! HTTP Error!';
-      end
+        // if the receieved code is 200 OK
+        200:  begin
+                // save the retrieved data
+                Result := nlhrReply.pData;
+                if nlhrReply.dataLength = 0 Then
+                  Result := ''; // DATA_EMPTY;
+              end;
+
+        // if the receieved code is 302 Moved, Found, etc
+        // workaround for url forwarding
+        302:  begin
+                // get the url for the new location and save it to szInfo
+                // look for the reply header "Location"
+                For i:=0 To nlhrReply.headersCount-1 Do
+                begin
+                  if nlhrReply.headers[i].szName = 'Location' then
+                  begin
+                    // if location url doesn't contain host name, we should add it
+                    szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
+                    if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
+                    begin
+                      if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                        szHost := szHost + '/';
+                      szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
+                    end
+                    Else
+                      szRedirUrl := nlhrReply.headers[i].szValue;
+                    nlhr.szUrl := PChar(szRedirUrl);
+
+                    Result := HTTP_NL_Get(szRedirUrl);
+                    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+                    Exit;
+                  end
+                end;
+              end;
+
+        // return error code if the receieved code is neither 200 OK nor 302 Moved
+        else  begin
+                // store the error code
+                Result := nlhrReply.pData;
+              end;
+
+      end;
+
     end
     // if the data does not downloaded successfully (ie. disconnected), then return 1000 as error code
     else
@@ -394,8 +395,8 @@ begin
   nlhr.pData := PChar(szData);
   nlhr.dataLength := Length(szData)+1;
 
-  nlhr.headersCount := 6;
-  SetLength(nlhr.headers, 6);
+  nlhr.headersCount := 5;
+  SetLength(nlhr.headers, 5);
   nlhr.headers[0].szName  := 'User-Agent';
   nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
   nlhr.headers[1].szName  := 'Connection';
@@ -427,48 +428,54 @@ begin
           CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
       End;
 
-      // if the recieved code is 200 OK
-      if (nlhrReply.resultCode = 200) then
-      begin
-        // save the retrieved data
-        Result := nlhrReply.pData;
-        if nlhrReply.dataLength = 0 Then
-          Result := ''; // DATA_EMPTY;
-      end
-      // if the recieved code is 302 Moved, Found, etc
-      // workaround for url forwarding
-      else if (nlhrReply.resultCode = 302) then // page moved
-      begin
-        // get the url for the new location and save it to szInfo
-        // look for the reply header "Location"
-        For i:=0 To nlhrReply.headersCount-1 Do
-        begin
-          if nlhrReply.headers[i].szName = 'Location' then
-          begin
-            // if location url doesn't contain host name, we should add it
-            szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
-            if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
-            begin
-              if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
-                szHost := szHost + '/';
-              szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
-            end
-            Else
-              szRedirUrl := nlhrReply.headers[i].szValue;
-            nlhr.szUrl := PChar(szRedirUrl);
+      case nlhrReply.resultCode of
 
-            Result := HTTP_NL_Get(szRedirUrl);
-            CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
-            Exit;
-          end
-        end;
-      end
-      // return error code if the recieved code is neither 200 OK nor 302 Moved
-      else
-      begin
-        // store the error code
-        Result:='Error occured! HTTP Error!';
-      end
+        // if the receieved code is 200 OK
+        200:  begin
+                if nlhrReply.dataLength = 0 then
+                  // DATA_EMPTY
+                  Result := ''
+                else
+                  // save the retrieved data
+                  Result := nlhrReply.pData;
+              end;
+
+        // if the receieved code is 302 Moved, Found, etc
+        // workaround for url forwarding
+        302:  begin
+                // get the url for the new location and save it to szInfo
+                // look for the reply header "Location"
+                For i:=0 To nlhrReply.headersCount-1 Do
+                begin
+                  if nlhrReply.headers[i].szName = 'Location' then
+                  begin
+                    // if location url doesn't contain host name, we should add it
+                    szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
+                    if Pos(szHost, nlhrReply.headers[i].szValue) = 0 then
+                    begin
+                      if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                        szHost := szHost + '/';
+                      szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
+                    end
+                    else szRedirUrl := nlhrReply.headers[i].szValue;
+
+                    nlhr.szUrl := PChar(szRedirUrl);
+
+                    Result := HTTP_NL_Get(szRedirUrl);
+                    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+                    Exit;
+                  end;
+                end;
+              end;
+
+        // return error code if the receieved code is neither 200 OK nor 302 Moved
+        else  begin
+                // store the error code
+                Result := nlhrReply.pData;
+              end;
+
+      end;
+
     end
     // if the data does not downloaded successfully (ie. disconnected), then return 1000 as error code
     else

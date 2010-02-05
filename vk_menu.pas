@@ -119,7 +119,7 @@ begin
   MenuContactPagesItems[4].Proc:=MenuContactPages;
 
   MenuContactPagesItems[5].Name:='The &wall VKontakte...';
-  MenuContactPagesItems[5].URL:=vk_url_prefix + vk_url_host + vk_url_wall;
+  MenuContactPagesItems[5].URL:=vk_url_prefix + vk_url_host + vk_url_wall_id;
   MenuContactPagesItems[5].Icon:='ICON_POST';
   MenuContactPagesItems[5].Position:=500002;
   MenuContactPagesItems[5].Proc:=MenuContactPages;
@@ -149,7 +149,7 @@ begin
   MenuContactPagesItems[9].Proc:=MenuContactPages;
 
   MenuContactPagesItems[10].Name:='W&rite on the wall VKontakte...';
-  MenuContactPagesItems[10].URL:=vk_url_prefix + vk_url_host + vk_url_wall;
+  MenuContactPagesItems[10].URL:=vk_url_prefix + vk_url_host + vk_url_wall_id;
   MenuContactPagesItems[10].Icon:='ICON_POST';
   MenuContactPagesItems[10].Position:=600000;
   MenuContactPagesItems[10].Proc:=MenuContactWall; // don't change id of this item! it is used in vk_xstatus
@@ -180,7 +180,7 @@ begin
   MenuMainItems[3].Proc:=MenuMainPages;
 
   MenuMainItems[4].Name:='My &wall...';
-  MenuMainItems[4].URL:=vk_url_prefix + vk_url_host + vk_url_wall;
+  MenuMainItems[4].URL:=vk_url_prefix + vk_url_host + vk_url_wall_id;
   MenuMainItems[4].Icon:='ICON_POST';
   MenuMainItems[4].Position:=100002;
   MenuMainItems[4].Proc:=MenuMainPages;

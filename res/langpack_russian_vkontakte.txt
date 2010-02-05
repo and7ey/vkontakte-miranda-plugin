@@ -1,10 +1,6 @@
-; Miranda Language Pack Version 1
-; Language: Russian
-; Locale: 0419
-; Authors: LA, CJ Flash
-; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.3.0.7
-; ** Russian translation
+Miranda Language Pack Version 1
+Locale: 0419
+Last-Modified-Using: Miranda IM 0.9.0 build 4
 
 [VKontakte Protocol]
 Протокол ВКонтакте
@@ -18,10 +14,20 @@
 &Моя страница ВКонтакте
 [&Open contact web page]
 &Страница друга ВКонтакте
+[Account]
+Учётная запись
 [Create a new VKontakte account using the VKontakte website]
 Регистрация на сайте ВКонтакте
 [Retrieve a lost password or VKontakte number]
 Восстановить забытый пароль
+[E-mail or login:]
+E-mail или логин:
+[Password:]
+Пароль:
+[Hint: If you don't enter your password here, Miranda will ask for the password everytime you try to go online.]
+Подсказка: если Вы не укажете здесь пароль, Миранда будет запрашивать его каждый раз при подключении к сети.
+[Advanced]
+Дополнительно
 [Connection settings]
 Настройки подключения
 [Preferred host]
@@ -134,8 +140,6 @@
 Друзья
 [Statuses]
 Статус
-[Groups]
-Группы
 [Meetings]
 Встречи
 [Audio]
@@ -158,18 +162,16 @@
 Настройки новостеq групп
 [Receive groups news]
 Получать новости групп
-[Check for group news each]
+[Check for groups news each]
 Проверять наличие новостей групп каждые
 [Filters]
 Фильтры
-[Display groups news of the following types only
+[Display groups news of the following types only]
 Отображать новости групп только следующих типов
 [Photos]
 Фотографии
 [Videos]
 Видео
-[News]
-Новости
 [Audio]
 Аудио
 [Themes]
@@ -186,7 +188,7 @@
 Проверять наличие новостей комментариев каждые
 [Filters]
 Фильтры
-[Display comments news of the following types only
+[Display comments news of the following types only]
 Отображать новости комментариев только следующих типов
 [Photos]
 Фотографии
@@ -205,11 +207,11 @@
 [Error: Unknown error during sign on]
 Ошибка: Неизвестная ошибка при входе
 [Updating of user details requires status change to Online. Would you like to change status and update details now?]
-Для обновления данных контакта необходимо перейти в режим В сети. Перейти в режим в Сети и обновить данные сейчас?
+Для обновления данных контакта необходимо перейти в режим В сети. Перейти в режим В сети и обновить данные сейчас?
 [Use VKontakte's page URL instead of contact's homepage]
 Использовать ссылку на страницу ВКонтакте вместо страницы контакта
 [Display Additional status for offline contacts]
-Отображать Дополнительный статус для контактов Не в сети
+Отображать дополнительный статус для контактов Не в сети
 [Use the following group by default for new contacts]
 Помещать новые контакты в группу
 [Advanced (continued)]
@@ -484,7 +486,7 @@
 Загрузка завершилась с ошибкой. Невозможно создать подпись
 [Uploading picture on the server...]
 Загрузка изображения на сервер...
-[Uploading failed due to uknown reason]
+[Uploading failed due to unknown reason]
 Загрузка завершилась с ошибкой
 [Uploading failed due to security violation]
 Загрузка завершилась с ошибкой. Нарушение безопасности
@@ -494,8 +496,12 @@
 Изображение не было опубликовано. Не удалось получить id
 [Posting of the picture...]
 Публикация изображения...
-[Posting failed due to uknown reason]
+[Posting failed due to unknown reason]
 Изображение не было опубликовано
+[File size is too large! Reduce it or try another picture.]
+Размер файла слишком большой! Уменьшите его или попробуйте другое изображение.
+[Kb is maximum.]
+Кб - максимум.
 [The picture has been posted successfully]
 Изображение было успешно опубликовано
 [Thank you for usage of VKontakte plugin!\r\n\r\nWould you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?\r\nIf you press Cancel now, the same question will be asked again during next Miranda start.]

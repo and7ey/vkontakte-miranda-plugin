@@ -55,7 +55,6 @@ type
     Wnd: HWnd;
   end;
 
-  function DlgCaptcha(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
   function DlgWallPic(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
 
   function vk_WallPostMessage(MsgDetails: PMsgDetails): TResultDetailed; overload;
@@ -74,6 +73,7 @@ implementation
 uses
   vk_core, // module with core functions
   vk_msgs, // module to send/receive messages
+  vk_captcha, // module to process captcha
 
   SysUtils,
   Classes, // to support TFileStream
@@ -104,136 +104,23 @@ const
 	wall_status_posting_pic_md5 = 'Generating signature...';
 	wall_status_posting_pic_md5_failed = 'Uploading failed. Unable to generate signature';
 	wall_status_posting_pic_sending = 'Uploading picture on the server...';
-	wall_status_posting_pic_sending_failed_unknown = 'Uploading failed due to uknown reason';
+	wall_status_posting_pic_sending_failed_unknown = 'Uploading failed due to unknown reason';
 	wall_status_posting_pic_sending_failed_security = 'Uploading failed due to security violation';
   wall_status_posting_pic_id = 'Picture uploaded';
   wall_status_posting_pic_id_failed = 'Posting failed. Unable to get picture id';
   wall_status_posting_pic_posting = 'Posting of the picture...';
-  wall_status_posting_pic_failed_unknown = 'Posting failed due to uknown reason';
+  wall_status_posting_pic_failed_unknown = 'Posting failed due to unknown reason';
   wall_status_posting_pic_succ = 'The picture has been posted successfully';
 
+  wall_status_posting_pic_size_failed = 'File size is too large! Reduce it or try another picture.';
+  pic_max_size = 255; // max allowed file size of the picture
+  pic_max_size_msg = 'Kb is maximum.';
 
 var
   bPictureSelected: Boolean;
   hBmp: THandle;
   sPicFileName: WideString;
-  hBmpCaptcha: THandle;
-  CaptchaValue: String;
   ContactID: Integer;
-  EditFunctionOriginal: Pointer;
-
-// =============================================================================
-// Dialog function to display captcha
-// -----------------------------------------------------------------------------
-function DlgCaptcha(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
-
-  // new edit function for input box
-  // allows only latin characters and digits, they are input regardless of user's
-  // current keyboard layout/lang
-  function EditFunctionNew(Wnd: HWnd; Msg, wParam, lParam: Integer): Integer; stdcall;
-
-    // deletes the requested message from the queue, but throw back
-    // any WM_QUIT msgs that PeekMessage may also return
-    procedure KillMessage(Wnd: HWnd; Msg: Integer);
-    var
-      M: TMsg;
-    begin
-      M.Message := 0;
-      if PeekMessage(M, Wnd, Msg, Msg, pm_Remove) and (M.Message = WM_QUIT) then
-        PostQuitMessage(M.WParam);
-    end;
-
-  begin
-    if (Msg = WM_KEYDOWN) then
-    begin
-      // codes - http://msdn.microsoft.com/en-us/library/dd375731(VS.85).aspx
-      if not (LoWord(wParam) in [VK_LEFT, VK_RIGHT, VK_DELETE, VK_BACK, VK_HOME, VK_END, VK_TAB, VK_RETURN, VK_ESCAPE]) then
-      begin
-        KillMessage(Wnd, WM_CHAR);
-        //if SendMessage(Wnd, WM_GETTEXTLENGTH, 0, 0) < 5 then // max 5 symbols are allowed
-          case LoWord(wParam) of
-            Ord('A')..Ord('Z'): PostMessage(Wnd, WM_CHAR, LoWord(wParam)+32, 0); // post lowercase latin symbol
-            Ord('0')..Ord('9'): PostMessage(Wnd, WM_CHAR, LoWord(wParam), 0);
-          end;
-        Result := 0;
-        Exit;
-      end;
-    end;
-    // call original edit function
-    Result := CallWindowProc(EditFunctionOriginal, Wnd, Msg, wParam, lParam);
-  end;
-
-// taken from m_imgsrvc.inc
-const
-  MS_IMG_LOAD = 'IMG/Load';
-var
-  rc: TRect;
-  DC, BitmapDC : hDC;
-  memBmp: THandle;
-begin
-  Result := False;
-  case Msg of
-     WM_INITDIALOG:
-       begin
-         // translate all dialog texts
-         TranslateDialogDefault(Dialog);
-         // assign window icon
-         SendMessage(Dialog, WM_SETICON, ICON_BIG, LoadIcon(hInstance, 'ICON_PROTO'));
-         // load picture, filename is passed in lParam during dialog creation
-         hBmpCaptcha := pluginLink^.CallService(MS_IMG_LOAD, windows.wParam(lParam), 0);
-         // delete our captcha file
-         DeleteFile(String(lParam));
-         SendMessage(GetDlgItem(Dialog, VK_CAPTCHA_CODE), EM_SETLIMITTEXT, 5, 0);
-         // assign new procedure to work with VK_CAPTCHA_CODE edit control
-         EditFunctionOriginal := Pointer(SetWindowLong(GetDlgItem(Dialog, VK_CAPTCHA_CODE), GWL_WNDPROC, Integer(@EditFunctionNew)));
-         Result := True;
-       end;
-     WM_CLOSE:
-       begin
-         EndDialog(Dialog, 0);
-       end;
-     WM_DRAWITEM:
-       begin
-         DC := GetDC(GetDlgItem(Dialog, VK_CAPTCHA_PIC));
-         // get size of our picture control
-         GetClientRect(GetDlgItem(Dialog, VK_CAPTCHA_PIC), rc);
-         // clear it
-         FillRect(DC, rc, GetSysColorBrush(COLOR_BTNFACE));
-
-         if hBmpCaptcha <> 0 then
-         begin
-           BitmapDC := CreateCompatibleDC(DC);
-           memBmp := SelectObject(BitmapDC, hBmpCaptcha);
-           BitBlt(DC,
-                  (rc.Right - 130) div 2,
-                  (rc.Bottom - 50) div 2,
-                  130, // captcha picture width
-                  50,  //                 height
-                  BitmapDC, 0, 0, SRCCOPY);
-           DeleteDC(BitmapDC);
-           DeleteObject(memBmp);
-         end;
-
-         FrameRect(DC, rc, GetSysColorBrush(COLOR_BTNSHADOW));
-
-         ReleaseDC(GetDlgItem(Dialog, VK_CAPTCHA_PIC), DC);
-
-         Result := True;
-       end;
-     WM_COMMAND:
-       begin
-         case wParam of
-           VK_CAPTCHA_OK:
-             begin
-               CaptchaValue := GetDlgString(dialog, VK_CAPTCHA_CODE);
-               EndDialog(Dialog, 0);
-               Result := True;
-             end;
-         end;
-       end;
-  end;
-end;
-
 
 // =============================================================================
 // Dialog procedure to enable all elements
@@ -315,6 +202,7 @@ begin
          ContactID := DBGetContactSettingDWord(lParam, piShortName, 'ID', 0); // remember contact's id
 
          ShowWindow(GetDlgItem(Dialog, VK_WALL_PIC), SW_HIDE);
+         SendMessage(GetDlgItem(Dialog, VK_WALL_PIC_EDIT), EM_SETLIMITTEXT, 4096, 0); // set max allowed text length
          SetFocus(GetDlgItem(Dialog, VK_WALL_PIC_EDIT));
 
          // create new menu item
@@ -405,7 +293,7 @@ begin
                SetWindowPos(Dialog, HWND_TOP, 0, 0, rc.Right-rc.Left, rc.Bottom-rc.Top+13, SWP_NOMOVE + SWP_NOZORDER);
                ShowWindow(GetDlgItem(Dialog, VK_WALL_PIC_PRGBAR), SW_SHOW);
                SendMessage(GetDlgItem(Dialog, VK_WALL_PIC_PRGBAR), PBM_SETRANGE, 0, MakeLParam(0, 100));
-               SendMessage(GetDlgItem(Dialog, VK_WALL_PIC_PRGBAR), PBM_SETPOS, 50, 0);}               
+               SendMessage(GetDlgItem(Dialog, VK_WALL_PIC_PRGBAR), PBM_SETPOS, 50, 0);}
                // disable other elements while processing request
                EnableWindow(GetDlgItem(dialog, VK_WALL_PIC_EDIT), false);
                EnableWindow(GetDlgItem(dialog, VK_WALL_PIC), false);
@@ -492,8 +380,8 @@ begin
                    FillChar(rb, SizeOf(rb), 0);
                    rb.size := SizeOf(rb);
                    rb.hBmp := hBmp;
-                   rb.max_width := 272;
-                   rb.max_height := 136;
+                   rb.max_width := 360;
+                   rb.max_height := 293;
                    rb.fit := 0 {RESIZEBITMAP_KEEP_PROPORTIONS + RESIZEBITMAP_FLAG_DONT_GROW};
                    hBmp := pluginLink^.CallService(MS_IMG_RESIZE, windows.wParam(@rb), 0);
 
@@ -591,10 +479,9 @@ var
   Hash: String;
 
   ContactID, FullContactID: Int64;
-  CaptchaId, CaptchaURL: String;
-  TempDir, TempFile: String;
-  Buf: array[0..1023] of Char;
-  MsgTextOrig, MsgText: WideString;
+  CaptchaId, CaptchaValue: String;
+  MsgTextOrig, MsgText: String;
+  szDataFinal: String;
   Dialog, DialogLabel: HWnd; // handles of the dialog and dialog lable reflecting processing status
   PopupsShowStatus: Boolean;
   defTimeout1, defTimeout2: Integer;
@@ -641,7 +528,7 @@ begin
     begin
       if Dialog <> 0 then
         SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_posting)));
-      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postmsg, [FullContactID, Hash, MsgText]), REQUEST_HEAD);
+      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall + '?' + vk_url_wall_postmsg, [FullContactID, Hash, MsgText]), REQUEST_HEAD);
       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' finished. Unable to verify result fully due to Invisible mode, but trying'));
       HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ContactID]));
       if Pos(MsgTextOrig, HTMLDecode(HTML)) > 0 then
@@ -664,7 +551,9 @@ begin
     begin // status = ONLINE
       if Dialog <> 0 then
         SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_posting)));
-      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postmsg, [FullContactID, Hash, MsgText]));
+
+      szDataFinal := Format(vk_url_wall_postmsg, [FullContactID, Hash, MsgText]);
+      HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_wall, szDataFinal, 'application/x-www-form-urlencoded','');
       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' done. Checking result...'));
 
       if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
@@ -686,50 +575,40 @@ begin
           if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
           Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha input is required, getting it...'));
           CaptchaId := TextBetween(HTML, '"captcha_sid":"', '"');
-          CaptchaURL := 'captcha.php?s=1&sid=' + CaptchaId;
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha id is ' + CaptchaId));
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha URL is ' + CaptchaURL));
-          if (CaptchaId <> '') and (CaptchaURL <> '') then
+
+          CaptchaValue := ProcessCaptcha(CaptchaId);
+
+          // error - can't download captcha image
+          if CaptchaValue = 'captcha_download_failed' then
           begin
-            CaptchaURL := vk_url_prefix + vk_url_host + '/' + CaptchaURL;
-            SetString(TempDir, Buf, GetTempPath(Sizeof(Buf)-1, Buf)); // getting path to Temp directory
-            TempFile := TempDir + 'vk_captcha.jpg';
-            if HTTP_NL_GetPicture(CaptchaURL, TempFile) then
-            begin // file downloaded successfully
-              Result.Text := TranslateW(wall_status_captcha_input);
-              Result.Code := 1;
-              if Dialog <> 0 then
-                SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha downloaded successfully and saved to ' + TempDir));
-              // ask user to input the value
-              DialogBoxParamW(hInstance, MAKEINTRESOURCEW(WideString('VK_CAPTCHA')), 0, @DlgCaptcha, Windows.lParam(TempFile));
-              HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postmsg_captcha, [FullContactID, Hash, MsgText, CaptchaId, CaptchaValue]), REQUEST_GET);
-              if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
-              begin
-                Result.Text := TranslateW(wall_status_succ);
-                Result.Code := 0;
-                Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... message posted successfully'));
-                if Dialog <> 0 then
-                  SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-                if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
-              end
-              else
-              begin
-                Result.Text := TranslateW(wall_status_failed);
-                Result.Code := 1;
-                Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... message posting failed'));
-                if Dialog <> 0 then
-                  SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-                if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 1, False);
-              end;
-            end else
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... unable to download captcha'));
+            Result.Text := TranslateW(wall_status_captcha_failed);
+            Result.Code := 1;
+            if Dialog <> 0 then
+              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+            if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+          end
+          else // ok
+          begin
+            szDataFinal := Format(vk_url_wall_postmsg_captcha, [FullContactID, Hash, MsgText, CaptchaId, CaptchaValue]);
+            HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_wall, szDataFinal, 'application/x-www-form-urlencoded','');
+            if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
             begin
-              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... unable to download captcha'));
-              Result.Text := TranslateW(wall_status_captcha_failed);
-              Result.Code := 1;
+              Result.Text := TranslateW(wall_status_succ);
+              Result.Code := 0;
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... message posted successfully'));
               if Dialog <> 0 then
                 SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
               if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+            end
+            else
+            begin
+              Result.Text := TranslateW(wall_status_failed);
+              Result.Code := 1;
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... message posting failed'));
+              if Dialog <> 0 then
+                SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+              if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 1, False);
             end;
           end;
         end;
@@ -795,6 +674,7 @@ function vk_WallPostPicture(MsgDetails: PMsgDetails): TResultDetailed; overload;
 var
   HTML: String;
   sFileName: String;
+  iFileSize: Cardinal; // picture file size (max allowed = 255 Κα)
   Dialog, DialogLabel: HWnd; // handles of the dialog and dialog lable reflecting processing status
   PopupsShowStatus: Boolean;
   PictureFile: TFileStream;
@@ -812,9 +692,8 @@ var
   FullContactID: Int64;
   Hash, MsgID, StrTemp: String;
 
-  CaptchaId, CaptchaURL: String;
-  TempDir, TempFile: String;
-  Buf: array[0..1023] of Char;
+  CaptchaId, CaptchaValue: String;
+
 begin
   sFileName := MsgDetails^.MessageText;
   ContactID := MsgDetails^.ID;
@@ -844,123 +723,139 @@ begin
       Result.Text := TranslateW(wall_status_posting_pic_reading);
 		  if Dialog <> 0 then
 		     SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-		  PictureFile := TFileStream.Create(sFileName, fmOpenRead);
-		  SetLength(szData, PictureFile.Size);
-		  PictureFile.Read(szData[1], PictureFile.Size);
-		  PictureFile.Free;
 
-      if szData <> '' then
+
+      // picture file size calculating & checking routine
+      iFileSize := GetFileSize_(sFileName); // bytes
+      iFileSize := Round(iFileSize/1024); // kilobytes
+
+      if iFileSize <= pic_max_size then
       begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... file has been read, generating base64 hash...'));
-			  // generating Base64
-        Result.Text := TranslateW(wall_status_posting_pic_base64);
-		    if Dialog <> 0 then
-		       SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-			  FillChar(nbd, SizeOf(nbd), 0);
-			  nbd.pbDecoded := PByte(PChar(szData));
-			  nbd.cbDecoded := Length(szData)+1;
-			  nbd.cchEncoded := Netlib_GetBase64EncodedBufferSize(nbd.cbDecoded);
-			  GetMem(PicBase64, nbd.cchEncoded);
-			  nbd.pszEncoded := PicBase64;
-			  PluginLink^.CallService(MS_NETLIB_BASE64ENCODE, 0, Windows.lParam(@nbd));
+  		  PictureFile := TFileStream.Create(sFileName, fmOpenRead);
+	  	  SetLength(szData, PictureFile.Size);
+		    PictureFile.Read(szData[1], PictureFile.Size);
+		    PictureFile.Free;
 
-        if StrLen(PicBase64) > 0 then
+        if szData <> '' then
         begin
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... base64 hash has been generated, calculating md5...'));
-				  // generating MD5 for first 1024 bytes
-          Result.Text := TranslateW(wall_status_posting_pic_md5);
-		      if Dialog <> 0 then
-		         SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-				  FillChar(mdi, SizeOf(mdi), 0);
-				  mdi.cbSize := SizeOf(mdi);
-				  PluginLink^.CallService(MS_SYSTEM_GET_MD5I, 0, Windows.lParam(@mdi));
-				  {FillChar(PicMD5, SizeOf(PicMD5), 0); // these 4 lines are just alternative to md5_hash,
-				  mdi.md5_init(PicMD5);                 // PicMD5: mir_md5_state_t;
-				  mdi.md5_append(PicMD5, PicBase64^, 1024);
-				  mdi.md5_finish(PicMD5, md5hash);}
-				  if StrLen(PicBase64) > 1024 then // we need first 1024 bytes only
-					  mdi.md5_hash(PicBase64^, 1024, md5hash)
-				  else
-				   	mdi.md5_hash(PicBase64^, StrLen(PicBase64), md5hash);
-				  // transforming array to string
-				  md5Signature := '';
-				  for i := 0 to 15 do
-					md5Signature := md5Signature + IntToHex(md5hash[i], 2);
-				    md5Signature := LowerCase(md5Signature);
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... file has been read, generating base64 hash...'));
+			    // generating Base64
+          Result.Text := TranslateW(wall_status_posting_pic_base64);
+  		    if Dialog <> 0 then
+	          SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+		      FillChar(nbd, SizeOf(nbd), 0);
+  			  nbd.pbDecoded := PByte(PChar(szData));
+	  		  nbd.cbDecoded := Length(szData)+1;
+		  	  nbd.cchEncoded := Netlib_GetBase64EncodedBufferSize(nbd.cbDecoded);
+			    GetMem(PicBase64, nbd.cchEncoded);
+  			  nbd.pszEncoded := PicBase64;
+	  		  PluginLink^.CallService(MS_NETLIB_BASE64ENCODE, 0, Windows.lParam(@nbd));
 
-          if Trim(md5Signature) <> '' then
+          if StrLen(PicBase64) > 0 then
           begin
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... md5 has been calculated ('+md5Signature+'), uploading the file...'));
-					  // generating header for our post request
-					  Boundary := '--OLEG-ANDREEV-PAVEL-DUROV-GRAFFITI-POST';
-					  FileHeader :=
-								  '--' + Boundary +
-								  #10 +
-								  'Content-Disposition: form-data; name="Signature"' +
-								  #10 + #10 +
-								  md5Signature +
-								  #10 +
-								  '--' + Boundary +
-								  #10 +
-								  'Content-Disposition: form-data; name="Filedata"; filename="graffiti.png"' +
-								  #10 +
-								  'Content-Type: image/png' +
-								  #10 + #10;
-					  FileTrailer := #10 + '--' + Boundary + '--';
-					  szDataFinal := FileHeader + szData + FileTrailer;
-            Result.Text := TranslateW(wall_status_posting_pic_sending);
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... base64 hash has been generated, calculating md5...'));
+	  			  // generating MD5 for first 1024 bytes
+            Result.Text := TranslateW(wall_status_posting_pic_md5);
 		        if Dialog <> 0 then
-		           SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+		          SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+  				  FillChar(mdi, SizeOf(mdi), 0);
+	  			  mdi.cbSize := SizeOf(mdi);
+		  		  PluginLink^.CallService(MS_SYSTEM_GET_MD5I, 0, Windows.lParam(@mdi));
+			  	  {FillChar(PicMD5, SizeOf(PicMD5), 0); // these 4 lines are just alternative to md5_hash,
+  				  mdi.md5_init(PicMD5);                 // PicMD5: mir_md5_state_t;
+	  			  mdi.md5_append(PicMD5, PicBase64^, 1024);
+		  		  mdi.md5_finish(PicMD5, md5hash);}
+			  	  if StrLen(PicBase64) > 1024 then // we need first 1024 bytes only
+				  	  mdi.md5_hash(PicBase64^, 1024, md5hash)
+  				  else
+	  			   	mdi.md5_hash(PicBase64^, StrLen(PicBase64), md5hash);
+		  		  // transforming array to string
+			  	  md5Signature := '';
+				    for i := 0 to 15 do
+    					md5Signature := md5Signature + IntToHex(md5hash[i], 2);
+		  	    md5Signature := LowerCase(md5Signature);
 
-					  HTML := HTTP_NL_PostPicture(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic_upload, [ContactID]), szDataFinal, Boundary);
-            if Trim(HTML) <> '' then
+            if Trim(md5Signature) <> '' then
             begin
-              if HTML <> 'Security Breach. Sorry.' then
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... md5 has been calculated ('+md5Signature+'), uploading the file...'));
+	  				  // generating header for our post request
+		  			  Boundary := '--OLEG-ANDREEV-PAVEL-DUROV-GRAFFITI-POST';
+			  		  FileHeader :=
+				  	    '--' + Boundary +
+					  	  #10 +
+						    'Content-Disposition: form-data; name="Signature"' +
+							  #10 + #10 +
+							  md5Signature +
+							  #10 +
+  						  '--' + Boundary +
+	  					  #10 +
+                'Content-Disposition: form-data; name="Filedata"; filename="graffiti.png"' +
+			  			  #10 +
+				  		  'Content-Type: image/png' +
+					  	  #10 + #10;
+					    FileTrailer := #10 + '--' + Boundary + '--';
+  					  szDataFinal := FileHeader + szData + FileTrailer;
+              Result.Text := TranslateW(wall_status_posting_pic_sending);
+		          if Dialog <> 0 then
               begin
-                Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... the file has been uploaded successfully, getting details...'));
-                HTML := TextBetween(HTML, 'var params = {', '}');
-                StrTemp := TextBetween(HTML, 'to_id: ''', '''');
-                Hash := DecodeWallHash(TextBetween(HTML, 'wall_hash: decodehash(''', ''')'));
-                MsgID := TextBetween(HTML, 'message: ''', '''');
-                Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... message details: grid '+MsgId+', hash '+Hash));
+                SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+              end;
 
-                Result.Text := TranslateW(wall_status_posting_pic_id) + ' (' + MsgID + ')';
-		            if Dialog <> 0 then
-		              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+  					  HTML := HTTP_NL_PostPicture(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic_upload, [ContactID]), szDataFinal, Boundary);
 
-                if TryStrToInt64(StrTemp, FullContactID) and (Length(Hash) = 32) and (Trim(MsgID) <> '') then
+              // checking for error messages from server
+              if Pos('413 Request Entity Too Large', HTML) > 0 then
+              begin
+                Result.Text := TranslateW(wall_status_posting_pic_size_failed);
+                Result.Code := 1;
+                Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... picture posting failed (file size limit is reached).'));
+              end
+              else if Trim(HTML) <> '' then
+              begin
+                if HTML <> 'Security Breach. Sorry.' then
                 begin
-                  Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting picture id '+MsgID+'...'));
-                  Result.Text := TranslateW(wall_status_posting_pic_posting);
-                  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic, [MsgID, FullContactID, Hash, MsgID]));
-                  if HTML <> '' then // contains some strange symbols, so assume if not empty, then OK
+                  Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... the file has been uploaded successfully, getting details...'));
+                  HTML := TextBetween(HTML, 'var params = {', '}');
+                  StrTemp := TextBetween(HTML, 'to_id: ''', '''');
+                  Hash := DecodeWallHash(TextBetween(HTML, 'wall_hash: decodehash(''', ''')'));
+                  MsgID := TextBetween(HTML, 'message: ''', '''');
+                  Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... message details: grid '+MsgId+', hash '+Hash));
+
+                  Result.Text := TranslateW(wall_status_posting_pic_id) + ' (' + MsgID + ')';
+		              if Dialog <> 0 then
+		                SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+
+                  if TryStrToInt64(StrTemp, FullContactID) and (Length(Hash) = 32) and (Trim(MsgID) <> '') then
                   begin
-                    if Pos('captcha_sid', HTML) > 0 then // captcha!
+                    Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting picture id '+MsgID+'...'));
+                    Result.Text := TranslateW(wall_status_posting_pic_posting);
+                    HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic, [MsgID, FullContactID, Hash, MsgID]), REQUEST_GET);
+                    if HTML <> '' then // contains some strange symbols, so assume if not empty, then OK
                     begin
-                      Result.Text := TranslateW(wall_status_captcha_required);
-                      Result.Code := 1; // not successful yet
-                      if Dialog <> 0 then
-                        SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-                      if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
-                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha input is required, getting it...'));
-                      CaptchaId := TextBetween(HTML, '"captcha_sid":"', '"');
-                      CaptchaURL := 'captcha.php?s=1&sid=' + CaptchaId;
-                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha id is ' + CaptchaId));
-                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha URL is ' + CaptchaURL));
-                      if (CaptchaId <> '') and (CaptchaURL <> '') then
+                      if Pos('captcha_sid', HTML) > 0 then // captcha!
                       begin
-                        CaptchaURL := vk_url_prefix + vk_url_host + '/' + CaptchaURL;
-                        SetString(TempDir, Buf, GetTempPath(Sizeof(Buf)-1, Buf)); // getting path to Temp directory
-                        TempFile := TempDir + 'vk_captcha.jpg';
-                        if HTTP_NL_GetPicture(CaptchaURL, TempFile) then
-                        begin // file downloaded successfully
-                          Result.Text := TranslateW(wall_status_captcha_input);
+                        Result.Text := TranslateW(wall_status_captcha_required);
+                        Result.Code := 1; // not successful yet
+                        if Dialog <> 0 then
+                          SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
+                        if PopupsShowStatus then
+                          ShowPopupMsg(0, Result.Text, 2, False);
+                        Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha input is required, getting it...'));
+                        CaptchaId := TextBetween(HTML, '"captcha_sid":"', '"');
+
+                        CaptchaValue := ProcessCaptcha(CaptchaId);
+
+                        // error - can't download captcha image
+                        if CaptchaValue = 'captcha_download_failed' then
+                        begin
+                          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to download captcha'));
+                          Result.Text := TranslateW(wall_status_captcha_failed);
                           Result.Code := 1;
                           if Dialog <> 0 then
                             SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-                          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... captcha downloaded successfully and saved to ' + TempDir));
-                          // ask user to input the value
-                          DialogBoxParamW(hInstance, MAKEINTRESOURCEW(WideString('VK_CAPTCHA')), 0, @DlgCaptcha, Windows.lParam(TempFile));
+                          if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+                        end else // ok
+                        begin
                           HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic_captcha, [MsgId, FullContactID, Hash, MsgId, CaptchaId, CaptchaValue]), REQUEST_GET);
                           if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
                           begin
@@ -969,7 +864,8 @@ begin
                             Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... picture posted successfully'));
                             if Dialog <> 0 then
                               SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-                            if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+                            if PopupsShowStatus then
+                              ShowPopupMsg(0, Result.Text, 2, False);
                           end
                           else
                           begin
@@ -980,65 +876,63 @@ begin
                               SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
                             if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 1, False);
                           end;
-                        end else
-                        begin
-                          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to download captcha'));
-                          Result.Text := TranslateW(wall_status_captcha_failed);
-                          Result.Code := 1;
-                          if Dialog <> 0 then
-                            SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-                          if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
                         end;
+                      end
+                      else
+                      begin
+                        Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting successful'));
+                        Result.Text := TranslateW(wall_status_posting_pic_succ);
+                        Result.Code := 0; // successful
                       end;
                     end
                     else
                     begin
-                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting successful'));
-                      Result.Text := TranslateW(wall_status_posting_pic_succ);
-                      Result.Code := 0; // successful
+                      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting of the picture failed'));
+                      Result.Text := TranslateW(wall_status_posting_pic_failed_unknown);
                     end;
                   end
                   else
                   begin
-                    Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting of the picture failed'));
-                    Result.Text := TranslateW(wall_status_posting_pic_failed_unknown);
+                    Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed, unable to get details'));
+                    Result.Text := TranslateW(wall_status_posting_pic_id_failed);
                   end;
                 end
                 else
                 begin
-                  Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed, unable to get details'));
-                  Result.Text := TranslateW(wall_status_posting_pic_id_failed);
+                  Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed, security violation'));
+                  Result.Text := TranslateW(wall_status_posting_pic_sending_failed_security);
                 end;
               end
               else
               begin
-                Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed, security violation'));
-                Result.Text := TranslateW(wall_status_posting_pic_sending_failed_security);
+                Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed'));
+                Result.Text := TranslateW(wall_status_posting_pic_sending_failed_unknown);
               end;
             end
             else
             begin
-              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... uploading of the picture failed'));
-              Result.Text := TranslateW(wall_status_posting_pic_sending_failed_unknown);
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to calculate md5, posting failed'));
+              Result.Text := TranslateW(wall_status_posting_pic_md5_failed);
             end;
           end
           else
           begin
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to calculate md5, posting failed'));
-            Result.Text := TranslateW(wall_status_posting_pic_md5_failed);
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to calculate base64 hash, posting failed'));
+            Result.Text := TranslateW(wall_status_posting_pic_base64_failed);
           end;
+          FreeMem(PicBase64);
         end
         else
         begin
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to calculate base64 hash, posting failed'));
-          Result.Text := TranslateW(wall_status_posting_pic_base64_failed);
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to read picture file, posting failed'));
+          Result.Text := TranslateW(wall_status_posting_pic_reading_failed);
         end;
-        FreeMem(PicBase64);
       end
       else
       begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... unable to read picture file, posting failed'));
-        Result.Text := TranslateW(wall_status_posting_pic_reading_failed);
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... picture posting failed (file size limit is reached).'));
+        Result.Text := TranslateW(wall_status_posting_pic_size_failed);
+        Result.Text := Result.Text + ' ' + IntToStr(pic_max_size) + ' ' + TranslateW(pic_max_size_msg);
       end;
     end
     else

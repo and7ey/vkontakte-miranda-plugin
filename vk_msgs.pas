@@ -39,7 +39,7 @@ interface
   procedure vk_GetNews();
   procedure vk_GetGroupsNews();
   procedure vk_GetCommentsNews();
-  function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; MsgDate: TDateTime): Boolean;  
+  function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; MsgDate: TDateTime): Boolean;
 
 implementation
 
@@ -51,6 +51,7 @@ uses
   vk_http, // module to connect with the site
   vk_common, // module with common functions
   vk_wall, // module to work with the wall
+  vk_captcha, // module to process captcha
 
   htmlparse, // module to simplify html parsing
   vk_core, // module with core functions
@@ -61,6 +62,12 @@ uses
   SysUtils;
 
   {$include api/m_folders.inc}
+
+const
+  msg_status_captcha_required = 'Security code (captcha) input is required for further processing...';
+	msg_status_captcha_input = 'Please input the captcha in the separate window';
+	msg_status_failed = 'Message sending failed (incorrect code?)';
+	msg_status_captcha_failed = 'Message sending failed. Unable to get the captcha';
 
 type // type to keep news
   TNewsRecord = record
@@ -96,6 +103,9 @@ var
   vk_hProtoMessageSendW,
   vk_hProtoMessageReceive: THandle;
 
+  CaptchaId,
+  CaptchaValue: String;
+
   function MessageSendThread(ccs: VK_PCCSDATA): LongWord; forward;
 
 // =============================================================================
@@ -108,6 +118,7 @@ function vk_SendMessage(ToID: Integer; Text: WideString): Byte;
 // 2 - msgs sent two often
 var SecureId: String; // temp variable to keep secure id needed for msg sending
     HTML: String; // html content of the page received
+    szDataFinal: String;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) Sending new message to id '+ IntToStr(ToID) +', message text: '+AnsiString(Text)));
   Result := 1;
@@ -131,10 +142,30 @@ begin
       if Trim(Text)<>'' Then // not empty message
       begin
         Text := URLEncode(Text); // encode all Russian and other characters
-        HTML := HTTP_NL_Get(Format(vk_url_pda_sendmsg, [ToID, SecureID, Text]))
+        //HTML := HTTP_NL_Get(Format(vk_url_pda_sendmsg, [ToID, SecureID, Text]))
+        szDataFinal := Format(vk_url_pda_sendmsg, [ToID, SecureID, Text]);
+        HTML := HTTP_NL_Post(vk_url_pda + vk_url_pda_mailsent, szDataFinal, 'application/x-www-form-urlencoded','');
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... posting of the message to contact ' + IntToStr(ToID) + ' done. Checking result...'));
       end
       else
         HTML := '';
+
+     	if Pos('captcha_sid', HTML) > 0 then // captcha!
+      begin
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... captcha input is required, getting it...'));
+        CaptchaId := TextBetween(HTML, 'sid=', '"');
+
+        CaptchaValue := ProcessCaptcha(CaptchaId);
+
+        // error - can't download captcha image
+        if CaptchaValue = 'captcha_download_failed' then
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... unable to download captcha'))
+        else // ok
+        begin
+          szDataFinal := Format(vk_url_pda_sendmsg_captcha, [ToID, SecureID, Text, CaptchaId, CaptchaValue]);
+          HTML := HTTP_NL_Post(vk_url_pda + vk_url_pda_mailsent, szDataFinal, 'application/x-www-form-urlencoded','');
+        end;
+      end;
 
       // verify if user tries to send messages too often and inform
       // him about it - http://pda.vkontakte.ru/blank
@@ -658,7 +689,25 @@ var DayWrapPosStart, feedTablePosStart: Integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) Receiving news...'));
 
+  // get user lang id
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed2);
+  vk_UserLangId := TextBetween(HTML, '"lang":{"id":"', '","p_id":');
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) LangId is: ' + vk_UserLangId));
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) LangHash is: ' + vk_UserLangHash));
+
+  if vk_UserLangId <> '0' then // change lang to Russian for correct parsing
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) Temporary changing site lang to Russian for parsing...'));
+    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, ['0', vk_UserLangHash]));
+  end;
+
   HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news);
+
+  if vk_UserLangId <> '0' then // return user default lang
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) Now getting back user default site lang...'));
+    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
+  end;
 
   If Trim(HTML) <> '' Then
   begin
@@ -856,7 +905,25 @@ var DayWrapPosStart, feedTablePosStart: Integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) Receiving groups news...'));
 
+  // get user lang id
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed2);
+  vk_UserLangId := TextBetween(HTML, '"lang":{"id":"', '","p_id":');
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) LangId is: ' + vk_UserLangId));
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) LangHash is: ' + vk_UserLangHash));
+
+  if vk_UserLangId <> '0' then // change lang to Russian for correct parsing
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) Temporary changing site lang to Russian for parsing...'));
+    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, ['0', vk_UserLangHash]));
+  end;
+
   HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news_groups);
+
+  if vk_UserLangId <> '0' then // return user default lang
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) Now getting back user default site lang...'));
+    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
+  end;
 
   If Trim(HTML) <> '' Then
   begin
@@ -1019,7 +1086,25 @@ var DayWrapPosStart, feedTablePosStart, commentItemPosStart: Integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) Receiving comments news...'));
 
+  // get user lang id
+  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed2);
+  vk_UserLangId := TextBetween(HTML, '"lang":{"id":"', '","p_id":');
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) LangId is: ' + vk_UserLangId));
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) LangHash is: ' + vk_UserLangHash));
+
+  if vk_UserLangId <> '0' then // change lang to Russian for correct parsing
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) Temporary changing site lang to Russian for parsing...'));
+    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, ['0', vk_UserLangHash]));
+  end;
+
   HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news_comments);
+
+  if vk_UserLangId <> '0' then // return user default lang
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) Now getting back user default site lang...'));
+    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
+  end;
 
   If Trim(HTML) <> '' Then
   begin
