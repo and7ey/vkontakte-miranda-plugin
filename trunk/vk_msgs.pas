@@ -59,7 +59,7 @@ uses
   uLkJSON, // module to parse data from feed2.php (in JSON format)
 
   Windows,
-  SysUtils;
+  SysUtils, DateUtils;
 
   {$include api/m_folders.inc}
 
@@ -613,12 +613,12 @@ var NewsPosStart, DayWrapPosStart: Integer;
     HTML, HTMLDay: String;
 
     nNType, nIDstr, nNTimestr: String;
+    nNTimeStrLower:string;
     nText: WideString;
     nID: Integer;
     nNTime: TDateTime;
 
     fSettings: TFormatSettings;
-
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsMinimal) Receiving minimal news...'));
 
@@ -643,7 +643,15 @@ begin
         nText := StringReplace(nText, '<br/>', ' ', [rfReplaceAll, rfIgnoreCase]);
         nText := Trim(HTMLDecodeW(nText));
         nNTimestr := TextBetweenInc(HTMLDay, '<span class="stTime">', '</span>');
-        nNTimestr := Trim(HTMLRemoveTags(nNTimestr));
+        nNTimestr := Trim(HTMLTrimWhitespace(HTMLRemoveTags(nNTimestr)));
+        //alexei.emanov protect against date
+        nNTimeStrLower := StrLower(PAnsiChar(nNTimestr));
+        if(nNTimeStrLower='сегодня') then
+          nNTimestr := DateToStr(Today)
+        else
+          if(nNTimeStrLower='вчера') then
+            nNTimestr := DateToStr(IncDay(Today, -1));
+
         GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, fSettings);
         fSettings.TimeSeparator := ':';
 
@@ -717,7 +725,7 @@ begin
     DayWrapPosStart := Pos('feedDayWrap', HTML);
     While HasNews and (DayWrapPosStart > 0) Do
     Begin
-      HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
+      HTMLDate := Trim(HTMLRemoveTags(TextBetween(HTML, '<div class="feedDay">', '</div>')));
       if HTMLDate = 'сегодня' then DayTime := Date else
         if HTMLDate = 'вчера' then DayTime := Date - 1 else
            DayTime := RusDateToDateTime(HTMLDate, true);
@@ -1115,7 +1123,7 @@ begin
     DayWrapPosStart := Pos('feedDayWrap', HTML);
     While HasNews and (DayWrapPosStart > 0) Do
     Begin
-      HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
+      HTMLDate := Trim(HTMLTrimWhitespace(HTMLRemoveTags(TextBetween(HTML, '<div class="feedDay">', '</div>'))));
       if HTMLDate = 'сегодня' then DayTime := Date else
         if HTMLDate = 'вчера' then DayTime := Date - 1 else
            DayTime := RusDateToDateTime(HTMLDate, true);
@@ -1229,6 +1237,7 @@ begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... checking comments news '+IntToStr(CurrNews+1)+' (of '+IntToStr(High(NewsAll)+1)+')...'));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... comments news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
       // validate date & time of message (if never was shown before)
+
       if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_CommentsLastNewsDateTime, 539033600) then
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... groups news ' +IntToStr(CurrNews+1)+' identified as not shown before'));
