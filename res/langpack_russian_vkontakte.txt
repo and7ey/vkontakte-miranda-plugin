@@ -3,7 +3,7 @@
 ; Locale: 0419
 ; Authors: LA, CJ Flash
 ; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.3.0.9
+; ** VKontakte Protocol 0.3.0.10
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -116,8 +116,6 @@ E-mail или логин:
 Обновлять аватары при получении деталей контактов
 [Avatars Cache]
 Кэш аватаров
-[You cannot send messages more often than once in 1 second. Please try again later.]
-Вы не можете отправлять более одного сообщения в секунду. Попытайтесь отправить сообщение позднее.
 [News]
 Новости
 [News support settings]
@@ -552,3 +550,19 @@ E-mail или логин:
 Школа
 [W&rite on the wall VKontakte...]
 &Написать на стене ВКонтакте...
+[Unknown error occured.]
+Произошла неизвестная ошибка.
+[Application is disabled. Enable your application or use test mode.]
+Приложение ВКонтакте, необходимое для работы плагина, выключено разработчиком.
+[Incorrect signature.]
+Неправильная подпись сообщения. Обратитесь к разработчикам плагина.
+[User authorization failed.]
+Пользователь не авторизован. Обратитесь к разработчикам плагина.
+[Too many requests per second.]
+Вы не можете отправлять более одного запроса в секунду. Попробуйте позднее.
+[Permission to perform this action is denied by user.]
+Получатель сообщения запретил Вам отправлять ему сообщения.
+[Flood control enabled for this action.]
+Вы не можете отправлять более одного запроса в секунду. Попробуйте позднее.
+[No session details are received. Some functions will not work properly.]
+Не получены детали сессии. Некоторые функции плагина будут работать неправильно.

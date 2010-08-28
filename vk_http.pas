@@ -83,7 +83,7 @@ function HTTP_NL_Get(szUrl: String; szRequestType: Integer = REQUEST_GET): Strin
 var nlhr: TNETLIBHTTPREQUEST;
     nlhrReply: PNETLIBHTTPREQUEST;
     szRedirUrl: String;
-    i: Integer;
+    i,j: Integer;
     szHost: String;
 
 begin
@@ -134,6 +134,7 @@ begin
 
     // download the page
     nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
+    Netlib_Log(vk_hNetlibUser, PChar('nlhrReply <> nil: '+ ifthen(nlhrReply <> nil, 'true', 'false')));
     if (nlhrReply <> nil) Then
     Begin
       // read cookies & store it
@@ -144,6 +145,7 @@ begin
           CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
       End;
 
+      Netlib_Log(vk_hNetlibUser, PChar('nlhrReply.resultCode: '+ IntToStr(nlhrReply.resultCode)));
       case nlhrReply.resultCode of
 
         // if the receieved code is 200 OK
@@ -158,6 +160,7 @@ begin
         // if the receieved code is 302 Moved, Found, etc
         // workaround for url forwarding
         302:  begin
+                Netlib_Log(vk_hNetlibUser, PChar('szRequestType <> REQUEST_HEAD:'+ ifthen(szRequestType <> REQUEST_HEAD, 'true', 'false')));
                 if szRequestType <> REQUEST_HEAD then  // no need to redirect if REQUEST_HEAD
                 begin
                   ConnectionErrorsCount := 0;
@@ -165,6 +168,7 @@ begin
                   // look for the reply header "Location"
                   For i:=0 To nlhrReply.headersCount-1 Do
                   begin
+                    Netlib_Log(vk_hNetlibUser, PChar('"'+nlhrReply.headers[i].szName+'"'));
                     if nlhrReply.headers[i].szName = 'Location' then
                     begin
                       // gap: the code below will not work correctly in some cases
@@ -178,6 +182,7 @@ begin
                       end
                       Else
                         szRedirUrl := nlhrReply.headers[i].szValue;
+                      Netlib_Log(vk_hNetlibUser, PChar('RedirUrl: '+ szRedirUrl));
 
                       nlhr.szUrl := PChar(szRedirUrl);
 
@@ -189,7 +194,13 @@ begin
                       CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
                       Exit;
                     end
-                  end;
+                  end
+                end
+                 else
+                begin
+                  //alexei.emanov. Need to stop endless loop
+                  Result := '';
+                  Exit;
                 end;
               end;
 
@@ -443,6 +454,7 @@ begin
         // if the receieved code is 302 Moved, Found, etc
         // workaround for url forwarding
         302:  begin
+                Netlib_Log(vk_hNetlibUser, PChar('Code302: '+ szRedirUrl));
                 // get the url for the new location and save it to szInfo
                 // look for the reply header "Location"
                 For i:=0 To nlhrReply.headersCount-1 Do

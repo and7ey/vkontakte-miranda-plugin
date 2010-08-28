@@ -908,14 +908,30 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadConnect) ... thread finished'));
 end;
 
+type
+  ActionProc=procedure();
 // =============================================================================
 // update data thread
 // -----------------------------------------------------------------------------
 procedure TThreadDataUpdate.Execute;
+
+procedure ExecIt(action:ActionProc; actionName:string);
+begin
+  try
+    Netlib_Log(vk_hNetlibUser, PChar(actionName+' started'));
+    action();
+    Netlib_Log(vk_hNetlibUser, PChar(actionName+' finished'));
+  except
+    on E : Exception do
+      Netlib_Log(vk_hNetlibUser, PChar(actionName+' exception: '+E.Message));
+  end;
+end;
+
 var
   ThreadNameInfo: TThreadNameInfo;
   ContactIDNews,
   ContactIDWall: Integer;
+  CheckMessagePeriod: integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Thread started...'));
 
@@ -968,7 +984,7 @@ begin
         begin
             // write new value of last date & time of contacts' status update
             DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeFriendsStatus, DateTimeToFileDate(Now));
-            vk_GetFriends();
+            ExecIt(@vk_GetFriends, 'vk_GetFriends');
         end;
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // check again if thread termination is requested OR
            (ThrIDDataUpdate.Terminated) then  // miranda is being closed
@@ -978,12 +994,18 @@ begin
         end;
 
         // checking for new messages received and for auth requests;   default value of last update is 539033600 = 1/1/1996 12:00 am
-        if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgs, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserCheckNewMessages, 60)) / SecsPerDay then // code is equal to IncSecond function with negative value
+        CheckMessagePeriod := DBGetContactSettingDWord(0, piShortName, opt_UserCheckNewMessages, 60);
+        if(CheckMessagePeriod=0) then
+        begin
+          Netlib_Log(vk_hNetlibUser, PChar('Message receiving disabled'));
+        end else
+        if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgs, 539033600)) <= ((Now * SecsPerDay) - CheckMessagePeriod) / SecsPerDay then // code is equal to IncSecond function with negative value
         begin
             // write new value of last date & time of new message received
             DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeMsgs, DateTimeToFileDate(Now));
-            vk_GetMsgsFriendsEtc();
+            ExecIt(@vk_GetMsgsFriendsEtc, 'vk_GetMsgsFriendsEtc');
         end;
+
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // check again if thread termination is requested OR
            (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin
@@ -998,7 +1020,7 @@ begin
           begin
               // write new value of last date & time of new message received
               DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeAvatars, DateTimeToFileDate(Now));
-              vk_AvatarsGet();
+              ExecIt(@vk_AvatarsGet, 'vk_AvatarsGet');
           end;
         end;
 
@@ -1013,8 +1035,8 @@ begin
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_NewsSecs, 300)) / SecsPerDay then
           begin
             // write new value of last date & time of new message received
+            ExecIt(@vk_GetNews, 'vk_GetNews');
             DBWriteContactSettingDWord (0, piShortName, opt_NewsLastUpdateDateTime, DateTimeToFileDate(Now));
-            vk_GetNews();
           end;
         end
         else  // if news are not supported
@@ -1036,7 +1058,7 @@ begin
           begin
             // write new value of last date & time of new message received
             DBWriteContactSettingDWord (0, piShortName, opt_GroupsLastUpdateDateTime, DateTimeToFileDate(Now));
-            vk_GetGroupsNews();
+            ExecIt(@vk_GetGroupsNews, 'vk_GetGroupsNews');
           end;
 
         // getting comment news, if required
@@ -1045,7 +1067,7 @@ begin
           begin
             // write new value of last date & time of new message received
             DBWriteContactSettingDWord (0, piShortName, opt_CommentsLastUpdateDateTime, DateTimeToFileDate(Now));
-            vk_GetCommentsNews();
+            ExecIt(@vk_GetCommentsNews, 'vk_GetCommentsNews');
           end;
 
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // one more time...
@@ -1090,7 +1112,7 @@ begin
         begin
             // write new value of last date & time of contacts' status update
             DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeKeepOnline, DateTimeToFileDate(Now));
-            vk_KeepOnline();
+            ExecIt(@vk_KeepOnline, 'vk_KeepOnline');
         end;
       end;
 

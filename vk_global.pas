@@ -55,10 +55,10 @@ const
   // URLs
   vk_url_prefix = 'http://';
   // pda url const section
-  vk_url_pda = vk_url_prefix + 'pda.vkontakte.ru';
+  vk_url_pda = vk_url_prefix + 'm.vkontakte.ru';
   vk_url_pda_inbox = vk_url_pda + '/inbox';
   vk_url_pda_login = 'http://vkontakte.ru/login.php?pda=index&email=%s&pass=%s&expire=0';
-  vk_url_pda_logout = vk_url_pda + 'logout';
+  vk_url_pda_logout = vk_url_pda + '/logout';
   vk_url_pda_forgot = vk_url_pda + '/forgot';
   vk_url_pda_sendmsg_secureid = vk_url_pda + '/?act=write&to=%d';
   vk_url_pda_mailsent = '/mailsent?pda=1';

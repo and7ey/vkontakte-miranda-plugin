@@ -14,6 +14,7 @@ uses
   function LastPos(ASearch: string; AText: string): Integer;
   function URLEncode(const AStr: string): string;
   function URLDecode(const AStr: string): string;
+  function HTMLTrimWhitespace(const Value: WideString): WideString;
   function HTMLRemoveTags(const Value: WideString): WideString;
   function HTMLDecode(const Value: string): string;
   function TextBetweenTagsInc(WholeText, Tag: string): string;
@@ -283,6 +284,22 @@ begin
     CurPos := Pos(ASearch, AText);
   end;
   Result := PrevPos;
+end;
+
+function HTMLTrimWhitespace(const Value: WideString): WideString;
+var
+  i, j, Max: Integer;
+begin
+  result := '';
+  Max := Length(Value);
+  for i:=1 to Max do
+    if not (Value[i] in [WideChar(1)..WideChar(32)]) then
+    for j:=Max downto i do
+      if not (Value[j] in [WideChar(1)..WideChar(32)]) then
+      begin
+        result := Copy(Value, i, j-i+1);
+        exit;
+      end;
 end;
 
 function HTMLRemoveTags(const Value: WideString): WideString;
