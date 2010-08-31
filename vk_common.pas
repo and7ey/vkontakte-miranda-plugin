@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -53,20 +53,30 @@ type
   function RusDateToDateTime(RDate: String; LMonthes: Boolean): TDateTime;
 
   function GetDlgString(hDlg: HWnd; idCtrl: Integer): String;
-  function GetDlgUnicode(hDlg: HWnd; idCtrl: Integer): WideString;  
+  function GetDlgUnicode(hDlg: HWnd; idCtrl: Integer): WideString;
   function GetDlgInt(hDlg: HWnd; idCtrl: Integer): Integer;
   function GetDlgComboBoxItem(hDlg: HWnd; idCtrl: Integer): Integer;
   procedure InitComboBox(hwndCombo: HWnd; const Names: Array of TComboBoxItem);
 
   function GetFileSize_(sFileName: string): cardinal;
 
-  function IfThen(AValue: Boolean; const ATrue: Integer; const AFalse: Integer = 0): Integer;  
+  function IfThen(AValue: Boolean; const ATrue: Integer; const AFalse: Integer = 0): Integer;
+
+  function GenerateApiUrl(sParms: String): String;
+
+  function GetJSONResponse(sResponse: String; sParm: String = 'response'): Variant;
+  function GetJSONResponseChild0(sHTML: String; sFieldName: String): Variant;
+  function GetJSONError(sResponse: String): Integer;
+
+  function UnixToDateTime(USec: Longint): TDateTime;
 
 implementation
 
 uses
   m_globaldefs,
   m_api,
+
+  uLkJSON, // module to parse JSON data
 
   htmlparse; // module to simplify html parsing
 
@@ -230,6 +240,134 @@ begin
     Result := ATrue
   else
     Result := AFalse;
+end;
+
+// =============================================================================
+// function to generate md5
+// -----------------------------------------------------------------------------
+function GenerateMD5(sParms: String): String;
+var
+  mdi: TMD5_INTERFACE;
+  md5hash: TMD5_Digest;
+  md5Signature: String;
+  i: byte;
+  pParms: PChar;
+begin
+  // Netlib_Log(vk_hNetlibUser, PChar('sParms='+sParms)); // TEMP!
+  FillChar(mdi, SizeOf(mdi), 0);
+	mdi.cbSize := SizeOf(mdi);
+	PluginLink^.CallService(MS_SYSTEM_GET_MD5I, 0, Windows.lParam(@mdi));
+  GetMem(pParms, Length(sParms)+1);
+  StrPCopy(pParms, sParms);
+  mdi.md5_hash(pParms^, StrLen(pParms), md5hash);
+  // GetMem(pParms, (Length(sParms) + 1) * SizeOf(WideChar));
+  // lstrcpynw(pParms, PWideChar(sParms), (Length(sParms) + 1) * SizeOf(WideChar));
+  // mdi.md5_hash(pParms^, (Length(sParms) + 1) * SizeOf(WideChar), md5hash);
+  for i := 0 to 15 do
+    md5Signature := md5Signature + IntToHex(md5hash[i], 2);
+  FreeMem(pParms);
+	Result := LowerCase(md5Signature);
+end;
+
+// =============================================================================
+// function to generate VK API signature
+// http://vkontakte.ru/developers.php?o=-1&p=%D0%90%D0%B2%D1%82%D0%BE%D1%80%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F+Desktop-%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9
+// -----------------------------------------------------------------------------
+function GenerateApiSignature(slParms: TStringList): String;
+var
+ sSig: String;
+begin
+ slParms.Sorted := True; // needed for correct signature generation
+ slParms.QuoteChar := '^';
+ slParms.Delimiter := '^';
+ slParms.Add('api_id=' + vk_api_appid); // application id
+ slParms.Add('v=3.0'); // API version
+ slParms.Add('format=JSON'); // format of result - JSON
+ sSig := vk_id + // mid - user's id
+         URLDecode(Replace(slParms.DelimitedText,'^','')) +  // had to URLDecode parms here, since signature should be generated in such a way
+         vk_secret;
+ // Netlib_Log(vk_hNetlibUser, PChar('sSig='+sSig)); // TEMP!
+ Result := GenerateMD5(sSig);
+ // Netlib_Log(vk_hNetlibUser, PChar('md5(sSig)='+Result)); // TEMP!
+end;
+
+// =============================================================================
+// function to generate VK API url
+// symbol ^ to be used in parms as delimeter
+// http://vkontakte.ru/developers.php?o=-1&p=%D0%90%D0%B2%D1%82%D0%BE%D1%80%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F+Desktop-%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9
+// -----------------------------------------------------------------------------
+function GenerateApiUrl(sParms: String): String;
+var slParms: TStringList;
+begin
+ slParms := TStringList.Create();
+ slParms.Delimiter := '^';
+ slParms.QuoteChar := #0;
+ slParms.DelimitedText := sParms;
+ slParms.Delimiter := '&';
+ Result := vk_url_api +
+           '?api_id=' + vk_api_appid + // application id
+           '&' +
+           slParms.DelimitedText +
+           '&format=JSON' +
+           '&sid=' + vk_session_id + // session id
+           '&sig=' + GenerateApiSignature(slParms) +
+           '&v=3.0';
+ Result := UTF8Encode(Result);
+ // Netlib_Log(vk_hNetlibUser, PChar('url='+Result));
+end;
+
+// =============================================================================
+// function to get integer response from the JSON answer like {"response":10847}
+// -----------------------------------------------------------------------------
+function GetJSONResponse(sResponse: String; sParm: String = 'response'): Variant;
+var FeedRoot: TlkJSONobject;
+begin
+ Result := 1; // Unknown error occured - default value
+ FeedRoot := TlkJSON.ParseText(sResponse) as TlkJSONobject;
+ try
+   Result := FeedRoot.Field[sParm].Value;
+ finally
+   FeedRoot.Free;
+ end;
+end;
+
+function GetJSONResponseChild0(sHTML: String; sFieldName: String): Variant;
+var jsoFeed: TlkJSONobject;
+begin
+  Result := '';
+  jsoFeed := TlkJSON.ParseText(sHTML) as TlkJSONobject;
+  try
+    if Assigned(jsoFeed) then
+      Result := Trim(HTMLDecodeW(jsoFeed.Field['response'].Child[0].Field[sFieldName].Value));
+  finally
+    jsoFeed.Free;
+  end;
+end;
+
+// =============================================================================
+// function to get error code response from the JSON
+// {"error":{"error_code":9,"error_msg":"Flood control enabled for this action","request_params":[{"key":"api_id","value":"1931262"},{"key":"method","value":"messages.send"},{"key":"uid","value":"1234567"},{"key":"message","value":"?"},{"key":"format","value":"JSON"},{"key":"sid","value":"91af4123345b8235c7b8cd80e170a18f49e9dfbcb966f8307a6904a0de"},{"key":"sig","value":"3f11234562712ab09f6c771cc088348e"},{"key":"v","value":"3.0"}]}}
+
+// TO DO: replace this code with usage of XML (m_xml.inc)
+// sample code: http://trac.miranda.im/mainrepo/browser/importtxt/trunk/BICQ5IP.inc
+// -----------------------------------------------------------------------------
+function GetJSONError(sResponse: String): Integer;
+var FeedRoot: TlkJSONobject;
+begin
+ Result := 1; // Unknown error occured - default value
+ FeedRoot := TlkJSON.ParseText(sResponse) as TlkJSONobject;
+ try
+   Result := FeedRoot.Field['error'].Field['error_code'].Value;
+ finally
+   FeedRoot.Free;
+ end;
+end;
+
+function UnixToDateTime(USec: Longint): TDateTime; 
+const
+  UnixStartDate: TDateTime = 25569.0;
+begin
+  Result := (Usec / 86400) + UnixStartDate;
 end;
 
 begin

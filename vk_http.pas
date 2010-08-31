@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
  Module to support Internet connections for VKontakte plugin
 
  [ Known Issues ]
- See the code
+ - re-write HTTP_NL_GetSession function
 
  Contributors: LA
 -----------------------------------------------------------------------------}
@@ -45,6 +45,7 @@ uses
 
   procedure HTTP_NL_Init();
   function HTTP_NL_Get(szUrl: String; szRequestType: Integer = REQUEST_GET): String;
+  function HTTP_NL_GetSession(szUrl: String; szRequestType: Integer = REQUEST_HEAD): String;
   function HTTP_NL_Post(szUrl: String; szData: String; ContentType: String; Boundary: String; szHeaders: String = ''): String;
   function HTTP_NL_PostPicture(szUrl: String; szData: String; Boundary: String): String;
   function HTTP_NL_GetPicture(szUrl, szFileName: String): Boolean;
@@ -83,7 +84,7 @@ function HTTP_NL_Get(szUrl: String; szRequestType: Integer = REQUEST_GET): Strin
 var nlhr: TNETLIBHTTPREQUEST;
     nlhrReply: PNETLIBHTTPREQUEST;
     szRedirUrl: String;
-    i,j: Integer;
+    i: Integer;
     szHost: String;
 
 begin
@@ -235,6 +236,158 @@ begin
     end;
   end;
 end;
+
+// =============================================================================
+// function to get Signature for vkontakte API
+// should be re-written
+// -----------------------------------------------------------------------------
+function HTTP_NL_GetSession(szUrl: String; szRequestType: Integer = REQUEST_HEAD): String;
+
+var nlhr: TNETLIBHTTPREQUEST;
+    nlhrReply: PNETLIBHTTPREQUEST;
+    szRedirUrl: String;
+    i: Integer;
+    szHost: String;
+
+begin
+  result := ' ';
+
+  // create 'storage' for cookies
+  if Not Assigned(CookiesGlobal) Then
+  Begin
+    CookiesGlobal := TStringList.Create;
+    CookiesGlobal.Sorted := True;
+    CookiesGlobal.Duplicates := dupIgnore;
+    CookiesGlobal.Delimiter := ' ';
+  End;
+
+  FillChar(nlhr, sizeof(nlhr), 0);
+  nlhrReply := @nlhr;
+
+  // initialize the netlib request
+  nlhr.cbSize := sizeof(nlhr);
+  nlhr.requestType := szRequestType; // passed from the function parameters, REQUEST_GET is default
+  nlhr.flags := NLHRF_DUMPASTEXT or NLHRF_HTTP11;
+  nlhr.szUrl := PChar(szUrl);
+
+  nlhr.headersCount := 5;
+  SetLength(nlhr.headers, 5);
+  nlhr.headers[0].szName  := 'User-Agent';
+  nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
+  nlhr.headers[1].szName  := 'Connection';
+  nlhr.headers[1].szValue := 'Keep-Alive';
+  nlhr.headers[2].szName  := 'Cache-Control';
+  nlhr.headers[2].szValue := 'no-cache';
+  nlhr.headers[3].szName  := 'Pragma';
+  nlhr.headers[3].szValue := 'no-cache';
+  nlhr.headers[4].szName  := 'Cookie';
+  nlhr.headers[4].szValue := PChar(CookiesGlobal.DelimitedText);
+
+  while (Result = ' ') do
+  begin
+
+    // fast exit when Miranda terminating
+    if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
+    begin
+       Result := '';
+       Exit;
+    end;
+
+    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Get) Dowloading page: '+ szUrl));
+
+    // download the page
+    nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
+    if (nlhrReply <> nil) Then
+    Begin
+      // read cookies & store it
+      For i:=0 To nlhrReply.headersCount-1 Do
+      Begin
+        // read cookie
+        if nlhrReply.headers[i].szName = 'Set-Cookie' then
+          CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
+      End;
+
+      case nlhrReply.resultCode of
+
+        // if the receieved code is 200 OK
+        200:  begin
+                ConnectionErrorsCount := 0;
+                // save the retrieved data
+                Result := nlhrReply.pData;
+                if nlhrReply.dataLength = 0 Then
+                  Result := ''; // DATA_EMPTY;
+              end;
+
+        // if the receieved code is 302 Moved, Found, etc
+        // workaround for url forwarding
+        302:  begin
+                  ConnectionErrorsCount := 0;
+                  // get the url for the new location and save it to szInfo
+                  // look for the reply header "Location"
+                  For i:=0 To nlhrReply.headersCount-1 Do
+                  begin
+                    if nlhrReply.headers[i].szName = 'Location' then
+                    begin
+                      // gap: the code below will not work correctly in some cases
+                      // if location url doesn't contain host name, we should add it
+                      szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
+                      if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
+                      begin
+                        if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                          szHost := szHost + '/';
+                        szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
+                      end
+                      Else
+                        szRedirUrl := nlhrReply.headers[i].szValue;
+
+                      nlhr.szUrl := PChar(szRedirUrl);
+
+                      if Pos('session', szRedirUrl) > 0 then
+                      begin
+                        vk_id := TextBetween(szRedirUrl, 'mid%22%3A', '%2C'); // extract user's id
+                        vk_secret := TextBetween(szRedirUrl, 'secret%22%3A%22', '%22'); // extract user's id
+                        vk_session_id := TextBetween(szRedirUrl, 'sid%22%3A%22', '%22'); // extract session's id
+                        Result := vk_session_id;
+                      end;
+
+                      CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+                      Exit;
+                    end
+                end;
+              end;
+
+        // return error code if the receieved code is neither 200 OK nor 302 Moved
+        else  begin
+                // change status of the protocol to offline
+                Inc(ConnectionErrorsCount);
+                if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
+                begin
+                  ConnectionErrorsCount := 0;
+                  vk_SetStatus(ID_STATUS_OFFLINE);
+                end;
+                // store the error code
+                Result := nlhrReply.pData;
+              end;
+
+      end;
+
+    end
+    // if the data does not downloaded successfully (ie. disconnected), then return error
+    else
+    begin
+      // change status of the protocol to offline
+      Inc(ConnectionErrorsCount);
+      if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
+      begin
+        ConnectionErrorsCount := 0;
+        vk_SetStatus(ID_STATUS_OFFLINE);
+      end;
+      // store the error code
+      Result:='NetLib error occurred!';
+    end;
+  end;
+end;
+
 
 // =============================================================================
 // function to post data to the site

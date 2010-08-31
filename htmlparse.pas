@@ -14,7 +14,6 @@ uses
   function LastPos(ASearch: string; AText: string): Integer;
   function URLEncode(const AStr: string): string;
   function URLDecode(const AStr: string): string;
-  function HTMLTrimWhitespace(const Value: WideString): WideString;
   function HTMLRemoveTags(const Value: WideString): WideString;
   function HTMLDecode(const Value: string): string;
   function TextBetweenTagsInc(WholeText, Tag: string): string;
@@ -22,7 +21,7 @@ uses
   function ReplaceLink(WholeText: WideString): WideString;
   function RemoveDuplicates(WholeText: WideString): WideString;
   function PosEx(Const SubStr, S: String; Offset: Cardinal = 1): Integer;
-  function HTMLDecodeW(const Value: String): WideString;
+  function HTMLDecodeW(const Value: WideString): WideString;
   function Replace(Str, X, Y: string): string;
 
 var
@@ -286,22 +285,6 @@ begin
   Result := PrevPos;
 end;
 
-function HTMLTrimWhitespace(const Value: WideString): WideString;
-var
-  i, j, Max: Integer;
-begin
-  result := '';
-  Max := Length(Value);
-  for i:=1 to Max do
-    if not (Value[i] in [WideChar(1)..WideChar(32)]) then
-    for j:=Max downto i do
-      if not (Value[j] in [WideChar(1)..WideChar(32)]) then
-      begin
-        result := Copy(Value, i, j-i+1);
-        exit;
-      end;
-end;
-
 function HTMLRemoveTags(const Value: WideString): WideString;
 var
   i, Max: Integer;
@@ -401,7 +384,8 @@ begin
 end;
 
 
-function HTMLDecodeW(const Value: String): WideString;
+// GAP: doesn't work correctly?
+function HTMLDecodeW(const Value: WideString): WideString;
 const
   Symbols: array [32..255] of string = (
                         'nbsp',   '',       'quot',   '',       '',       '',       'amp',    '',

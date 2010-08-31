@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -59,7 +59,7 @@ uses
   uLkJSON, // module to parse data from feed2.php (in JSON format)
 
   Windows,
-  SysUtils, DateUtils;
+  SysUtils;
 
   {$include api/m_folders.inc}
 
@@ -104,6 +104,7 @@ var
   vk_hProtoMessageReceive: THandle;
 
   CaptchaId,
+  CaptchaUrl,
   CaptchaValue: String;
 
   function MessageSendThread(ccs: VK_PCCSDATA): LongWord; forward;
@@ -112,74 +113,50 @@ var
 // function to send message
 // (it is called from separate thread, so minimum number of WRITE global variables is used)
 // -----------------------------------------------------------------------------
-function vk_SendMessage(ToID: Integer; Text: WideString): Byte;
+function vk_SendMessage(ToID: Integer; Text: WideString; sCaptcha: String = ''): Integer;
 // 0 - successful
 // 1 - not successful (unknown reason)
 // 2 - msgs sent two often
-var SecureId: String; // temp variable to keep secure id needed for msg sending
-    HTML: String; // html content of the page received
-    szDataFinal: String;
+var HTML: String; // html content of the page received
+    sText: String;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) Sending new message to id '+ IntToStr(ToID) +', message text: '+AnsiString(Text)));
-  Result := 1;
+  Result := 1; // Unknown error occured
   if ToID > 0 Then
   Begin
-    // we need to get secure id first, otherwise it is not possible to send msg
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... getting secure id'));
-    HTML := HTTP_NL_Get(Format(vk_url_pda_sendmsg_secureid, [ToID]));
-
+    sText := UTF8Encode(Text);
+    sText := URLEncode(sText);
+    HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_messages_send, [ToID, sText]) + sCaptcha));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... sending of the message to contact ' + IntToStr(ToID) + ' done. Checking result...'));
     If Trim(HTML) <> '' Then
     Begin
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... page with secure id downloaded successfully'));
-      // SecureId := TextBetween(getElementsByAttr(iHTTP, 'input', 'name', 'chas')[0], 'value=', ' '); // <input type="hidden" name="secure" value="272c812340fd0d5aaa4e"/>
-      SecureId := TextBetween(HTML, 'name="chas"', '/>');
-      SecureId := TextBetween(SecureId, 'value="', '"');
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... secure id received: '+SecureId));
-      // now the message can be sent
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... sending message'));
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... message text: ' + AnsiString(Text)));
-      Text := UTF8Encode(Text);
-      if Trim(Text)<>'' Then // not empty message
-      begin
-        Text := URLEncode(Text); // encode all Russian and other characters
-        //HTML := HTTP_NL_Get(Format(vk_url_pda_sendmsg, [ToID, SecureID, Text]))
-        szDataFinal := Format(vk_url_pda_sendmsg, [ToID, SecureID, Text]);
-        HTML := HTTP_NL_Post(vk_url_pda + vk_url_pda_mailsent, szDataFinal, 'application/x-www-form-urlencoded','');
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... posting of the message to contact ' + IntToStr(ToID) + ' done. Checking result...'));
-      end
+      if Pos('error', HTML) > 0 then
+        Result := GetJSONError(HTML)
       else
-        HTML := '';
+        Result := GetJSONResponse(HTML);
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... sending of the message to contact ' + IntToStr(ToID) + ' finished with result: '+IntToStr(Result)));
+      Case Result Of
+        0..9, 100: ; // error occured
+        14:  // captcha needed
+          Begin
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... captcha input is required, getting it...'));
+            CaptchaId := GetJSONResponse(HTML, 'captcha_sid');
+            CaptchaUrl := GetJSONResponse(HTML, 'captcha_img');
 
-     	if Pos('captcha_sid', HTML) > 0 then // captcha!
-      begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... captcha input is required, getting it...'));
-        CaptchaId := TextBetween(HTML, 'sid=', '"');
-
-        CaptchaValue := ProcessCaptcha(CaptchaId);
-
-        // error - can't download captcha image
-        if CaptchaValue = 'captcha_download_failed' then
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... unable to download captcha'))
-        else // ok
-        begin
-          szDataFinal := Format(vk_url_pda_sendmsg_captcha, [ToID, SecureID, Text, CaptchaId, CaptchaValue]);
-          HTML := HTTP_NL_Post(vk_url_pda + vk_url_pda_mailsent, szDataFinal, 'application/x-www-form-urlencoded','');
-        end;
-      end;
-
-      // verify if user tries to send messages too often and inform
-      // him about it - http://pda.vkontakte.ru/blank
-      if Pos('<div id="error">', HTML) > 0 then
-      Begin
-        Result := 2;
+            CaptchaValue := ProcessCaptcha(CaptchaId, CaptchaUrl);
+            if CaptchaValue = 'captcha_download_failed' then // error - can't download captcha image
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... unable to download captcha'))
+            else // ok
+              begin
+                Result := vk_SendMessage(ToID, Text, '^'+Format(vk_url_api_captcha_addition, [CaptchaId, CaptchaValue]));
+              end;
+          End;
+        Else // successful
+          Begin
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... message sent successfully'));
+          End;
       End;
 
-      // verify whether msg is delivered or not
-      if Pos('<div id="msg">', HTML) > 0 then
-      Begin
-        Result := 0;
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... message sent successfully'));
-      End;
     End;
 
   End;
@@ -202,7 +179,8 @@ begin
   // SecondsPerDay = 60*24*60; = 86400;
   // ----
   // Local time is used on the server, so, we need to convert it to GMT
-  pre.timestamp := Trunc((MsgDate-25569)*86400)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,Trunc((MsgDate-25569)*86400),0);
+  // pre.timestamp := Trunc((MsgDate-25569)*86400)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,Trunc((MsgDate-25569)*86400),0);
+  pre.timestamp := Trunc((MsgDate-25569)*86400);
  	pre.lParam := 0;
   // now we need to initiate incoming message event
   // we can add message without this event (with usage of MS_DB_EVENT_ADD directly),
@@ -214,8 +192,8 @@ begin
 	ccs_chain.wParam := 0;
   ccs_chain.flags := PREF_UTF; // it is utf8 message
  	ccs_chain.lParam := Windows.lParam(@pre);
-  PluginLink^.CallService(MS_PROTO_CHAINRECV, 0, Windows.lParam(@ccs_chain));
-
+  if PluginLink^.CallService(MS_PROTO_CHAINRECV, 0, Windows.lParam(@ccs_chain)) = 0 then // successful?
+    Result := True;
 end;
 
 // =============================================================================
@@ -227,12 +205,12 @@ var HTML, HTMLInbox: AnsiString; // html content of the pages received
     MsgsCount: Integer; // temp variable to keep number of new msgs received
     FriendsCount: Integer; // temp variable to keep number of new authorization requests received
     MsgID: String;
-    MsgUrl: String;
-    MsgDateStr, MsgTimeStr: String;
-    MsgText: WideString;
+    iMsgID: Integer;
+    MsgText, MsgTitle: WideString;
     MsgSenderName: WideString;
     i, ii, temppos: Integer;
-    MsgDate, MsgTime: TDateTime;
+    iMsgDate: Integer;
+    MsgDate: TDateTime;
     MsgSender: Integer;
   	ccs_chain: TCCSDATA;
 
@@ -244,7 +222,7 @@ var HTML, HTMLInbox: AnsiString; // html content of the pages received
 
     FeedRoot, FeedMsgs, FeedMsgsItems: TlkJSONobject; // objects to keep parsed JSON data
 
-    fSettings: TFormatSettings;
+    FeedMRoot, FeedProfile: TlkJSONobject; // objects to keep messages received in JSON format
 
 begin
  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Checking for new incoming messages, new authorization requests (friends) etc...'));
@@ -284,87 +262,103 @@ begin
      if MsgsCount > 0 Then // got new messages!
      Begin
        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... getting message(s) details'));
-       HTMLInbox := HTTP_NL_Get(vk_url_pda_inbox);
-       for i:=(MsgsCount-1) downto 0 do // now processing all msgs one-by-one
+
+       HTMLInbox := HTTP_NL_Get(GenerateApiUrl(vk_url_api_messages_get));
+       if Trim(HTMLInbox) <> '' then
        Begin
-         Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', getting id'));
-         MsgID := Trim(TextBetween(Utf8ToAnsi(HTMLInbox), '<div class=''newMsg''>', '<br/>'));
-         MsgID := TextBetween(MsgID, '<a href="/letter', '?">');
-         If MsgID <> '' Then
-         Begin
-           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', id: '+MsgID));
-           MsgUrl := Format(vk_url_pda_msg, [StrToInt(MsgID)]);
-           // get msg details
-           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', getting details'));
-           HTML := HTTP_NL_Get(MsgUrl);
-           // date and time of message
-           if DBGetContactSettingByte(0, piShortName, opt_UserUseLocalTimeForIncomingMessages, 0) = 0 then
-           begin
-             MsgDateStr := TextBetween(Utf8ToAnsi(HTML), '<span class="label">Дата:</span> ', ' в ');
-             if MsgDateStr = 'сегодня' then MsgDate := Date else
-               if MsgDateStr = 'вчера' then MsgDate := Date - 1 else
-                 MsgDate := RusDateToDateTime(MsgDateStr, true);
-             MsgTimeStr := TextBetween(Utf8ToAnsi(HTML), '<span class="label">Дата:</span> ' + MsgDateStr + ' в ', '<br/>');
-             GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, fSettings);
-             fSettings.TimeSeparator := ':';
-             TryStrToTime(MsgTimeStr, MsgTime, fSettings);
-             MsgDate := MsgDate + MsgTime;
-           end else
-             MsgDate := Now; // use local time, if requested in the settings
-           // from
-           If Not TryStrToInt(TextBetween(HTML, 'name="to_id" value="', '"/>'), MsgSender) Then
-             Exit;
-           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from id: '+IntToStr(MsgSender)));
-           // from - Name (needed for not-friends)
-           MsgSenderName := TextBetween(Utf8ToAnsi(HTML), '</span> <a href="', '/a>');
-           MsgSenderName := HTMLDecodeW(TextBetween(MsgSenderName, '">', '<'));
-           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', from person: '+String(MsgSenderName)));
-           // subject and message
-           MsgText := TextBetween(Utf8ToAnsi(HTML), '<span class="label">Тема:</span> ', '<span class="label">Ответить:');
-           if DBGetContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, 1) = 1 then
-           begin
-             // remove empty subject, if user would like to
-             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', removing empty subject'));
-             MsgText := StringReplace(MsgText, 'Re:  ...', '', []);
-             MsgText := StringReplace(MsgText, ' ... ', '', []);
-             if (MsgText[1] = 'R') and (MsgText[2] = 'e') and (MsgText[3] = '(') then
+         FeedMRoot := TlkJSON.ParseText(HTMLInbox) as TlkJSONobject;
+         if Assigned(FeedMRoot) then
+         begin
+           try
+             MsgsCount := FeedMRoot.Field['response'].Count; // to be on the safe side, read messages count from the data downloaded
+             for i:=MsgsCount-1 downto 1 do
              begin
-               ii := 4;
-               while (MsgText[ii] in [WideChar('0')..WideChar('9')]) and (ii <= Length(MsgText)-1) do
-             	  Inc(ii);
-                temppos := PosEx('):  ...', MsgText);
-                if (temppos = ii) then
-            	    Delete(MsgText, 1, temppos + 6);
+               Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... processing message ' + IntToStr(i)));
+               iMsgID := FeedMRoot.Field['response'].Child[i].Field['mid'].Value;
+               iMsgDate := FeedMRoot.Field['response'].Child[i].Field['date'].Value;
+               MsgDate := UnixToDateTime(iMsgDate);
+               MsgSender := FeedMRoot.Field['response'].Child[i].Field['uid'].Value;
+               Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), from id: '+IntToStr(MsgSender)+', sent on '+IntToStr(iMsgDate)));
+               MsgText := FeedMRoot.Field['response'].Child[i].Field['body'].Value;
+               MsgTitle := FeedMRoot.Field['response'].Child[i].Field['title'].Value;
+               Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), title: '+String(MsgTitle)+', text '+String(MsgText)));
+               if (iMsgID > 0) and (iMsgDate > 0) and (MsgSender > 0) and (MsgText <> '') then
+               begin
+                 // remove empty subject, if user would like to
+                 if DBGetContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, 1) = 1 then
+                 begin
+                   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), removing empty subject'));
+                   MsgTitle := StringReplace(MsgTitle, 'Re:  ...', '', []);
+                   MsgTitle := StringReplace(MsgTitle, ' ... ', '', []);
+                   if Length(MsgTitle) > 4 then
+                     if (MsgTitle[1] = 'R') and (MsgTitle[2] = 'e') and (MsgTitle[3] = '(') then
+                     begin
+                       ii := 4;
+                       while (MsgTitle[ii] in [WideChar('0')..WideChar('9')]) and (ii <= Length(MsgTitle)-1) do
+                         Inc(ii);
+                       temppos := PosEx('):  ...', MsgTitle);
+                       if (temppos = ii) then
+                         Delete(MsgTitle, 1, temppos + 6);
+                     end;
+                 end;
+                 MsgText := StringReplace(MsgText, '<br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
+                 MsgText := HTMLDecodeW(MsgText);
+                 MsgText := Trim(MsgText);
+                 Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), re-formatted text: '+String(MsgText)));
+
+                 // if message from unknown contact then
+                 // we add contact to our list temporary
+                 TempFriend := GetContactByID(MsgSender);
+                 If TempFriend = 0 Then
+                 Begin
+                   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+') received from unknown contact, adding him/her to the contact list temporarily'));
+                   // add sender to our contact list
+                   // now we don't read user's status, so it is added as offline - field online doesn't work in VK API
+
+                   // getting MsgSenderName
+                   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), getting name of unknown contact...'));
+                   HTMLInbox := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getprofiles, [IntToStr(MsgSender),'first_name,last_name,nickname,sex,online'])));
+                   if Pos('error', HTMLInbox) > 0 then
+                   begin
+                     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), unable to get name, error code: '+IntToStr(GetJSONError(HTMLInbox))));
+                     MsgSenderName := 'id'+IntToStr(MsgSender); // define name with id instead
+                   end
+                   else
+                   begin
+                     // TODO: verify if it works properly with unicode symbols
+                     HTMLInbox := HTMLDecodeW(HTMLInbox);
+                     FeedProfile := TlkJSON.ParseText(HTMLInbox) as TlkJSONobject;
+                     try
+                       MsgSenderName := FeedProfile.Field['response'].Child[0].Field['first_name'].Value + ' ' + FeedProfile.Field['response'].Child[0].Field['last_name'].Value;
+                     finally
+                       FeedProfile.Free;
+                     end;  
+                   end;
+
+                   TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
+                   // and make it as temporary contact
+                   DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
+                   DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
+                 End; // if temp friend end
+                 Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), adding to miranda database'));
+                 // everything seems to be OK, may add this message to Miranda DB
+                 if vk_ReceiveMessage(TempFriend, MsgText, MsgDate) = true then // true - if message added successfully
+                 begin
+                   // mark message as read on the site
+                   // GAP: Result is not validated
+                   HTMLInbox := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_messages_markasread, [IntToStr(iMsgID)])));
+                 end;
+
+               end
+               else
+                 Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), error in parsing, skipped'));
              end;
+           finally
+             FeedMRoot.Free;
            end;
-           MsgText := StringReplace(MsgText, '<br/><br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
-           MsgText := StringReplace(MsgText, '<br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
-           MsgText := StringReplace(MsgText, Chr(9), '', [rfReplaceAll, rfIgnoreCase]);
-           MsgText := HTMLDecodeW(MsgText);
-           MsgText := Trim(MsgText);
-           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', text: '+String(MsgText)));
-
-           // if message from unknown contact then
-           // we add contact to our list temporary
-           TempFriend := GetContactByID(MsgSender);
-           If TempFriend = 0 Then
-           Begin
-             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ' received from unknown contact, adding him/her to the contact list temporarily'));
-             // add sender to our contact list
-             // now we don't read user's status, so it is added as offline
-             TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
-             // and make it as temporary contact
-             DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
-       		   DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
-           End;
-
-           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i+1) + ', adding to miranda database'));
-           // everything seems to be OK, may add this message to Miranda DB
-           vk_ReceiveMessage(TempFriend, MsgText, MsgDate);
-         End;
-         Delete(HTMLInbox, 1, Pos('<a href="/letter', HTMLInbox) + 1);
-
+         end;
        End;
+
      End; // receiving of new messages completed
      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking for new incoming messages finished'));
 
@@ -532,6 +526,7 @@ var trx_id: Integer;
     hContact: THandle;
     MsgText: WideString;
     ResultTemp: TResultDetailed;
+    iResult: Integer;
     bPostingOnTheWall: Boolean;
     sWord: WideString;
     iWordLength: Byte;
@@ -585,16 +580,17 @@ begin
     end;
   end
   else // calling function to send normal message
-  case vk_SendMessage(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0), MsgText) of
-     0: // 0 - successful
-        // the ACK contains reference (thandle) to the trx number
-        ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_SUCCESS, THandle(trx_id), 0);
-     1: // 1 - not successful (unknown reason)
-        ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), 0);
-     2: // 2 - msgs sent two often
-        ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(Translate(err_sendmgs_freq)));
-   end;
+  begin
+    iResult := vk_SendMessage(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0), MsgText);
+    case iResult of
+       0..10: // not successful
+          ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_FAILED, THandle(trx_id), windows.lParam(Translate(PChar(err_messages_send[iResult]))));
+       else // successful
+          // the ACK contains reference (thandle) to the trx number
+          ProtoBroadcastAck(piShortName, hContact, ACKTYPE_MESSAGE, ACKRESULT_SUCCESS, THandle(trx_id), 0);
 
+     end;
+  end;
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadSendMsg) ... thread finished'));
 end;
 
@@ -613,18 +609,17 @@ var NewsPosStart, DayWrapPosStart: Integer;
     HTML, HTMLDay: String;
 
     nNType, nIDstr, nNTimestr: String;
-    nNTimeStrLower:string;
     nText: WideString;
     nID: Integer;
     nNTime: TDateTime;
 
     fSettings: TFormatSettings;
+
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsMinimal) Receiving minimal news...'));
 
   HTML := HTTP_NL_Get(vk_url_pda_news);
   HTML := UTF8Decode(HTML);
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsMinimal) ha-ha-ha...' + HTML));
 
   If Trim(HTML) <> '' Then
   begin
@@ -643,15 +638,7 @@ begin
         nText := StringReplace(nText, '<br/>', ' ', [rfReplaceAll, rfIgnoreCase]);
         nText := Trim(HTMLDecodeW(nText));
         nNTimestr := TextBetweenInc(HTMLDay, '<span class="stTime">', '</span>');
-        nNTimestr := Trim(HTMLTrimWhitespace(HTMLRemoveTags(nNTimestr)));
-        //alexei.emanov protect against date
-        nNTimeStrLower := StrLower(PAnsiChar(nNTimestr));
-        if(nNTimeStrLower='сегодня') then
-          nNTimestr := DateToStr(Today)
-        else
-          if(nNTimeStrLower='вчера') then
-            nNTimestr := DateToStr(IncDay(Today, -1));
-
+        nNTimestr := Trim(HTMLRemoveTags(nNTimestr));
         GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, fSettings);
         fSettings.TimeSeparator := ':';
 
@@ -725,9 +712,11 @@ begin
     DayWrapPosStart := Pos('feedDayWrap', HTML);
     While HasNews and (DayWrapPosStart > 0) Do
     Begin
-      HTMLDate := Trim(HTMLRemoveTags(TextBetween(HTML, '<div class="feedDay">', '</div>')));
-      if HTMLDate = 'сегодня' then DayTime := Date else
-        if HTMLDate = 'вчера' then DayTime := Date - 1 else
+      HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
+      HTMLDate := Trim(HTMLRemoveTags(HTMLDate));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) HTMLDate: '+HTMLDate));;
+      if Pos('сегодня', HTMLDate)>0 then DayTime := Date else
+        if Pos('вчера', HTMLDate)>0 then DayTime := Date - 1 else
            DayTime := RusDateToDateTime(HTMLDate, true);
 
       HTMLDay := TextBetweenTagsAttrInc(HTML, 'div', 'class', 'items_wrap');
@@ -942,8 +931,8 @@ begin
     While HasNews and (DayWrapPosStart > 0) Do
     Begin
       HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
-      if HTMLDate = 'сегодня' then DayTime := Date else
-        if HTMLDate = 'вчера' then DayTime := Date - 1 else
+      if Pos('сегодня', HTMLDate) > 0 then DayTime := Date else
+        if Pos('вчера', HTMLDate) > 0 then DayTime := Date - 1 else
            DayTime := RusDateToDateTime(HTMLDate, true);
 
       HTMLDay := TextBetweenTagsAttrInc(HTML, 'div', 'class', 'items_wrap');
@@ -1070,7 +1059,7 @@ end;
 
 // =============================================================================
 // procedure to parse comments news
-// -----------------------------------------------------------------------------
+// -------------------------------3----------------------------------------------
 function vk_ParseCommentsNews(): TNewsRecords;
 var DayWrapPosStart, feedTablePosStart, commentItemPosStart: Integer;
     DayTime: TDateTime;
@@ -1123,7 +1112,8 @@ begin
     DayWrapPosStart := Pos('feedDayWrap', HTML);
     While HasNews and (DayWrapPosStart > 0) Do
     Begin
-      HTMLDate := Trim(HTMLTrimWhitespace(HTMLRemoveTags(TextBetween(HTML, '<div class="feedDay">', '</div>'))));
+      HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
+      HTMLDate := Trim(HTMLRemoveTags(HTMLDate)); 
       if HTMLDate = 'сегодня' then DayTime := Date else
         if HTMLDate = 'вчера' then DayTime := Date - 1 else
            DayTime := RusDateToDateTime(HTMLDate, true);
@@ -1237,7 +1227,6 @@ begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... checking comments news '+IntToStr(CurrNews+1)+' (of '+IntToStr(High(NewsAll)+1)+')...'));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... comments news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
       // validate date & time of message (if never was shown before)
-
       if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_CommentsLastNewsDateTime, 539033600) then
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(vk_GetCommentsNews) ... groups news ' +IntToStr(CurrNews+1)+' identified as not shown before'));

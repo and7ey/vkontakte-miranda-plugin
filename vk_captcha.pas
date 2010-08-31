@@ -44,7 +44,7 @@ uses
   Messages;
 
   function DlgCaptcha(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
-  function ProcessCaptcha(CaptchaId: String): String;
+  function ProcessCaptcha(CaptchaId: String; CaptchaURL: String = ''): String;
 
 implementation
 
@@ -169,18 +169,17 @@ begin
   end;
 end;
 
-function ProcessCaptcha(CaptchaId: String): String;
+function ProcessCaptcha(CaptchaId: String; CaptchaURL: String = ''): String;
 var
-  CaptchaURL: String;
   TempDir, TempFile: String;
   Buf: array[0..1023] of Char;
 begin
-  CaptchaURL := 'captcha.php?s=1&sid=' + CaptchaId;
+  if CaptchaURL = '' then
+    CaptchaURL := vk_url_prefix + vk_url_host + '/captcha.php?s=1&sid=' + CaptchaId;
   Netlib_Log(vk_hNetlibUser, PChar('(vk_CaptchaProcessing) ... captcha ID is ' + CaptchaId));
   Netlib_Log(vk_hNetlibUser, PChar('(vk_CaptchaProcessing) ... captcha URL is ' + CaptchaURL));
   if (CaptchaId <> '') and (CaptchaURL <> '') then
   begin
-    CaptchaURL := vk_url_prefix + vk_url_host + '/' + CaptchaURL;
     SetString(TempDir, Buf, GetTempPath(Sizeof(Buf)-1, Buf)); // getting path to Temp directory
     TempFile := TempDir + 'vk_captcha.jpg';
     if HTTP_NL_GetPicture(CaptchaURL, TempFile) then
