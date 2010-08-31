@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 3 shl 16 + 0 shl 8 + 9;
+  piVersion = 0 shl 24 + 4 shl 16 + 0 shl 8 + 0;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -52,13 +52,33 @@ const
   piHomepage = 'http://forum.miranda.im/showthread.php?t=2035';
 
 const
+  // vkontakte API application id
+  vk_api_appid = '1931262';
+
   // URLs
   vk_url_prefix = 'http://';
   // pda url const section
   vk_url_pda = vk_url_prefix + 'm.vkontakte.ru';
+
+  vk_url_api = 'http://api.vkontakte.ru/api.php';
+  vk_url_api_session = '/login.php?app='+vk_api_appid+'&layout=popup&type=browser&settings=16383'; // 1931262 - constant app id
+  // in api related links fields should be separated by symbol ^
+  vk_url_api_messages_send = 'method=messages.send^uid=%d^message=%s';
+  vk_url_api_messages_get = 'method=messages.get^filters=1^preview_length=0^time_offset=0'; // only unread messages
+  vk_url_api_messages_markasread = 'method=messages.markAsRead^mids=%s';
+  vk_url_api_getprofiles = 'method=getProfiles^uids=%s^fields=%s';
+  vk_url_api_getcities = 'method=getCities^cids=%s';
+  vk_url_api_getcountries = 'method=getCountries^cids=%s';
+  vk_url_api_captcha_addition = 'captcha_sid=%d^captcha_key=%s';
+  vk_url_api_activity_set = 'method=activity.set^text=%s';
+  vk_url_api_activity_get = 'method=activity.get^uid=%d';
+  vk_url_api_activity_delete = 'method=activity.deleteHistoryItem^aid=%d';
+  vk_url_api_wall_get = 'method=wall.get';
+
   vk_url_pda_inbox = vk_url_pda + '/inbox';
   vk_url_pda_login = 'http://vkontakte.ru/login.php?pda=index&email=%s&pass=%s&expire=0';
-  vk_url_pda_logout = vk_url_pda + '/logout';
+  // vk_url_pda_logout = vk_url_pda + '/logout';
+  vk_url_pda_logout = 'http://login.vk.com/?act=logout&vk=&hash=';
   vk_url_pda_forgot = vk_url_pda + '/forgot';
   vk_url_pda_sendmsg_secureid = vk_url_pda + '/?act=write&to=%d';
   vk_url_pda_mailsent = '/mailsent?pda=1';
@@ -123,8 +143,33 @@ const
 
 const
   // error messages
+  err = 'Unknown error occured.';
+  err_messages_send: Array [0..100] of String = (
+    err, // 0
+    err, // 1
+    'Application is disabled. Enable your application or use test mode.', // 2
+    err, // 3
+    'Incorrect signature.', // 4
+    'User authorization failed.', // 5
+    'Too many requests per second.', // 6
+    'Permission to perform this action is denied by user.', // 7
+    err, // 8
+    'Flood control enabled for this action.', // 9
+    err, // 10
+    err, err, err, err, err, err, err, err, err, err,  // 11-20
+    err, err, err, err, err, err, err, err, err, err,  // 21-30
+    err, err, err, err, err, err, err, err, err, err,  // 31-40
+    err, err, err, err, err, err, err, err, err, err,  // 41-50
+    err, err, err, err, err, err, err, err, err, err,  // 51-60
+    err, err, err, err, err, err, err, err, err, err,  // 61-70
+    err, err, err, err, err, err, err, err, err, err,  // 71-80
+    err, err, err, err, err, err, err, err, err, err,  // 81-90
+    err, err, err, err, err, err, err, err, err, // 91-99
+    'One of the parameters specified was missing or invalid.'); // 100
+
   err_sendmgs_offline = 'You cannot send messages when you are offline.';
-  err_sendmgs_freq = 'You cannot send messages more often than once in 1 second. Please try again later.';
+  // err_sendmgs_freq = 'You cannot send messages more often than once in 1 second. Please try again later.';
+  err_session_nodetail = 'No session details are received. Some functions will not work properly.';
 
   // questions
   qst_join_vk_group = 'Thank you for usage of VKontakte plugin!'#13#10#13#10'Would you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?'#13#10'If you press Cancel now, the same question will be asked again during next Miranda start.';
@@ -136,16 +181,16 @@ const
   // user details paramaters names
   usr_dtl_education = 'Education';
   usr_dtl_faculty = 'Faculty';
-  usr_dtl_occupation = 'Occupation';
-  usr_dtl_hobby = 'Hobby';
-  usr_dtl_music = 'Music';
-  usr_dtl_movies = 'Movies';
-  usr_dtl_shows = 'Shows';
-  usr_dtl_books = 'Books';
-  usr_dtl_games = 'Games';
-  usr_dtl_quotes = 'Quotes';
-  usr_dtl_department = 'Department';
-  usr_dtl_school = 'School';
+  // usr_dtl_occupation = 'Occupation';
+  // usr_dtl_hobby = 'Hobby';
+  // usr_dtl_music = 'Music';
+  // usr_dtl_movies = 'Movies';
+  // usr_dtl_shows = 'Shows';
+  // usr_dtl_books = 'Books';
+  // usr_dtl_games = 'Games';
+  // usr_dtl_quotes = 'Quotes';
+  // usr_dtl_department = 'Department';
+  // usr_dtl_school = 'School';
 
 const
   // List of settings in DB
@@ -311,6 +356,10 @@ var
 
   vk_o_login: String; // variables to keep user's login and pass
   vk_o_pass: String;
+
+  vk_session_id: String; // variable to keep current session's id - needed for VK API
+  vk_id: String; // variable to keep user's id
+  vk_secret: String; 
 
   ErrorCode: Byte; // global variable to keep error code of last exception
   CookiesGlobal: TStringList;

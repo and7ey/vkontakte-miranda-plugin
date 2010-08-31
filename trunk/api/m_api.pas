@@ -335,6 +335,7 @@ var
   {$include m_dbeditor.inc}
   {$include m_userinfoex.inc}
   // {$include m_imgsrvc.inc} // modified by LA
+  {$include m_xml.inc} // modified by LA
   {$define M_API_UNIT}
   {$include m_helpers.inc}
 

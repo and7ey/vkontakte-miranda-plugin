@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@
 
  [ Known Issues ]
  - See the code
- - This code doesn't synchronize additional status with the server (so, if
+ - TODO: This code doesn't synchronize additional status with the server (so, if
    status is changed on the server, it is not read by the plugin)
 
  Contributors: LA
@@ -56,6 +56,8 @@ uses
   vk_opts, // unit to work with options
 
   htmlparse, // module to simplify html parsing
+
+  uLkJSON,
 
   CommCtrl,
   SysUtils,
@@ -87,142 +89,136 @@ var
 // -----------------------------------------------------------------------------
 procedure vk_StatusAdditionalSet(StatusText: WideString);
 var HTML: String;
-    SecurityHash: String;
+    jsoFeed: TlkJSONobject;
+    iStatusID: Integer;
 begin
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) Assign new additional status...'));
-  HTML := HTTP_NL_Get(vk_url_pda_setstatus_securityhash);
-  SecurityHash := TextBetween(HTML, 'name="activityhash" value="','"');
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... received security id: ' + SecurityHash));
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... new additional status to be assigned: ' + String(StatusText)));
-  if Trim(StatusText)<>'' Then
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) Changing additional status...'));
+  if StatusText <> '' then
   begin
-    StatusText := UTF8Encode(StatusText);
-    StatusText := URLEncode(StatusText);
-    HTTP_NL_Get(Format(vk_url_pda_setstatus, [SecurityHash, StatusText]), REQUEST_HEAD); // we don't care about result as of now
+    HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_set,[URLEncode(UTF8Encode(StatusText))])));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... new additional status assigned'));
   end
   else
-    HTTP_NL_Get(Format(vk_url_pda_statusdelete, [SecurityHash]), REQUEST_HEAD);
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... new additional status assigned'));
+  begin
+    // firstly we should get id of current status
+    HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get,[StrToInt(vk_id)])));
+
+    jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
+    iStatusID := 0;
+    try
+      if Assigned(jsoFeed) then
+        iStatusID := jsoFeed.Field['response'].Field['id'].Value;
+    finally
+      jsoFeed.Free;
+    end;
+
+    // now delete the status
+    if iStatusID > 0 then
+    begin
+      HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_delete,[iStatusID])));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... additional status deleted'));
+    end;
+
+  end;
 end;
 
 // =============================================================================
-// procedure to get from the server additional status message of all contacts,
-// updated today
+// procedure to get from the server additional status message of all contacts
+// TODO: optimization is possible - get all ids first and then send one request
+//       to the server to get their statuses
 // -----------------------------------------------------------------------------
 procedure vk_StatusAdditionalGet();
-var HTML: String; // html content of the pages received
-    StrTemp: String;
+var HTML: String;
     hContact: THandle;
-    TempFriend: Integer;
-    MsgID: String;
+    iContactID: Integer;
     MsgText: WideString;
-    MsgDate: TDateTime;
-    MsgSender: Integer;
     i: Integer;
-    XStatusUpdateTemp: Boolean;
+    bXStatusUpdate, bXStatusNew: Boolean;
+    jsoFeed: TlkJSONobject;
+
 begin
  if DBGetContactSettingByte(0, piShortName, opt_UserUpdateAddlStatus, 1) = 1 then
  begin
-   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Updating of contact''s additional status...'));
+   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Updating of contact''s XStatus...'));
 
-   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... reading additional statuses from the server'));
-
-   HTML := HTTP_NL_Get(vk_url_pda_news);
-   HTML := UTF8Decode(HTML);
-   
-   If Trim(HTML) <> '' Then
-   Begin
-    XStatusUpdateTemp := True;
-
-    // update status for online contacts only?
-    if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
-        if DBGetContactSettingWord(TempFriend, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_OFFLINE then
-        XStatusUpdateTemp := False;
-
-     While Pos('a href=''/id', HTML)<>0 Do
-     Begin
-       StrTemp := TextBetweenInc(HTML, '<a href=''/id', '<br/>');
-       // <a href='id123456'>Surname Name</a> Status text <span class="stTime">11:46</span><br/>
-       if (Pos('покинул',StrTemp)=0) and
-          (Pos('добавил',StrTemp)=0) and
-          (Pos('вступил',StrTemp)=0) and
-          (Pos('новую тему',StrTemp)=0) and
-          (Pos('открыл темы',StrTemp)=0) and
-          (Pos('открыла темы',StrTemp)=0) and
-          (Pos('вышла замуж за',StrTemp)=0) and
-          (Pos('женился на',StrTemp)=0) and // does it exist?
-          (Pos('примет участие во встрече',StrTemp)=0) and
-          (Pos('начал встречаться с ',StrTemp)=0) and
-          (Pos('начала встречаться с ',StrTemp)=0) and
-          (Pos('примет участие во встречах ',StrTemp)=0) and
-          (Pos('появилась подруга',StrTemp)=0) and
-          (Pos('в активном поиске',StrTemp)=0) and
-          (Pos('не будет участвовать во встрече ',StrTemp)=0) then
-          begin
-            MsgID := TextBetween(StrTemp, '<a href=''/id', '''>');
-            MsgText := Trim(TextBetween(StrTemp, '</a> ', ' <span class="stTime">'));
-            MsgText := StringReplace(MsgText, '<wbr/>', '', [rfReplaceAll, rfIgnoreCase]);
-            MsgText := HTMLDecodeW(MsgText);
-
-            if (TryStrToInt(MsgID, MsgSender)) and (MsgText<>'') then
-            begin
-              TempFriend := GetContactByID(MsgSender);
-              StrTemp := TextBetween(StrTemp, '<span class="stTime">', '</span>');
-              if (TempFriend <> 0) and (TryStrToTime(StrTemp, MsgDate)) then // read status for known contacts only
-              begin
-                if XStatusUpdateTemp then // this boolean variable is defined early
-                  begin
-                    DBWriteContactSettingByte(TempFriend, piShortName, 'XStatusUpdated', 1); // temp setting to identify that status just has been updated
-                    if StrToTime(DBReadString(TempFriend, piShortName, 'XStatusTime', '00:00')) < MsgDate then
-                    begin
-                      DBWriteContactSettingString(TempFriend, piShortName, 'XStatusTime', PChar(StrTemp));
-                      DBWriteContactSettingUnicode(TempFriend, piShortName, 'XStatusMsg', PWideChar(MsgText));
-                      DBWriteContactSettingUnicode(TempFriend, piShortName, 'XStatusName', TranslateW('Current')); // required for clist_modern to display status
-
-                      pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.WPARAM(TempFriend), 0); // inform other plugins that we've updated xstatus for a contact
-
-                      MsgText := AnsiLowerCase(MsgText);
-                      for i:=Low(xStatuses)+2 to High(xStatuses) do
-                      // GAP (?): need to remove ... at the end of xStatuses[i].Text
-                      begin
-                        if (Pos(AnsiLowerCase(xStatuses[i].Text), MsgText)<>0) or
-                             (Pos(AnsiLowerCase(String(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText)<>0) then
-                        begin
-                          DBWriteContactSettingByte(TempFriend, piShortName, 'XStatusId', i);
-                          StatusAddlSetIcon(TempFriend, xStatuses[i].IconExtraIndex);
-                          break;
-                        end;
-                      end;
-                    end;
-                  end;
-              end;
-            end;
-          end;
-          Delete(HTML, 1, Pos('<span class="stTime">', HTML)+21);
-     End;
-   End;
-
-   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... deleting old additional statuses'));
    hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
    while hContact <> 0 do
    begin
      if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PChar(piShortName))) <> 0 Then
      begin
-       if DBGetContactSettingByte(hContact, piShortName, 'XStatusUpdated', 0) = 0 then
+
+       // new value of XStatus defined?
+       bXStatusNew := False;
+       // should we update XStatus for offline contacts?
+       bXStatusUpdate := True;
+       if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
+          if DBGetContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_OFFLINE then
+            bXStatusUpdate := False;
+
+       if bXStatusUpdate then
        begin
-         // deleting old data
-         DBDeleteContactSetting(hContact, piShortName, 'XStatusTime');
+         iContactID := DBGetContactSettingDWord(hContact, piShortName, 'ID', 0);
+         if iContactID > 0 then
+         begin
+           // {"response":{"id":-1,"time":0,"activity":""}}
+           Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... reading XStatus from the server for contact '+IntToStr(iContactID)));
+           HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get,[iContactID])));
+
+           jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
+           try
+             if Assigned(jsoFeed) then
+               MsgText := jsoFeed.Field['response'].Field['activity'].Value;
+           finally
+             jsoFeed.Free;
+           end;
+
+           if Trim(MsgText) <> '' then
+           begin
+             bXStatusNew := True;
+             if DBReadUnicode(hContact, piShortName, 'XStatusMsg', '') <> MsgText then
+             begin // xstatus changed! write new values
+               DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusMsg', PWideChar(MsgText));
+               DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusName', TranslateW('Current')); // required for clist_modern to display status
+
+               DBDeleteContactSetting(hContact, piShortName, 'XStatusId');
+               MsgText := AnsiLowerCase(MsgText);
+               for i:=Low(xStatuses)+2 to High(xStatuses) do
+               begin
+                 if (Pos(AnsiLowerCase(xStatuses[i].Text), MsgText)<>0) or
+                    (Pos(AnsiLowerCase(String(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText)<>0) then
+                 begin
+                   DBWriteContactSettingByte(hContact, piShortName, 'XStatusId', i);
+                   StatusAddlSetIcon(hContact, xStatuses[i].IconExtraIndex);
+                   break;
+                 end;
+               end;
+
+               pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.wParam(hContact), 0); // inform other plugins that we've updated xstatus for a contact
+             end;
+           end;
+
+         end;
+       end;
+
+       // deleting old data
+       DBDeleteContactSetting(hContact, piShortName, 'XStatusUpdated'); // was used in old versions of plugin
+       DBDeleteContactSetting(hContact, piShortName, 'XStatusTime');    // was used in old versions of plugin
+
+       // delete old statuses and statuses of offline contacts (if not updated)
+       if bXStatusNew = False then
+       begin
+         Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... deleting old additional statuses'));
          DBDeleteContactSetting(hContact, piShortName, 'XStatusMsg');
          DBDeleteContactSetting(hContact, piShortName, 'XStatusName');
          DBDeleteContactSetting(hContact, piShortName, 'XStatusId');
          StatusAddlSetIcon(hContact, THandle(-1)); // delete icon
        end;
-       DBDeleteContactSetting(hContact, piShortName, 'XStatusUpdated');
+
      end;
      hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
    end;
 
-   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... updating of contact''s additional status finished'));
+   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... updating of contact''s XStatus finished'));
  end;
 end;
 
@@ -419,7 +415,7 @@ end;
 function MenuContactAdditionalStatusRead(wParam: wParam; lParam: lParam): Integer; cdecl;
 var MsgCaption: WideString;
 begin
-  MsgCaption := TranslateW('Additional status') + ', ' + WideString(DBReadString(wParam, piShortName, 'XStatusTime', '00:00')) + ': '+#10#13+
+  MsgCaption := TranslateW('XStatus') + ', ' + WideString(DBReadString(wParam, piShortName, 'XStatusTime', '00:00')) + ': '+#10#13+
                 DBReadUnicode(wParam, piShortName, 'XStatusMsg', '');
   ShowPopupMsg(wParam, MsgCaption, 1);
 
@@ -732,7 +728,7 @@ begin
   srvFce := PChar(Format('%s/MenuContactReadAdditionalStatus', [piShortName]));
   pluginLink^.CreateServiceFunction(srvFce, @MenuContactAdditionalStatusRead);
   cmi.pszService := srvFce;
-  cmi.szName.w := 'Read additional status';
+  cmi.szName.w := 'Read XStatus';
   cmi.pszContactOwner := piShortName;
   vk_hMenuContactStatusAdditionalRead := pluginLink^.CallService(MS_CLIST_ADDCONTACTMENUITEM, 0,  Windows.lparam(@cmi));
 

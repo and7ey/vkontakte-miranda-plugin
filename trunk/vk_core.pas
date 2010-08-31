@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -122,7 +122,7 @@ begin
          begin
            pluginLink^.CallService(MS_DB_CRYPT_DECODESTRING, SizeOf(vk_o_pass), Windows.lparam(vk_o_pass));
            SetDlgItemText(dialog, VK_ACCMGR_PASS, PChar(vk_o_pass)); // password
-         end;  
+         end;
 
          Result := True;
        end;
@@ -331,7 +331,29 @@ begin
 
   // OK
   If Pos('div class="menu2"', HTML) > 0 Then
+  Begin
     ErrorCode := 0; // succesfull login!
+
+    // get api related details
+    // http://vkontakte.ru/developers.php?o=-1&p=%D0%90%D0%B2%D1%82%D0%BE%D1%80%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F+Desktop-%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting session details...'));
+    HTTP_NL_GetSession(vk_url_prefix + vk_url_host + vk_url_api_session); // TODO: it is possible that nothing is received
+
+    // vk_session_id := '';
+    // vk_secret := '';
+    // vk_id := '';
+
+    if (vk_session_id = '') or (vk_secret = '') or (vk_id = '') then
+     ShowPopupMsg(0, err_session_nodetail, 1); // TODO: once plugin is fully migrated to VK API
+                                               // here we should change error code and do not change
+                                               // status to Online
+
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Session details received: session id='+vk_session_id+', secret='+vk_secret+', vk_id='+vk_id+', vk_api_appid='+vk_api_appid));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting user rights...'));
+    HTML := HTTP_NL_Get(GenerateApiUrl('method=getUserSettings'));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) User rights received: '+HTML));
+
+  End;
 
   Result := ErrorCode;
 
@@ -931,7 +953,8 @@ var
   ThreadNameInfo: TThreadNameInfo;
   ContactIDNews,
   ContactIDWall: Integer;
-  CheckMessagePeriod: integer;
+  CheckMessagePeriod: Integer;
+
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Thread started...'));
 
@@ -995,9 +1018,9 @@ begin
 
         // checking for new messages received and for auth requests;   default value of last update is 539033600 = 1/1/1996 12:00 am
         CheckMessagePeriod := DBGetContactSettingDWord(0, piShortName, opt_UserCheckNewMessages, 60);
-        if(CheckMessagePeriod=0) then
+        if (CheckMessagePeriod = 0) then
         begin
-          Netlib_Log(vk_hNetlibUser, PChar('Message receiving disabled'));
+          Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Message receiving disabled'));
         end else
         if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgs, 539033600)) <= ((Now * SecsPerDay) - CheckMessagePeriod) / SecsPerDay then // code is equal to IncSecond function with negative value
         begin

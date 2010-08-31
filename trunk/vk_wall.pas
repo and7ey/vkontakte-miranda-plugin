@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2009 Andrey Lukyanov
+    Copyright (c) 2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
  Module to work with VKontakte's wall
 
  [ Known Issues ]
- None
+ - video, audio etc. is not supported now in vk_WallGetMessages
 
  Contributors: LA
 -----------------------------------------------------------------------------}
@@ -43,7 +43,7 @@ uses
   vk_popup, // module to support popups
   vk_common, // module with common functions
   htmlparse, // module to simplify html parsing
-
+  uLkJSON,
   Windows,
   Messages;
 
@@ -980,162 +980,114 @@ end;
 
 // =============================================================================
 // procedure to get messages from the wall of given contact
+// TODO: Add support of video, audio etc.
 // -----------------------------------------------------------------------------
 procedure vk_WallGetMessages(ID: Integer = 0);
 var
   HTML: String;
-  sWallPage,
-  sWallPost,
   sSenderID,
-  sMsgTime,
   sMsgID: String;
   sSenderName,
   sSenderNameFull,
   sMsgText: WideString;
-  sTemp, sMsgAudioUrl: WideString;
   MsgDate: TDateTime;
   iSenderStatus,
   iSenderID,
-  iMsgID,
-  iURLPos: Integer;
+  iMsgDate,
+  iMsgID: Integer;
   TempFriend: Integer;
+  jsoFeed, jsoFeedProfile: TlkJSONobject;
+  iWallMsgsCount: Integer;
+  i: Byte;
+
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) Getting wall messages for id ' + IntToStr(ID) + '...'));
-  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ID]));
+
+  HTML := HTTP_NL_Get(GenerateApiUrl(vk_url_api_wall_get));
   if Trim(HTML) <> '' then
   begin
-    sWallPage := TextBetweenTagsAttrInc(HTML, 'div', 'id', 'wallpage');
-    if Trim(sWallPage) <> '' then
-    begin
-      while Pos('"wallpost"', sWallPage) > 0 do
+    jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
+    try
+      iWallMsgsCount := jsoFeed.Field['response'].Count; // to be on the safe side, read messages count from the data downloaded
+      for i:=iWallMsgsCount-1 downto 1 do
       begin
-        sWallPost := TextBetweenTagsAttrInc(sWallPage, 'table', 'class', 'wallpost');
-        sMsgID := Trim(TextBetween(sWallPost, 'deletePost(', ',')); // post id - please note that it works when id = 0 only
-        if (sWallPost <> '') and (TryStrToInt(sMsgID, iMsgID)) then
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... processing message ' + IntToStr(i) + ' started...'));
+        iSenderID := jsoFeed.Field['response'].Child[i].Field['from_id'].Value;
+        iMsgID := jsoFeed.Field['response'].Child[i].Field['id'].Value;
+        iMsgDate := jsoFeed.Field['response'].Child[i].Field['date'].Value;
+        MsgDate := UnixToDateTime(iMsgDate);
+        sMsgText := jsoFeed.Field['response'].Child[i].Field['text'].Value;
+        // sMsgText := StringReplace(sMsgText, '<br>', ' ', [rfReplaceAll, rfIgnoreCase]);
+        iSenderStatus := jsoFeed.Field['response'].Child[i].Field['online'].Value;
+        if iSenderStatus = 1 then
+          iSenderStatus := ID_STATUS_ONLINE
+        else
+          iSenderStatus := ID_STATUS_OFFLINE;
+
+        if (iMsgID > 0) and (iMsgDate > 0) and (iSenderID > 0) and (sMsgText <> '') then
         begin
-          // read other posts only if they are new
-          if iMsgID > DBGetContactSettingDWord(0, piShortName, opt_WallLastPostID, 0) then
+          // add only new posts
+          if iMsgDate > DBGetContactSettingDWord(0, piShortName, opt_WallLastPostID, 0) then
           begin
-						sSenderID := TextBetween(sWallPost, 'href="/id', '"');
-            sSenderName := Trim(TextBetween(sWallPost, '<a class="memLink" ' + 'href="/id' + sSenderID + '">', '</a>'));
             if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
-            begin // getting message in the separate contact, so get details of sender
-          		sSenderNameFull := '<a ' + Trim(TextBetween(sWallPost, '<a class="memLink" ', '<br />'));
-              sSenderNameFull := ReplaceLink(sSenderNameFull);
-              sSenderNameFull := Trim(HTMLRemoveTags(HTMLDecodeW(sSenderNameFull)));
-            end;
-            if Pos('<div class="wallOnline">Online</div>', sWallPost) > 0 then
-              iSenderStatus := ID_STATUS_ONLINE
-            else
-              iSenderStatus := ID_STATUS_OFFLINE;
-						// message text
-            sMsgText := TextBetweenTagsAttrInc(sWallPost, 'div', 'class', 'text');
-            sMsgText := StringReplace(sMsgText, '<br>', ' ', [rfReplaceAll, rfIgnoreCase]);
-            sMsgText := HTMLDecodeW(sMsgText);
-            // - audio
-						if Pos('"audioRowWall"', sMsgText) > 0 then
-						begin
-						  Insert(', ', sMsgText, Pos('<div class="duration">', sMsgText) - 1);
-						  // operateWall(60833648,4210,6114921,'3c8680515484',249) -->
-						  // http://cs4210.vkontakte.ru/u6114921/audio/3c8680515484.mp3
-						  sTemp := TextBetween(sMsgText, 'operateWall(', ')');
-						  sMsgAudioUrl := TextBetween(sTemp, ',', ',');
-              // fix sMsgAudioUrl - remove quotes
-             if (sMsgAudioUrl[1] = '"') or (sMsgAudioUrl[1] = '''') then
-               sMsgAudioUrl := Copy(sMsgAudioUrl, 2, Length(sMsgAudioUrl)-2);
-						  Delete(sTemp, 1, Pos(',', sTemp) + 1);
-              sMsgText := Trim(HTMLRemoveTags(sMsgText));
-						  sMsgText := Trim(sMsgText) + ' (' + sMsgAudioUrl + ')';
-              sMsgText := StringReplace(sMsgText, #$A, '', [rfReplaceAll, rfIgnoreCase]);
-						end;
-						// - video
-						if Pos('"feedVideos"', sMsgText) > 0 then
-						begin
-						  sTemp := TextBetween(sMsgText, 'href="/video', '"');
-						  sMsgText := sMsgText + ' (' + vk_url_prefix + vk_url_host + '/video' + sTemp + ')';
-						end;
-						// - graffiti
-						if Pos('''Graffiti''', sMsgText) > 0 then
-						begin
-						  sTemp := TextBetween(sMsgText, 'href=''/graffiti', '''');
-						  sMsgText := Translate('Graffiti') + ' (' + vk_url_prefix + vk_url_host + '/graffiti' + sTemp + ')';
-						end;
-						// - photo
-						if Pos('''feedPhotos''', sMsgText) > 0 then
-						begin
-						  sTemp := TextBetween(sMsgText, 'href=''/photos.php?act=', '''');
-						  sMsgText := sMsgText + ' (' + vk_url_prefix + vk_url_host + '/photos.php?act=' + sTemp + ')';
-						end;
-            // - contains url
-            while Pos('away.php', sMsgText) > 0 do
-            begin
-              sTemp := URLDecode(TextBetween(sMsgText, 'away.php?to=', ''''));
-              iURLPos := Pos('away.php', sMsgText);
-              Insert(' (' + sTemp + ')', sMsgText, PosEx('</a>', sMsgText, iURLPos));
-              Delete(sMsgText, Pos('away.php', sMsgText), 8);
-            end;
-						sMsgText := Trim(HTMLRemoveTags(sMsgText));
-
-						sMsgTime := Trim(TextBetween(sWallPost, '<small>', '</small>'));
-
-            // fix sMsgTime - remove letter 'â'
-            Delete(sMsgTime, Pos('â', sMsgTime), 2);
-
-            try
-              if DBGetContactSettingByte(0, piShortName, opt_WallUseLocalTime, 0) = 0 then
-                MsgDate := RusDateToDateTime(sMsgTime, true)
-              else
-                MsgDate := Now; // use local time, if requested in the settings
-             except
-               MsgDate := Now;
-             end;
-
-						if (TryStrToInt(sSenderID, iSenderID)) and (TryStrToInt(sMsgID, iMsgID)) and (sMsgText <> '') and (sMsgTime <> '') then
-						begin
-              if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
+            begin // getting message in the separate contact, so getting details of a sender
+              HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getprofiles, [IntToStr(iSenderID),'first_name,last_name,nickname,sex,online'])));
+              if Pos('error', HTML) > 0 then
               begin
-                // messages should be added to a separate contact
-								TempFriend := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_WallSeparateContactID, 666), // separate contact ID, 666 by default
-														  DBReadUnicode(0, piShortName, opt_WallSeparateContactName, TranslateW('The wall')), // separate contact nick, translated 'The wall' by default
-														  ID_STATUS_OFFLINE, // status
-														  1); // friend = yes
-                sMsgText := sSenderNameFull + ': ' + sMsgText;
+                Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), unable to get name, error code: '+IntToStr(GetJSONError(HTML))));
+                sSenderNameFull := 'id'+IntToStr(iSenderID); // define name with id instead
               end
               else
               begin
-                // message should be added in according contact
-                sMsgText := WideString(TranslateW(DBReadUnicode(0, piShortName, opt_WallMessagesWord, 'wall:'))) + ' ' + sMsgText;
-                // if message from unknown contact then
-                // we add contact to our list temporary
-							  TempFriend := GetContactByID(iSenderID);
-							  If TempFriend = 0 Then
-							  Begin
+                // TODO: verify if it works properly with unicode symbols
+                // HTMLInbox := HTMLDecodeW(iSenderID);
+                jsoFeedProfile := TlkJSON.ParseText(HTML) as TlkJSONobject;
+                try
+                  sSenderNameFull := jsoFeedProfile.Field['response'].Child[0].Field['first_name'].Value + ' ' + jsoFeedProfile.Field['response'].Child[0].Field['last_name'].Value;
+                finally
+                  jsoFeedProfile.Free;
+                end;
+              end;
+
+              TempFriend := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_WallSeparateContactID, 666), // separate contact ID, 666 by default
+														  DBReadUnicode(0, piShortName, opt_WallSeparateContactName, TranslateW('The wall')), // separate contact nick, translated 'The wall' by default
+														  ID_STATUS_ONLINE, // status
+														  1); // friend = yes
+              sMsgText := sSenderNameFull + ': ' + sMsgText;
+            end
+            else // no separate The Wall contact, message should be added in according contact
+            begin
+              sMsgText := WideString(TranslateW(DBReadUnicode(0, piShortName, opt_WallMessagesWord, 'wall:'))) + ' ' + sMsgText;
+              // if message from unknown contact then
+              // add contact to our list temporary
+              TempFriend := GetContactByID(iSenderID);
+              if TempFriend = 0 Then
+              begin
 								Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) ... wall message id ' + sMsgID + ' received from unknown contact ' + sSenderID + ', adding him/her to the contact list temporarily'));
 								// add sender to our contact list
-								// now we don't read user's status, so it is added as offline
 								TempFriend := vk_AddFriend(iSenderID, sSenderName, iSenderStatus, 0);
 								// and make it as temporary contact
 								DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
-								  DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
-							  End;
+                DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
               end;
-              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) ... adding wall message to miranda database...'));
-              // everything seems to be OK, may add this message to Miranda DB
-              vk_ReceiveMessage(TempFriend, sMsgText, MsgDate);
-						end;
-          end
-          else
-            break; // stop processing - all posts are received already
+            end;
+
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) ... adding wall message to miranda database...'));
+            // everything seems to be OK, may add this message to Miranda DB
+            vk_ReceiveMessage(TempFriend, sMsgText, MsgDate);
+            DBWriteContactSettingDWord(0, piShortName, opt_WallLastPostID, iMsgDate); // log id (time and date) of last post
+
+          end;
+
         end;
-        Delete(sWallPage, 1, Pos('</table></div>', sWallPage)); // </table></div> identifies end of the post
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... processing message ' + IntToStr(i) + ' completed'));
       end;
 
-      sMsgID := Trim(TextBetween(HTML, 'deletePost(', ',')); // last post id - please note that it works when id = 0 only
-      if TryStrToInt(sMsgID, iMsgID) then
-        DBWriteContactSettingDWord(0, piShortName, opt_WallLastPostID, iMsgID); // log id of last post
-
+    finally
+      jsoFeed.Free;
     end;
   end;
+
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) ... getting wall messages for id ' + IntToStr(ID) + ' finished'));
 end;
 
