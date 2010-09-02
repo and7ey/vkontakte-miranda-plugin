@@ -57,7 +57,7 @@ type
 
   function DlgWallPic(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
 
-  function vk_WallPostMessage(MsgDetails: PMsgDetails): TResultDetailed; overload;
+  function vk_WallPostMessage(MsgDetails: PMsgDetails; sCaptcha: String = ''): TResultDetailed; overload;
   function vk_WallPostMessage(ID: Integer; const MessageText: WideString; Wnd: HWnd): TResultDetailed; overload;
 
   function vk_WallPostPicture(MsgDetails: PMsgDetails): TResultDetailed; overload;
@@ -473,15 +473,14 @@ end;
 // function to post message on the wall
 // called directly from the main messages window
 // -----------------------------------------------------------------------------
-function vk_WallPostMessage(MsgDetails: PMsgDetails): TResultDetailed; overload;
+function vk_WallPostMessage(MsgDetails: PMsgDetails; sCaptcha: String = ''): TResultDetailed; overload;
 var
   HTML: String;
-  Hash: String;
+  sText: WideString;
 
-  ContactID, FullContactID: Int64;
-  CaptchaId, CaptchaValue: String;
-  MsgTextOrig, MsgText: String;
-  szDataFinal: String;
+  ContactID: Integer;
+  CaptchaId, CaptchaUrl, CaptchaValue: String;
+  MsgTextOrig, MsgText: WideString;
   Dialog, DialogLabel: HWnd; // handles of the dialog and dialog lable reflecting processing status
   PopupsShowStatus: Boolean;
   defTimeout1, defTimeout2: Integer;
@@ -507,7 +506,7 @@ begin
     DialogLabel := 0; // useless, just to remove Variable '<element>' might not have been initialized message
   ContactID := MsgDetails^.ID;
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) Posting message on the wall of contact ' + IntToStr(ContactID) + '...'));
-  FullContactID := vk_WallGetFullID(ContactID);
+
   MsgTextOrig := MsgDetails^.MessageText;
   try
     MsgText := URLEncode(UTF8Encode(MsgTextOrig));
@@ -516,111 +515,60 @@ begin
   end;
   Dispose(MsgDetails);
 
+  sText := MsgText;
   if Dialog <> 0 then
-    SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_getting_hash)));
-  if FullContactID <> 0 then
-    Hash := vk_WallGetHash(FullContactID);
+    SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_posting)));
+  HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_wall_post, [ContactID, sText]) + sCaptcha));
 
-  if Length(Hash) = 32 then
-  begin
-
-    if (vk_Status = ID_STATUS_INVISIBLE) then
-    begin
-      if Dialog <> 0 then
-        SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_posting)));
-      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall + '?' + vk_url_wall_postmsg, [FullContactID, Hash, MsgText]), REQUEST_HEAD);
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' finished. Unable to verify result fully due to Invisible mode, but trying'));
-      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ContactID]));
-      if Pos(MsgTextOrig, HTMLDecode(HTML)) > 0 then
-      begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' looks successful'));
-        Result.Text := TranslateW(wall_status_invisible_succ);
-        Result.Code := 0;
-      end
-      else
-      begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' seems failed'));
-        Result.Text := TranslateW(wall_status_invisible_failed);
-        Result.Code := 1;
-      end;
-      if Dialog <> 0 then
-        SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-      if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
-    end
+  If Trim(HTML) <> '' Then
+  Begin
+    if Pos('error', HTML) > 0 then
+      Result.Code := GetJSONError(HTML)
     else
-    begin // status = ONLINE
-      if Dialog <> 0 then
-        SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_posting)));
-
-      szDataFinal := Format(vk_url_wall_postmsg, [FullContactID, Hash, MsgText]);
-      HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_wall, szDataFinal, 'application/x-www-form-urlencoded','');
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... posting of the message on the wall of contact ' + IntToStr(ContactID) + ' done. Checking result...'));
-
-      if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
-      begin
-        Result.Text := TranslateW(wall_status_succ);
-        Result.Code := 0;
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... message posted successfully'));
-        if Dialog <> 0 then
-          SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-        if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
-      end
-      else
-        if Pos('captcha_sid', HTML) > 0 then // captcha!
-        begin
-          Result.Text := TranslateW(wall_status_captcha_required);
-          Result.Code := 1; // not successful yet
+      Result.Code := 0;
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) Posting message on the wall of contact ' + IntToStr(ContactID) + ' finished with result: '+IntToStr(Result.Code)));
+    Case Result.Code Of
+      1..9, 100: // error occured
+        Begin
           if Dialog <> 0 then
-            SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-          if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+            SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_failed)));
+          if PopupsShowStatus then ShowPopupMsg(0, TranslateW(wall_status_failed), 2, False);
+        End;
+      14:  // captcha needed
+        Begin
           Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... captcha input is required, getting it...'));
-          CaptchaId := TextBetween(HTML, '"captcha_sid":"', '"');
+          if Dialog <> 0 then
+            SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_captcha_required)));
 
-          CaptchaValue := ProcessCaptcha(CaptchaId);
+          CaptchaId := GetJSONResponse(HTML, 'captcha_sid');
+          CaptchaUrl := GetJSONResponse(HTML, 'captcha_img');
 
-          // error - can't download captcha image
-          if CaptchaValue = 'captcha_download_failed' then
+          CaptchaValue := ProcessCaptcha(CaptchaId, CaptchaUrl);
+          if CaptchaValue = 'captcha_download_failed' then // error - can't download captcha image
           begin
             Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... unable to download captcha'));
-            Result.Text := TranslateW(wall_status_captcha_failed);
-            Result.Code := 1;
             if Dialog <> 0 then
-              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-            if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
+              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_captcha_failed)));
           end
           else // ok
           begin
-            szDataFinal := Format(vk_url_wall_postmsg_captcha, [FullContactID, Hash, MsgText, CaptchaId, CaptchaValue]);
-            HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_wall, szDataFinal, 'application/x-www-form-urlencoded','');
-            if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
-            begin
-              Result.Text := TranslateW(wall_status_succ);
-              Result.Code := 0;
-              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... message posted successfully'));
-              if Dialog <> 0 then
-                SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-              if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
-            end
-            else
-            begin
-              Result.Text := TranslateW(wall_status_failed);
-              Result.Code := 1;
-              Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... message posting failed'));
-              if Dialog <> 0 then
-                SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-              if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 1, False);
-            end;
+            Result := vk_WallPostMessage(MsgDetails, '^'+Format(vk_url_api_captcha_addition, [CaptchaId, CaptchaValue]));
+            Exit;
           end;
-        end;
-    end;
-  end else
-  begin
-    Result.Text := TranslateW(wall_status_getting_hash_failed);
-    Result.Code := 1;
-    if Dialog <> 0 then
-      SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
-    if PopupsShowStatus then ShowPopupMsg(0, Result.Text, 2, False);
-  end;
+        End;
+      Else // successful
+        Begin
+          if Dialog <> 0 then
+            SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_succ)));
+          if PopupsShowStatus then ShowPopupMsg(0, TranslateW(wall_status_succ), 1, False);
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... message posted successfully'));
+        End;
+      End;
+
+    End;
+
+
+
   if Dialog <> 0 then
     DlgWallPicEnable(Dialog); // enable all dialog elements
 
@@ -817,8 +765,8 @@ begin
                   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... the file has been uploaded successfully, getting details...'));
                   HTML := TextBetween(HTML, 'var params = {', '}');
                   StrTemp := TextBetween(HTML, 'to_id: ''', '''');
-                  Hash := DecodeWallHash(TextBetween(HTML, 'wall_hash: decodehash(''', ''')'));
-                  MsgID := TextBetween(HTML, 'message: ''', '''');
+                  Hash := DecodeWallHash(TextBetween(HTML, 'hash: decodehash(''', ''')'));
+                  MsgID := TextBetween(HTML, 'media_id: ''', '''');
                   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... message details: grid '+MsgId+', hash '+Hash));
 
                   Result.Text := TranslateW(wall_status_posting_pic_id) + ' (' + MsgID + ')';
@@ -995,16 +943,18 @@ var
   iSenderID,
   iMsgDate,
   iMsgID: Integer;
+  sMediaType: String;
   TempFriend: Integer;
   jsoFeed, jsoFeedProfile: TlkJSONobject;
   iWallMsgsCount: Integer;
   i: Byte;
+  iLevel: Integer;
 
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) Getting wall messages for id ' + IntToStr(ID) + '...'));
 
   HTML := HTTP_NL_Get(GenerateApiUrl(vk_url_api_wall_get));
-  if Trim(HTML) <> '' then
+  if (Pos('error', HTML)=0) and (Trim(HTML) <> '') then
   begin
     jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
     try
@@ -1017,7 +967,60 @@ begin
         iMsgDate := jsoFeed.Field['response'].Child[i].Field['date'].Value;
         MsgDate := UnixToDateTime(iMsgDate);
         sMsgText := jsoFeed.Field['response'].Child[i].Field['text'].Value;
-        // sMsgText := StringReplace(sMsgText, '<br>', ' ', [rfReplaceAll, rfIgnoreCase]);
+
+
+        iLevel := 2;
+        if (sMsgText <> '') then
+        begin
+          sMsgText := StringReplaceW(sMsgText, '<br>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
+        end else
+          if Pos('media', GenerateReadableText(jsoFeed.Field['response'].Child[i], iLevel)) > 0 then // message contains media object
+          begin
+            sMediaType := jsoFeed.Field['response'].Child[i].Field['media'].Field['type'].Value;
+            if (sMediaType = 'audio') then
+            begin
+              sMsgText := sMediaType + jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
+            end else
+              if (sMediaType = 'photo') then
+              begin
+                sMsgText := 'photo: ' +
+                            vk_url_prefix + vk_url_host + '/photo' +
+                            jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value + '_' +
+                            jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
+                // sMsgText := 'photo: '+jsoFeed.Field['response'].Child[i].Field['media'].Field['thumb_src'].Value;
+              end else
+                if (sMediaType = 'app') then
+                begin
+                  sMsgText := 'app: '+ jsoFeed.Field['response'].Child[i].Field['media'].Field['thumb_src'].Value;
+                end else
+                  if (sMediaType = 'graffiti') then
+                  begin
+                    sMsgText := sMediaType + jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value +
+                                Chr(13) + Chr(10) +
+                                jsoFeed.Field['response'].Child[i].Field['media'].Field['thumb_src'].Value;
+                    { the code below doesn't work - from_id is unknown
+                     sMsgText := 'graffiti: '+
+                                vk_url_prefix + vk_url_host + '/graffiti' +
+                                jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
+                    }
+                  end else
+                    if (sMediaType = 'video') then
+                    begin
+                      sMsgText := 'video: ' +
+                                  vk_url_prefix + vk_url_host + '/video' +
+                                  jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value + '_' +
+                                  jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
+                    end else
+                      if (sMediaType = 'posted_photo') then
+                      begin
+                        sMsgText := vk_url_prefix + vk_url_host + '/photos.php?act=posted&id=' +
+                                    jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value + '&oid=' +
+                                    jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value;
+                      end;
+
+          end;
+        sMsgText := HTMLDecodeW(sMsgText);
+
         iSenderStatus := jsoFeed.Field['response'].Child[i].Field['online'].Value;
         if iSenderStatus = 1 then
           iSenderStatus := ID_STATUS_ONLINE

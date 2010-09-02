@@ -174,13 +174,7 @@ begin
   FillChar(pre, SizeOf(pre), 0);
   pre.flags := PREF_UTF;
   pre.szMessage := PChar(UTF8Encode(MsgText)); // encode msg to utf8
-  // Trunc((DateTime-UnixTimeStart) * SecondsPerDay);
-  // UnixTimeStart = 25569; = 1970-01-01 00:00:00 in TDateTime
-  // SecondsPerDay = 60*24*60; = 86400;
-  // ----
-  // Local time is used on the server, so, we need to convert it to GMT
-  // pre.timestamp := Trunc((MsgDate-25569)*86400)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,Trunc((MsgDate-25569)*86400),0);
-  pre.timestamp := Trunc((MsgDate-25569)*86400);
+  pre.timestamp := Trunc(DateTimeToUnix(MsgDate));
  	pre.lParam := 0;
   // now we need to initiate incoming message event
   // we can add message without this event (with usage of MS_DB_EVENT_ADD directly),
@@ -201,7 +195,7 @@ end;
 // (it is called from separate thread, so minimum number of WRITE global variables is used)
 // -----------------------------------------------------------------------------
 procedure vk_GetMsgsFriendsEtc();
-var HTML, HTMLInbox: AnsiString; // html content of the pages received
+var HTML, HTMLInbox: String; // html content of the pages received
     MsgsCount: Integer; // temp variable to keep number of new msgs received
     FriendsCount: Integer; // temp variable to keep number of new authorization requests received
     MsgID: String;
@@ -249,7 +243,7 @@ begin
  If Trim(HTML) <> '' Then
  Begin
    // to support Russian characters, we need to utf8 encode html text
-   FeedRoot := TlkJSON.ParseText(UTF8Encode(HTML)) as TlkJSONobject;
+   FeedRoot := TlkJSON.ParseText(HTML) as TlkJSONobject;
    if Assigned(FeedRoot) Then
    Begin
      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking messages count'));
@@ -288,8 +282,8 @@ begin
                  if DBGetContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, 1) = 1 then
                  begin
                    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), removing empty subject'));
-                   MsgTitle := StringReplace(MsgTitle, 'Re:  ...', '', []);
-                   MsgTitle := StringReplace(MsgTitle, ' ... ', '', []);
+                   MsgTitle := StringReplaceW(MsgTitle, 'Re:  ...', '', []);
+                   MsgTitle := StringReplaceW(MsgTitle, ' ... ', '', []);
                    if Length(MsgTitle) > 4 then
                      if (MsgTitle[1] = 'R') and (MsgTitle[2] = 'e') and (MsgTitle[3] = '(') then
                      begin
@@ -301,7 +295,9 @@ begin
                          Delete(MsgTitle, 1, temppos + 6);
                      end;
                  end;
-                 MsgText := StringReplace(MsgText, '<br/>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
+                 if Trim(MsgTitle) <> '' then
+                   MsgText := MsgTitle + ': <br><br>' + MsgText;
+                 MsgText := StringReplaceW(MsgText, '<br>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
                  MsgText := HTMLDecodeW(MsgText);
                  MsgText := Trim(MsgText);
                  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), re-formatted text: '+String(MsgText)));
@@ -802,7 +798,7 @@ begin
   if High(NewsAll) > -1 then // received news
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) Verifying '+IntToStr(High(NewsAll)+1)+' received news...'));
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... last news received, date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600)))));
+    // Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... last news received, date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600)))));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... current local date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', Now)));
     for CurrNews:=0 to High(NewsAll) do
     begin
@@ -869,6 +865,8 @@ begin
           NewsText := HTMLRemoveTags(NewsText);
           // cleanup NewsText - remove leading spaces
 		      while NewsText[1]=' ' do Delete(NewsText, 1, 1);
+          // use local time for news
+          NewsAll[CurrNews].NTime := DateTimeToUnix(NewsAll[CurrNews].NTime)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,DateTimeToUnix(NewsAll[CurrNews].NTime),0);
           // display news
           vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
         end;
@@ -1259,6 +1257,8 @@ begin
           NewsText := HTMLRemoveTags(NewsText);
           // cleanup NewsText - remove leading spaces
 		      while NewsText[1]=' ' do Delete(NewsText, 1, 1);
+          // use local time for news
+          NewsAll[CurrNews].NTime := DateTimeToUnix(NewsAll[CurrNews].NTime)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,DateTimeToUnix(NewsAll[CurrNews].NTime),0);
           // display news
           vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
         end;

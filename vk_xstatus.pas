@@ -132,6 +132,7 @@ var HTML: String;
     hContact: THandle;
     iContactID: Integer;
     MsgText: WideString;
+    iMsgTime: Integer;
     i: Integer;
     bXStatusUpdate, bXStatusNew: Boolean;
     jsoFeed: TlkJSONobject;
@@ -168,17 +169,20 @@ begin
            try
              if Assigned(jsoFeed) then
                MsgText := jsoFeed.Field['response'].Field['activity'].Value;
+               iMsgTime := jsoFeed.Field['response'].Field['time'].Value;
            finally
              jsoFeed.Free;
            end;
 
-           if Trim(MsgText) <> '' then
+           if (Trim(MsgText) <> '') and (iMsgTime > 0) then
            begin
+             MsgText := HTMLDecodeW(MsgText);
              bXStatusNew := True;
              if DBReadUnicode(hContact, piShortName, 'XStatusMsg', '') <> MsgText then
              begin // xstatus changed! write new values
                DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusMsg', PWideChar(MsgText));
-               DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusName', TranslateW('Current')); // required for clist_modern to display status
+               DBWriteContactSettingDWord(hContact, piShortName, 'XStatusTime', iMsgTime);
+               // DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusName', TranslateW('Current')); // required for clist_modern to display status
 
                DBDeleteContactSetting(hContact, piShortName, 'XStatusId');
                MsgText := AnsiLowerCase(MsgText);
@@ -202,14 +206,14 @@ begin
 
        // deleting old data
        DBDeleteContactSetting(hContact, piShortName, 'XStatusUpdated'); // was used in old versions of plugin
-       DBDeleteContactSetting(hContact, piShortName, 'XStatusTime');    // was used in old versions of plugin
+       DBDeleteContactSetting(hContact, piShortName, 'XStatusName');
 
        // delete old statuses and statuses of offline contacts (if not updated)
        if bXStatusNew = False then
        begin
          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... deleting old additional statuses'));
          DBDeleteContactSetting(hContact, piShortName, 'XStatusMsg');
-         DBDeleteContactSetting(hContact, piShortName, 'XStatusName');
+         DBDeleteContactSetting(hContact, piShortName, 'XStatusTime');
          DBDeleteContactSetting(hContact, piShortName, 'XStatusId');
          StatusAddlSetIcon(hContact, THandle(-1)); // delete icon
        end;
@@ -414,8 +418,10 @@ end;
 // -----------------------------------------------------------------------------
 function MenuContactAdditionalStatusRead(wParam: wParam; lParam: lParam): Integer; cdecl;
 var MsgCaption: WideString;
+    dtDateTime: TDateTime;
 begin
-  MsgCaption := TranslateW('XStatus') + ', ' + WideString(DBReadString(wParam, piShortName, 'XStatusTime', '00:00')) + ': '+#10#13+
+  dtDateTime := UnixToDateTime(DBGetContactSettingDword(wParam, piShortName, 'XStatusTime', 0));
+  MsgCaption := TranslateW('XStatus') + ', ' + WideString(FormatDateTime('d.mm.yyyy, hh.nn', dtDateTime)) + ': '+#10#13+
                 DBReadUnicode(wParam, piShortName, 'XStatusMsg', '');
   ShowPopupMsg(wParam, MsgCaption, 1);
 

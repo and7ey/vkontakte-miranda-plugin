@@ -44,12 +44,12 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 4 shl 16 + 0 shl 8 + 0;
+  piVersion = 0 shl 24 + 4 shl 16 + 1 shl 8 + 1;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
   piCopyright = '(c) 2008-2010 Andrey Lukyanov, Artyom Zhurkin';
-  piHomepage = 'http://forum.miranda.im/showthread.php?t=2035';
+  piHomepage = 'http://vkontakte.ru/club6929403';
 
 const
   // vkontakte API application id
@@ -74,6 +74,7 @@ const
   vk_url_api_activity_get = 'method=activity.get^uid=%d';
   vk_url_api_activity_delete = 'method=activity.deleteHistoryItem^aid=%d';
   vk_url_api_wall_get = 'method=wall.get';
+  vk_url_api_wall_post = 'method=wall.post^owner_id=%d^message=%s';
 
   vk_url_pda_inbox = vk_url_pda + '/inbox';
   vk_url_pda_login = 'http://vkontakte.ru/login.php?pda=index&email=%s&pass=%s&expire=0';
@@ -132,10 +133,10 @@ const
   vk_url_wall_hash = '/wall.php?act=write&id=%d';
   vk_url_wall_postmsg = 'to_id=%d&act=sent&wall_hash=%s&message=%s';
   vk_url_wall_postmsg_captcha = 'to_id=%d&act=sent&wall_hash=%s&message=%s&captcha_sid=%s&captcha_key=%s';
-  vk_url_wall_postpic_upload = '/graffiti.php?to_id=%d';
+  vk_url_wall_postpic_upload = '/graffiti.php?to_id=%d&group_id=0';
   vk_url_wall_postpic_getlast = '/graffiti.php?act=last';
-  vk_url_wall_postpic = '/wall.php?act=sent&grid=%s&to_id=%d&wall_hash=%s&message=%s';
-  vk_url_wall_postpic_captcha = '/wall.php?act=sent&grid=%s&to_id=%d&wall_hash=%s&message=%s&captcha_sid=%s&captcha_key=%s';
+  vk_url_wall_postpic = '/wall.php?act=a_post_wall&grid=%s&to_id=%d&hash=%s&message=%s&media=graffiti&type=0&reply_to=0';
+  vk_url_wall_postpic_captcha = '/wall.php?act=a_post_wall&grid=%s&to_id=%d&hash=%s&media=graffiti&type=0&reply_to=0&message=%s&captcha_sid=%s&captcha_key=%s';
   vk_lang_dialog = '/lang.php?act=lang_dialog';
   vk_lang_change = '/lang.php?act=change_lang&lang_id=%s&hash=%s';
   vk_url_activityhistory = '/profile.php?id=%d&activityhistory=1'; // for future usage

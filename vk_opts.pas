@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -109,6 +109,7 @@ begin
   odp.pfnDlgProc := @DlgProcOptionsNews;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
 
+  { TEMP: disabled!
   odp.szTab.a := 'Groups';
   odp.pszTemplate := 'SETTINGS_GROUPS'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsGroups;
@@ -118,6 +119,7 @@ begin
   odp.pszTemplate := 'SETTINGS_COMMENTS'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsComments;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
+  }
 
   odp.szTab.a := 'Ignore';
   odp.pszTemplate := 'SETTINGS_IGNORE'; // identifies template from res file
@@ -135,10 +137,10 @@ begin
     odp.pfnDlgProc := @DlgProcOptionsPopup;
     PluginLink^.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
   end;
- 
+
   Result:=0;
 end;
- 
+
 function GetMask(hContact: THandle): DWord;
 var mask: DWord;
 begin
