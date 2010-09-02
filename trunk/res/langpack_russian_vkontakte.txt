@@ -100,14 +100,14 @@ E-mail или логин:
 Мои &заметки...
 [My &questions...]
 Мои &вопросы...
-[Read additional status]
-Прочитать дополнительный статус
+[Read XStatus]
+Прочитать xСтатус
 [Avatars]
 Аватары
-[Enable contacts additional status support]
-Включить поддержку дополнительных статусов контактов
-[Additional status]
-Дополнительный статус
+[Enable contacts XStatus support]
+Включить поддержку xСтатусов контактов
+[XStatus]
+xСтатус
 [Enable avatars support]
 Включить поддержку аватаров
 [Update contacts avatars each]
@@ -212,8 +212,8 @@ E-mail или логин:
 Для обновления данных контакта необходимо перейти в режим В сети. Перейти в режим В сети и обновить данные сейчас?
 [Use VKontakte's page URL instead of contact's homepage]
 Использовать ссылку на страницу ВКонтакте вместо страницы контакта
-[Display Additional status for offline contacts]
-Отображать дополнительный статус для контактов Не в сети
+[Display XStatus for offline contacts]
+Отображать xСтатус для контактов Не в сети
 [Use the following group by default for new contacts]
 Помещать новые контакты в группу
 [Advanced (continued)]
@@ -566,3 +566,5 @@ E-mail или логин:
 Вы не можете отправлять более одного запроса в секунду. Попробуйте позднее.
 [No session details are received. Some functions will not work properly.]
 Не получены детали сессии. Некоторые функции плагина будут работать неправильно.
+[One of the parameters specified was missing or invalid.]
+Пропущен один из параметров в запросе. Обратитесь к разработчикам плагина.

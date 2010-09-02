@@ -233,9 +233,11 @@ function GetInfo(wParam: wParam; lParam: lParam): Integer; cdecl;
 var res: LongWord;
     hContact: THandle;
 begin
-  hContact := PCCSDATA(lParam).hContact;
-  CloseHandle(BeginThread(nil, 0, @GetInfoProc, Pointer(hContact), 0, res));
-
+  try
+    hContact := PCCSDATA(lParam).hContact;
+    CloseHandle(BeginThread(nil, 0, @GetInfoProc, Pointer(hContact), 0, res));
+  except
+  end;
   Result := 0;
 end;
 
@@ -288,7 +290,10 @@ begin
       begin
         hContactID := IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0));
         Netlib_Log(vk_hNetlibUser, PChar('(GetInfoAllProc) Updating of details of contact ID ' + hContactID + ' ...'));
-        vk_GetInfoFull(hContact);
+        try
+          vk_GetInfoFull(hContact);
+        except
+        end;
         Netlib_Log(vk_hNetlibUser, PChar('(GetInfoAllProc) ... updating of details of contact ID ' + hContactID + ' finished'));
       end;
       hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);

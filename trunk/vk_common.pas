@@ -69,6 +69,7 @@ type
   function GetJSONError(sResponse: String): Integer;
 
   function UnixToDateTime(USec: Longint): TDateTime;
+  function DateTimeToUnix(dtDateTime: TDateTime): Integer;
 
 implementation
 
@@ -368,6 +369,13 @@ const
   UnixStartDate: TDateTime = 25569.0;
 begin
   Result := (Usec / 86400) + UnixStartDate;
+end;
+
+function DateTimeToUnix(dtDateTime: TDateTime): Integer;
+const
+  UnixStartDate: TDateTime = 25569.0; // 1970-01-01 00:00:00 in TDateTime
+begin
+  Result := Trunc((dtDateTime-UnixStartDate)*86400); // SecondsPerDay = 60*24*60; = 86400;
 end;
 
 begin
