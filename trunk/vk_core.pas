@@ -513,7 +513,7 @@ begin
         TempList.Add(TextBetween(HTML, '[', ','));
         if Pos(']', HTML) > 0 then
           Delete(HTML, 1, Pos(']', HTML))
-        else break;  
+        else break;
       end;
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... ' + IntToStr(TempList.Count) + ' friend(s) online found'));
 		  For i:=0 to TempList.Count-1 Do
@@ -635,7 +635,7 @@ begin
           begin
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Updating data of existing contact, id: '+IntToStr(Friends[i].ID)+', nick: '+String(Friends[i].Name)));
             Friends[i].InList := True;
-            DBWriteContactSettingUnicode(hContact, piShortName, 'Nick', PWideChar(HTMLDecodeW(Friends[i].Name)));
+            DBWriteContactSettingUnicode(hContact, piShortName, 'Nick', PWideChar(Friends[i].Name));
       	   	DBWriteContactSettingByte(hContact, piShortName, 'Friend', 1); // found on server list - making friend
             if Friends[i].Deleted Then
               DBWriteContactSettingByte(hContact, 'CList', 'Hidden', 1);

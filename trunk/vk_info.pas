@@ -132,6 +132,8 @@ begin
        2: DBWriteContactSettingByte(hContact, piShortName, 'Gender', 77); // мужской
      end;
    // birthdate
+   if Pos('bdate', HTML) > 0 then
+   begin
    try
      sDOB := GetInfo(HTML, 'bdate');
      if sDOB <> '' then
@@ -148,6 +150,7 @@ begin
        end;
      end;
    except
+   end;
    end;
    // calculating age
    DBDeleteContactSetting(hContact, piShortName, 'Age');
@@ -167,24 +170,38 @@ begin
    end;
 
    // city
-   sTemp := '';
-   sTemp := GetInfo(HTML, 'city');
-   HTMLCity := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getcities, [sTemp])));
-   GetAndSaveInfo(HTMLCity, hContact, 'name', 'City');
+   if Pos('city', HTML) > 0 then
+   begin
+     sTemp := '';
+     sTemp := GetInfo(HTML, 'city');
+     HTMLCity := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getcities, [sTemp])));
+     GetAndSaveInfo(HTMLCity, hContact, 'name', 'City');
+   end;
    // country
-   sTemp := '';
-   sTemp := GetInfo(HTML, 'country');
-   HTMLCity := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getcountries, [sTemp])));
-   GetAndSaveInfo(HTMLCity, hContact, 'name', 'Country');
+   if Pos('country', HTML) > 0 then
+   begin
+     sTemp := '';
+     sTemp := GetInfo(HTML, 'country');
+     HTMLCity := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getcountries, [sTemp])));
+     GetAndSaveInfo(HTMLCity, hContact, 'name', 'Country');
+   end;
    // education - university
-   DBWriteContactSettingUnicode(hContact, piShortName, 'Affiliation0', TranslateW(usr_dtl_education));
-   GetAndSaveInfo(HTML, hContact, 'university_name', 'Affiliation0Text');
+   if Pos('university_name', HTML) > 0 then
+   begin
+     DBWriteContactSettingUnicode(hContact, piShortName, 'Affiliation0', TranslateW(usr_dtl_education));
+     GetAndSaveInfo(HTML, hContact, 'university_name', 'Affiliation0Text');
+   end;
    // education - faculty
-   DBWriteContactSettingUnicode(hContact, piShortName, 'Affiliation1', TranslateW(usr_dtl_faculty));
-   GetAndSaveInfo(HTML, hContact, 'faculty_name', 'Affiliation1Text');
+   if Pos('faculty_name', HTML) > 0 then
+   begin
+     DBWriteContactSettingUnicode(hContact, piShortName, 'Affiliation1', TranslateW(usr_dtl_faculty));
+     GetAndSaveInfo(HTML, hContact, 'faculty_name', 'Affiliation1Text');
+   end;
    // contacts
-   GetAndSaveInfo(HTML, hContact, 'mobile_phone', 'MyPhone0', 0, 'UserInfo');
-   GetAndSaveInfo(HTML, hContact, 'home_phone', 'MyPhone1', 0, 'UserInfo');
+   if Pos('mobile_phone', HTML) > 0 then
+     GetAndSaveInfo(HTML, hContact, 'mobile_phone', 'MyPhone0', 0, 'UserInfo');
+   if Pos('home_phone', HTML) > 0 then
+     GetAndSaveInfo(HTML, hContact, 'home_phone', 'MyPhone1', 0, 'UserInfo');
 
    // webpage
    // depending on the setting we put here either contact's vkontakte url

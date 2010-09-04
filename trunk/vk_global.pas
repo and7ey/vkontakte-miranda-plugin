@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 4 shl 16 + 1 shl 8 + 1;
+  piVersion = 0 shl 24 + 4 shl 16 + 1 shl 8 + 3;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -237,6 +237,7 @@ const
   opt_NewsLastNewsDateTime: PChar = 'NewsLastNewsDateTime';
   opt_NewsSeparateContactID: PChar = 'NewsSeparateContactID';
   opt_NewsSeparateContactName: PChar = 'NewsSeparateContactName';
+  opt_NewsStatusWord: PChar = 'NewsStatusWord';
   opt_GroupsSupport: PChar = 'GroupsEnabled';
   opt_GroupsSecs: PChar = 'GroupsUpdateFrequencySecs';
   opt_GroupsFilterPhotos: PChar = 'GroupsFilterPhotos';

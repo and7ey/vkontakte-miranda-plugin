@@ -174,7 +174,7 @@ begin
   FillChar(pre, SizeOf(pre), 0);
   pre.flags := PREF_UTF;
   pre.szMessage := PChar(UTF8Encode(MsgText)); // encode msg to utf8
-  pre.timestamp := Trunc(DateTimeToUnix(MsgDate));
+  pre.timestamp := DateTimeToUnix(MsgDate);
  	pre.lParam := 0;
   // now we need to initiate incoming message event
   // we can add message without this event (with usage of MS_DB_EVENT_ADD directly),
@@ -243,13 +243,15 @@ begin
  If Trim(HTML) <> '' Then
  Begin
    // to support Russian characters, we need to utf8 encode html text
-   FeedRoot := TlkJSON.ParseText(HTML) as TlkJSONobject;
+   FeedRoot := TlkJSON.ParseText(Utf8Encode(HTML)) as TlkJSONobject;
    if Assigned(FeedRoot) Then
    Begin
      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking messages count'));
      FeedMsgs := FeedRoot.Field['messages'] as TlkJSONobject;
      if Assigned(FeedMsgs) Then
-       MsgsCount := FeedMsgs.getInt('count');
+       MsgsCount := FeedMsgs.getInt('count')
+     else
+       MsgsCount := 0;
 
      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... ' + IntToStr(MsgsCount) + ' message(s) received'));
 
@@ -328,7 +330,7 @@ begin
                        MsgSenderName := FeedProfile.Field['response'].Child[0].Field['first_name'].Value + ' ' + FeedProfile.Field['response'].Child[0].Field['last_name'].Value;
                      finally
                        FeedProfile.Free;
-                     end;  
+                     end;
                    end;
 
                    TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
@@ -361,7 +363,9 @@ begin
      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking new authorization requests count'));
      FeedMsgs := FeedRoot.Field['friends'] as TlkJSONobject;
      if Assigned(FeedMsgs) Then
-       FriendsCount := FeedMsgs.getInt('count');
+       FriendsCount := FeedMsgs.getInt('count')
+     else
+       FriendsCount := 0;
      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... ' + IntToStr(MsgsCount) + ' new authorization request(s) received'));
      if FriendsCount > 0 Then // got new authorization request(s)!
      Begin
@@ -371,7 +375,8 @@ begin
        Begin
          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i+1) + ', getting id and name'));
          MsgID := FeedMsgsItems.NameOf[i];
-         MsgSenderName := HTMLDecodeW(FeedMsgsItems.getString(FeedMsgsItems.NameOf[i]));
+         MsgSenderName := HTMLDecodeW(FeedMsgsItems.getWideString(i));
+         // {"user":{"id":123456},"friends":{"count":2,"items":{"1234567":"Петр &#9793; Ф-Ф &#9793; Владимиров","26322232":"Даниил Петров"}},"messages":{"count":0},"events":{"count":0},"groups":{"count":0},"photos":{"count":0},"videos":{"count":0},"notes":{"count":0},"opinions":{"count":0},"questions":{"count":0},"gifts":{"count":0},"lang":{"id":"0","p_id":0},"activity":{"updated":0}}
          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i+1) + ', from id: '+MsgID));
          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i+1) + ', from person: '+String(MsgSenderName)));
          if (Trim(MsgID)<>'') and (TryStrToInt(MsgID, MsgSender)) {and (Trim(MsgSenderName)<>'')} Then
@@ -395,7 +400,7 @@ begin
            FillChar(pre, SizeOf(pre), 0);
            pre.flags := PREF_UTF;
            MsgDate := Now;
-           pre.timestamp := Trunc((MsgDate-25569)*86400)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,Trunc((MsgDate-25569)*86400),0);
+           pre.timestamp := DateTimeToUnix(MsgDate);
 
            // GAP(?): use AnsiStrings below, as unicode not supported
            //blob is: uin( DWORD ), hContact( HANDLE ), nick( ASCIIZ ), first( ASCIIZ ), last( ASCIIZ ), email( ASCIIZ ), reason( ASCIIZ )
@@ -742,6 +747,9 @@ begin
         // remove extra spaces (when contact added more than 1 friend)
         nText := StringReplace(nText, '<div class="feedFriend">    <div class="feedFriendText">    ', '<div class="feedFriend"><div class="feedFriendText">', [rfReplaceAll]);
         nText := Trim(HTMLDecodeW(nText));
+        if nNType = 'people' then
+          nText := TranslateW(DBReadUnicode(0, piShortName, opt_NewsStatusWord, TranslateW('Status:'))) + WideString(' ') + nText;
+
         // nText := LeftStr(nText, Length(nText)-1); // remove trailing dot - doesn't work correctly when contact added more than 1 friend
         nNTimestr := TextBetweenInc(HTMLNews, '<td class="feedTime', '</td>');
         nNTimestr := Trim(HTMLRemoveTags(nNTimestr));
@@ -789,6 +797,7 @@ var NewsAll: TNewsRecords;
     ValidNews: Boolean;
     NewsText: WideString;
     ContactID: THandle;
+    dtDateTimeNews: TDateTime;
 begin
   if DBGetContactSettingByte(0, piShortName, opt_NewsMin, 0) = 1 then
     NewsAll := vk_GetNewsMinimal()
@@ -804,6 +813,7 @@ begin
     begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... checking news '+IntToStr(CurrNews+1)+' (of '+IntToStr(High(NewsAll)+1)+')...'));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... news ' +IntToStr(CurrNews+1)+', date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', NewsAll[CurrNews].NTime)));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNews) ... last news date and time: '+FormatDateTime('dd-mmm-yyyy, hh:nn:ss', FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600)))));
       // validate date & time of message (if never was shown before)
       if DateTimeToFileDate(NewsAll[CurrNews].NTime) > DBGetContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, 539033600) then
       begin
@@ -822,7 +832,7 @@ begin
             ValidNews := False;
           if (NewsAll[CurrNews].NType = 'friends') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterFriends, 1) = 0) Then
             ValidNews := False;
-          if (NewsAll[CurrNews].NType = 'peoples') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterStatuses, 0) = 0) Then
+          if (NewsAll[CurrNews].NType = 'people') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterStatuses, 0) = 0) Then
             ValidNews := False;
           if (NewsAll[CurrNews].NType = 'groups') And (DBGetContactSettingByte(0, piShortName, opt_NewsFilterGroups, 1) = 0) Then
             ValidNews := False;
@@ -866,9 +876,9 @@ begin
           // cleanup NewsText - remove leading spaces
 		      while NewsText[1]=' ' do Delete(NewsText, 1, 1);
           // use local time for news
-          NewsAll[CurrNews].NTime := DateTimeToUnix(NewsAll[CurrNews].NTime)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,DateTimeToUnix(NewsAll[CurrNews].NTime),0);
+          dtDateTimeNews := UnixToDateTime(DateTimeToUnix(NewsAll[CurrNews].NTime)*2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL,DateTimeToUnix(NewsAll[CurrNews].NTime),0));
           // display news
-          vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
+          vk_ReceiveMessage(ContactID, NewsText, dtDateTimeNews);
         end;
       end;
     end;
