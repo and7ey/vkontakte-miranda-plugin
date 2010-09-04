@@ -3,7 +3,7 @@
 ; Locale: 0419
 ; Authors: LA, CJ Flash
 ; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.3.0.10
+; ** VKontakte Protocol 0.4.1.3
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -35,7 +35,7 @@ E-mail или логин:
 [Connection settings]
 Настройки подключения
 [Preferred host]
-Предпочитаемый хост
+Сайт
 [Other settings]
 Дополнительные настройки
 [Send 'Keep-online' message each]
@@ -568,3 +568,5 @@ xСтатус
 Не получены детали сессии. Некоторые функции плагина будут работать неправильно.
 [One of the parameters specified was missing or invalid.]
 Пропущен один из параметров в запросе. Обратитесь к разработчикам плагина.
+[Status:]
+Статус:

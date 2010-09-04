@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -50,6 +50,7 @@ uses
   vk_global, // module with global variables and constant used
   vk_http, // module to connect with the site
   vk_opts, // unit to work with options
+  vk_captcha,
   htmlparse, // module to simplify html parsing
 
   Messages,
@@ -106,14 +107,24 @@ end;
 procedure vk_AuthRequestReceivedAllow(ID: String);
 var HTML: String;
     RequestURL: String;
+    sCaptchaValue, sHash: String;
 begin
   // first we have to get URL to accept request
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_authrequestreceived_requestid);
+  HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
   RequestURL := TextBetween(HTML, 'addfriend', '"');
   RequestURL := vk_url_pda + '/addfriend' + RequestURL;
 
   // GAP (?): we don't care about result as of now
-  HTTP_NL_Get(RequestURL, REQUEST_HEAD);
+  HTML := HTTP_NL_Get(RequestURL, REQUEST_GET);
+  if Pos('captcha', HTML) > 0 then
+  begin // captcha input required
+    sCaptchaValue := ProcessCaptcha(TextBetween(HTML, 'captcha_sid=', '"'));
+    sHash := TextBetween(HTML, 'hash" value="', '"');
+    RequestURL := TextBetween(HTML, 'addfriend', '&amp;');
+    RequestURL := vk_url_pda + '/addfriend' + RequestURL;
+    RequestURL := RequestURL + '&pda=1&hash=' + sHash + '&captcha_key=' + sCaptchaValue;
+    HTTP_NL_Get(RequestURL, REQUEST_HEAD);
+  end;
 end;
 
 // =============================================================================
@@ -124,7 +135,7 @@ var HTML: String;
     RequestURL: String;
 begin
   // first we have to get URL to deny request
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_authrequestreceived_requestid);
+  HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
   RequestURL := TextBetween(HTML, 'deletefriend', '"');
   RequestURL := vk_url_pda + '/deletefriend' + RequestURL;
 
