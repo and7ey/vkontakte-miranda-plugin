@@ -1076,8 +1076,7 @@ begin
         end;
 
         // getting groups news, if required
-        { TEMP: disabled!
-        if DBGetContactSettingByte(0, piShortName, opt_GroupsSupport, 1) = 1 then
+        if DBGetContactSettingByte(0, piShortName, opt_GroupsSupport, 0) = 1 then
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_GroupsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_GroupsSecs, 300)) / SecsPerDay then
           begin
             // write new value of last date & time of new message received
@@ -1086,14 +1085,14 @@ begin
           end;
 
         // getting comment news, if required
-        if DBGetContactSettingByte(0, piShortName, opt_CommentsSupport, 1) = 1 then
+        if DBGetContactSettingByte(0, piShortName, opt_CommentsSupport, 0) = 1 then
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_CommentsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_CommentsSecs, 300)) / SecsPerDay then
           begin
             // write new value of last date & time of new message received
             DBWriteContactSettingDWord (0, piShortName, opt_CommentsLastUpdateDateTime, DateTimeToFileDate(Now));
             ExecIt(@vk_GetCommentsNews, 'vk_GetCommentsNews');
           end;
-        }
+
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // one more time...
            (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin

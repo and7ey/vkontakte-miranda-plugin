@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName = 'VKontakte';
-  piVersion = 0 shl 24 + 4 shl 16 + 1 shl 8 + 3;
+  piVersion = 0 shl 24 + 4 shl 16 + 1 shl 8 + 5;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -75,6 +75,9 @@ const
   vk_url_api_activity_delete = 'method=activity.deleteHistoryItem^aid=%d';
   vk_url_api_wall_get = 'method=wall.get';
   vk_url_api_wall_post = 'method=wall.post^owner_id=%d^message=%s';
+  vk_url_api_audio_getbyid = 'method=audio.getById^audios=%s';
+  vk_url_api_photos_getbyid = 'method=photos.getById^photos=%s';
+  vk_url_api_video_get = 'method=video.get^videos=%s';
 
   vk_url_pda_inbox = vk_url_pda + '/inbox';
   vk_url_pda_login = 'http://vkontakte.ru/login.php?pda=index&email=%s&pass=%s&expire=0';
@@ -113,7 +116,7 @@ const
   vk_url_frienddelete = 'http://vkontakte.ru/friends_ajax.php?act=decline_friend&fid=%d&hash=%s';
   vk_url_friend_hash = 'http://vkontakte.ru/id%d';
   // vk_url_searchbyname = 'http://vkontakte.ru/search.php?act=adv&subm=1&first_name=%s&last_name=%s&o=0';
-  vk_url_search = '/search.php?act=adv&subm=1&g=0&first_name=%s&last_name=%s&sex=%d&status=%d&political=%d&bday_day=%d&bday_month=%d&bday_year=%d&country=%d&uni_city=%d&university=%d&faculty=%d&chair=%d&graduation=%d&edu_form=%d&online=%d';
+  vk_url_search = '/gsearch.php?section=people&name=1&ra=1&q=%s&sex=%d&status=%d&political=%d&bday_day=%d&bday_month=%d&bday_year=%d&country=%d&uni_city=%d&university=%d&faculty=%d&chair=%d&graduation=%d&edu_form=%d&online=%d';
   vk_url_search_suffix = '&st=%d';
   // vk_url_searchbyanydata = 'http://vkontakte.ru/search.php?q=%s&act=quick';
   vk_url_searchbyid = '/search.php?id=%d';

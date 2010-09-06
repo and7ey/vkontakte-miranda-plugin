@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2009 Andrey Lukyanov
+    Copyright (c) 2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -80,6 +80,7 @@ uses
 
   function SearchAdv(wnd: HWnd): DWord; forward;
   function SearchName(lParam: lParam): DWord; forward;
+  function SearchBasic(wParam: wParam; lParam: lParam): Integer; cdecl; forward;
   function SearchID(ContactID: PChar): DWord; forward;
 
 const
@@ -275,7 +276,7 @@ var
     FriendFaculty: WideString;
 
 begin
-  SearchURL := SearchURL + vk_url_prefix + vk_url_host + vk_url_search_suffix;
+  SearchURL := SearchURL + vk_url_search_suffix;
 
   HTML := HTTP_NL_Get(Format(SearchURL, [0]));
 
@@ -425,9 +426,8 @@ begin
   srchUEduForm := GetDlgComboBoxItem(wnd, VK_ADVSRCH_ED_STATUS);
   srchOnline := Byte(IsDlgButtonChecked(wnd, VK_ADVSRCH_ONLINEONLY));
 
-  SearchURL := Format(vk_url_prefix + vk_url_host + vk_url_search, [srchFirstName, srchLastName, srchSex, srchStatus, srchPolitical, srchBDDay, srchBDMonth, srchBDYear,
+  SearchURL := Format(vk_url_prefix + vk_url_host + vk_url_search, [srchFirstName+' '+srchLastName, srchSex, srchStatus, srchPolitical, srchBDDay, srchBDMonth, srchBDYear,
                         srchUCountry, srchUCity, srchUniversity, srchUFaculty, srchUChair, srchUGraduation, srchUEduForm, srchOnline]);
-
   // for debug - SetDlgItemText(wnd, VK_ADVSRCH_FIRSTNAME, PChar(SearchURL));
   vk_SearchFriends(SearchURL, SearchHandle, 2);
 
