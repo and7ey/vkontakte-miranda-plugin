@@ -933,6 +933,8 @@ end;
 procedure vk_WallGetMessages(ID: Integer = 0);
 var
   HTML: String;
+  HTMLAudio: String;
+  sAudioID: String;
   sSenderID,
   sMsgID: String;
   sSenderName,
@@ -945,7 +947,7 @@ var
   iMsgID: Integer;
   sMediaType: String;
   TempFriend: Integer;
-  jsoFeed, jsoFeedProfile: TlkJSONobject;
+  jsoFeed, jsoFeedProfile, jsoFeedAudio: TlkJSONobject;
   iWallMsgsCount: Integer;
   i: Byte;
   iLevel: Integer;
@@ -980,10 +982,22 @@ begin
             if (sMediaType = 'audio') then
             begin
               sMsgText := sMediaType + jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
+              sAudioID := jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value + '_' +
+                          jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
+              HTMLAudio := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_audio_getbyid, [sAudioID])));
+              jsoFeedAudio := TlkJSON.ParseText(HTMLAudio) as TlkJSONobject;
+              try
+                sMsgText := TranslateW('audio') + ': '  +
+                            jsoFeedAudio.Field['response'].Child[0].Field['artist'].Value + ' - ' +
+                            jsoFeedAudio.Field['response'].Child[0].Field['title'].Value + Chr(13) + Chr(10) +
+                            jsoFeedAudio.Field['response'].Child[0].Field['url'].Value;
+              finally
+                jsoFeedAudio.Free;
+              end;
             end else
               if (sMediaType = 'photo') then
               begin
-                sMsgText := 'photo: ' +
+                sMsgText := TranslateW('photo') + ': ' + 
                             vk_url_prefix + vk_url_host + '/photo' +
                             jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value + '_' +
                             jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
@@ -995,7 +1009,7 @@ begin
                 end else
                   if (sMediaType = 'graffiti') then
                   begin
-                    sMsgText := sMediaType + jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value +
+                    sMsgText := TranslateW('graffiti') + ': ' + jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value +
                                 Chr(13) + Chr(10) +
                                 jsoFeed.Field['response'].Child[i].Field['media'].Field['thumb_src'].Value;
                     { the code below doesn't work - from_id is unknown
@@ -1006,7 +1020,7 @@ begin
                   end else
                     if (sMediaType = 'video') then
                     begin
-                      sMsgText := 'video: ' +
+                      sMsgText := TranslateW('video') + ': ' +
                                   vk_url_prefix + vk_url_host + '/video' +
                                   jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value + '_' +
                                   jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;

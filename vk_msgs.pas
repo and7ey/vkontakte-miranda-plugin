@@ -195,12 +195,13 @@ end;
 // (it is called from separate thread, so minimum number of WRITE global variables is used)
 // -----------------------------------------------------------------------------
 procedure vk_GetMsgsFriendsEtc();
-var HTML, HTMLInbox: String; // html content of the pages received
+var HTML, HTMLInbox, HTMLAttachment: String; // html content of the pages received
     MsgsCount: Integer; // temp variable to keep number of new msgs received
     FriendsCount: Integer; // temp variable to keep number of new authorization requests received
     MsgID: String;
     iMsgID: Integer;
-    MsgText, MsgTitle: WideString;
+    iLevel: Integer;
+    MsgText, MsgTitle, MsgAttachment: WideString;
     MsgSenderName: WideString;
     i, ii, temppos: Integer;
     iMsgDate: Integer;
@@ -217,6 +218,7 @@ var HTML, HTMLInbox: String; // html content of the pages received
     FeedRoot, FeedMsgs, FeedMsgsItems: TlkJSONobject; // objects to keep parsed JSON data
 
     FeedMRoot, FeedProfile: TlkJSONobject; // objects to keep messages received in JSON format
+    jsoFeedAttachment: TlkJSONobject;
 
 begin
  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Checking for new incoming messages, new authorization requests (friends) etc...'));
@@ -278,6 +280,60 @@ begin
                MsgText := FeedMRoot.Field['response'].Child[i].Field['body'].Value;
                MsgTitle := FeedMRoot.Field['response'].Child[i].Field['title'].Value;
                Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '('+IntToStr(iMsgID)+'), title: '+String(MsgTitle)+', text '+String(MsgText)));
+               iLevel := 2;
+               if Pos('attachments', GenerateReadableText(FeedMRoot.Field['response'].Child[i], iLevel)) > 0 then
+               begin
+                 if Trim(MsgText) <> '' then
+                   MsgText := MsgText + Chr(13) + Chr(10) + Chr(13) + Chr(10);
+                 // only 1 attachment can be now
+                 // for ia := 0 to FeedMRoot.Field['response'].Child[i].Field['attachments'].Count-1 do
+                 MsgAttachment := FeedMRoot.Field['response'].Child[i].Field['attachments'].Child[0].Value;
+                 if Pos('audio', MsgAttachment) > 0 then // audio is attached to the message
+                 begin
+                   MsgAttachment := TextBetween(MsgAttachment, '[[audio', ']]');
+                   HTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_audio_getbyid, [MsgAttachment])));
+                   jsoFeedAttachment := TlkJSON.ParseText(HTMLAttachment) as TlkJSONobject;
+                   try
+                     MsgText := MsgText +
+                                TranslateW('audio') + ': ' +
+                                jsoFeedAttachment.Field['response'].Child[0].Field['artist'].Value + ' - ' +
+                                jsoFeedAttachment.Field['response'].Child[0].Field['title'].Value + Chr(13) + Chr(10) +
+                                jsoFeedAttachment.Field['response'].Child[0].Field['url'].Value;
+                   finally
+                     jsoFeedAttachment.Free;
+                   end;
+                 end else
+                   if Pos('photo', MsgAttachment) > 0 then // photo is attached to the message
+                   begin
+                     MsgAttachment := TextBetween(MsgAttachment, '[[photo', ']]');
+                     HTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_photos_getbyid, [MsgAttachment])));
+                     jsoFeedAttachment := TlkJSON.ParseText(HTMLAttachment) as TlkJSONobject;
+                     try
+                       MsgText := MsgText +
+                                  TranslateW('photo') + ': ' + Chr(13) + Chr(10) +
+                                  jsoFeedAttachment.Field['response'].Child[0].Field['src'].Value;
+                     finally
+                       jsoFeedAttachment.Free;
+                     end;
+                   end else
+                     if Pos('video', MsgAttachment) > 0 then // video is attached to the message
+                     begin
+                       MsgAttachment := TextBetween(MsgAttachment, '[[video', ']]');
+                       HTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_video_get, [MsgAttachment])));
+                       jsoFeedAttachment := TlkJSON.ParseText(HTMLAttachment) as TlkJSONobject;
+                       try
+                         MsgText := MsgText +
+                                    TranslateW('video') + ': ' +
+                                    jsoFeedAttachment.Field['response'].Child[1].Field['title'].Value + Chr(13) + Chr(10) +
+                                    jsoFeedAttachment.Field['response'].Child[1].Field['description'].Value + Chr(13) + Chr(10) +
+                                    vk_url_prefix + vk_url_host + '/video' +
+                                    MsgAttachment;
+                       finally
+                         jsoFeedAttachment.Free;
+                       end;
+                     end;
+               end;
+
                if (iMsgID > 0) and (iMsgDate > 0) and (MsgSender > 0) and (MsgText <> '') then
                begin
                  // remove empty subject, if user would like to
@@ -716,8 +772,8 @@ begin
       HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
       HTMLDate := Trim(HTMLRemoveTags(HTMLDate));
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) HTMLDate: '+HTMLDate));;
-      if Pos('сегодня', HTMLDate)>0 then DayTime := Date else
-        if Pos('вчера', HTMLDate)>0 then DayTime := Date - 1 else
+      if (Pos('сегодня', HTMLDate)>0) or (Pos('сьогодні', HTMLDate)>0) then DayTime := Date else
+        if (Pos('вчера', HTMLDate)>0) or (Pos('вчора', HTMLDate)>0) then DayTime := Date - 1 else
            DayTime := RusDateToDateTime(HTMLDate, true);
 
       HTMLDay := TextBetweenTagsAttrInc(HTML, 'div', 'class', 'items_wrap');
@@ -855,7 +911,7 @@ begin
 
           if DBGetContactSettingByte(0, piShortName, opt_NewsSeparateContact, 0) = 1 then
           begin // display news in a separate contact
-            ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234), // separate contact ID, 1234 by default
+            ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234567890), // separate contact ID, 1234567890 by default
                                       DBReadUnicode(0, piShortName, opt_NewsSeparateContactName, TranslateW('News')), // separate contact nick, translated 'News' by default
                                       ID_STATUS_OFFLINE, // status
                                       1); // friend = yes
@@ -1039,7 +1095,7 @@ begin
           NewsText := NewsAll[CurrNews].NText;
 
           // display news in a separate contact
-          ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234), // separate contact ID, 1234 by default
+          ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234567890), // separate contact ID, 1234567890 by default
                                     DBReadUnicode(0, piShortName, opt_NewsSeparateContactName, TranslateW('News')), // separate contact nick, translated 'News' by default
                                     ID_STATUS_OFFLINE, // status
                                     1); // friend = yes
@@ -1256,7 +1312,7 @@ begin
           NewsText := NewsAll[CurrNews].NText;
 
           // display news in a separate contact
-          ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234), // separate contact ID, 1234 by default
+          ContactID := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234567890), // separate contact ID, 1234567890 by default
                                     DBReadUnicode(0, piShortName, opt_NewsSeparateContactName, TranslateW('News')), // separate contact nick, translated 'News' by default
                                     ID_STATUS_OFFLINE, // status
                                     1); // friend = yes

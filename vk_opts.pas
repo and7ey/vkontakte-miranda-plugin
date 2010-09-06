@@ -109,7 +109,6 @@ begin
   odp.pfnDlgProc := @DlgProcOptionsNews;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
 
-  { TEMP: disabled!
   odp.szTab.a := 'Groups';
   odp.pszTemplate := 'SETTINGS_GROUPS'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsGroups;
@@ -119,7 +118,6 @@ begin
   odp.pszTemplate := 'SETTINGS_COMMENTS'; // identifies template from res file
   odp.pfnDlgProc := @DlgProcOptionsComments;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
-  }
 
   odp.szTab.a := 'Ignore';
   odp.pszTemplate := 'SETTINGS_IGNORE'; // identifies template from res file
@@ -874,7 +872,7 @@ begin
         // translate all dialog texts
         TranslateDialogDefault(Dialog);
 
-        val := DBGetContactSettingByte(0, piShortName, opt_GroupsSupport, 1);
+        val := DBGetContactSettingByte(0, piShortName, opt_GroupsSupport, 0);
         CheckDlgButton(dialog, VK_OPT_GROUPSSUPPORT, val);
 
         val := DBGetContactSettingDWord(0, piShortName, opt_GroupsSecs, 300);
@@ -943,7 +941,7 @@ begin
         // translate all dialog texts
         TranslateDialogDefault(Dialog);
 
-        val := DBGetContactSettingByte(0, piShortName, opt_CommentsSupport, 1);
+        val := DBGetContactSettingByte(0, piShortName, opt_CommentsSupport, 0);
         CheckDlgButton(dialog, VK_OPT_COMMENTSSUPPORT, val);
 
         val := DBGetContactSettingDWord(0, piShortName, opt_CommentsSecs, 300);
