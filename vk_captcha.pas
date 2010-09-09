@@ -35,16 +35,14 @@ interface
 
 uses
   m_api,
-
   vk_global, // module with global variables and constant used
-  vk_http, // module to connect with the site
+  vk_http,   // module to connect with the site
   vk_common, // module with common functions
 
-  Windows,
-  Messages;
+  Messages, Windows;
 
-  function DlgCaptcha(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
-  function ProcessCaptcha(CaptchaId: String; CaptchaURL: String = ''): String;
+function DlgCaptcha(Dialog: HWnd; Msg: cardinal; wParam, lParam: DWord): boolean; stdcall;
+function ProcessCaptcha(CaptchaId: string; CaptchaURL: string = ''): string;
 
 implementation
 
@@ -53,23 +51,23 @@ uses
   SysUtils;
 
 var
-  hBmpCaptcha: THandle;
+  hBmpCaptcha:          THandle;
   EditFunctionOriginal: Pointer;
-  CaptchaValue: String;
+  CaptchaValue:         string;
 
-// =============================================================================
-// Dialog function to display captcha
-// -----------------------------------------------------------------------------
-function DlgCaptcha(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+ // =============================================================================
+ // Dialog function to display captcha
+ // -----------------------------------------------------------------------------
+function DlgCaptcha(Dialog: HWnd; Msg: cardinal; wParam, lParam: DWord): boolean; stdcall;
 
   // new edit function for input box
   // allows only latin characters and digits, they are input regardless of user's
   // current keyboard layout/lang
-  function EditFunctionNew(Wnd: HWnd; Msg, wParam, lParam: Integer): Integer; stdcall;
+  function EditFunctionNew(Wnd: HWnd; Msg, wParam, lParam: integer): integer; stdcall;
 
     // deletes the requested message from the queue, but throw back
     // any WM_QUIT msgs that PeekMessage may also return
-    procedure KillMessage(Wnd: HWnd; Msg: Integer);
+    procedure KillMessage(Wnd: HWnd; Msg: integer);
     var
       M: TMsg;
     begin
@@ -86,10 +84,12 @@ function DlgCaptcha(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean
       begin
         KillMessage(Wnd, WM_CHAR);
         //if SendMessage(Wnd, WM_GETTEXTLENGTH, 0, 0) < 5 then // max 5 symbols are allowed
-          case LoWord(wParam) of
-            Ord('A')..Ord('Z'): PostMessage(Wnd, WM_CHAR, LoWord(wParam)+32, 0); // post lowercase latin symbol
-            Ord('0')..Ord('9'): PostMessage(Wnd, WM_CHAR, LoWord(wParam), 0);
-          end;
+        case LoWord(wParam) of
+          Ord('A')..Ord('Z'):
+            PostMessage(Wnd, WM_CHAR, LoWord(wParam) + 32, 0); // post lowercase latin symbol
+          Ord('0')..Ord('9'):
+            PostMessage(Wnd, WM_CHAR, LoWord(wParam), 0);
+        end;
         Result := 0;
         Exit;
       end;
@@ -98,81 +98,81 @@ function DlgCaptcha(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean
     Result := CallWindowProc(EditFunctionOriginal, Wnd, Msg, wParam, lParam);
   end;
 
-// taken from m_imgsrvc.inc
+  // taken from m_imgsrvc.inc
 const
   MS_IMG_LOAD = 'IMG/Load';
 var
-  rc: TRect;
-  DC, BitmapDC : hDC;
-  memBmp: THandle;
+  rc:           TRect;
+  DC, BitmapDC: hDC;
+  memBmp:       THandle;
 begin
   Result := False;
   case Msg of
-     WM_INITDIALOG:
-       begin
-         // translate all dialog texts
-         TranslateDialogDefault(Dialog);
-         // assign window icon
-         SendMessage(Dialog, WM_SETICON, ICON_BIG, LoadIcon(hInstance, 'ICON_PROTO'));
-         // load picture, filename is passed in lParam during dialog creation
-         hBmpCaptcha := pluginLink^.CallService(MS_IMG_LOAD, windows.wParam(lParam), 0);
-         // delete our captcha file
-         DeleteFile(String(lParam));
-         SendMessage(GetDlgItem(Dialog, VK_CAPTCHA_CODE), EM_SETLIMITTEXT, 5, 0);
-         // assign new procedure to work with VK_CAPTCHA_CODE edit control
-         EditFunctionOriginal := Pointer(SetWindowLong(GetDlgItem(Dialog, VK_CAPTCHA_CODE), GWL_WNDPROC, Integer(@EditFunctionNew)));
-         Result := True;
-       end;
-     WM_CLOSE:
-       begin
-         EndDialog(Dialog, 0);
-       end;
-     WM_DRAWITEM:
-       begin
-         DC := GetDC(GetDlgItem(Dialog, VK_CAPTCHA_PIC));
-         // get size of our picture control
-         GetClientRect(GetDlgItem(Dialog, VK_CAPTCHA_PIC), rc);
-         // clear it
-         FillRect(DC, rc, GetSysColorBrush(COLOR_BTNFACE));
+    WM_INITDIALOG:
+    begin
+      // translate all dialog texts
+      TranslateDialogDefault(Dialog);
+      // assign window icon
+      SendMessage(Dialog, WM_SETICON, ICON_BIG, LoadIcon(hInstance, 'ICON_PROTO'));
+      // load picture, filename is passed in lParam during dialog creation
+      hBmpCaptcha := pluginLink^.CallService(MS_IMG_LOAD, Windows.wParam(lParam), 0);
+      // delete our captcha file
+      DeleteFile(string(lParam));
+      SendMessage(GetDlgItem(Dialog, VK_CAPTCHA_CODE), EM_SETLIMITTEXT, 5, 0);
+      // assign new procedure to work with VK_CAPTCHA_CODE edit control
+      EditFunctionOriginal := Pointer(SetWindowLong(GetDlgItem(Dialog, VK_CAPTCHA_CODE), GWL_WNDPROC, integer(@EditFunctionNew)));
+      Result := True;
+    end;
+    WM_CLOSE:
+    begin
+      EndDialog(Dialog, 0);
+    end;
+    WM_DRAWITEM:
+    begin
+      DC := GetDC(GetDlgItem(Dialog, VK_CAPTCHA_PIC));
+      // get size of our picture control
+      GetClientRect(GetDlgItem(Dialog, VK_CAPTCHA_PIC), rc);
+      // clear it
+      FillRect(DC, rc, GetSysColorBrush(COLOR_BTNFACE));
 
-         if hBmpCaptcha <> 0 then
-         begin
-           BitmapDC := CreateCompatibleDC(DC);
-           memBmp := SelectObject(BitmapDC, hBmpCaptcha);
-           BitBlt(DC,
-                  (rc.Right - 130) div 2,
-                  (rc.Bottom - 50) div 2,
-                  130, // captcha picture width
-                  50,  //                 height
-                  BitmapDC, 0, 0, SRCCOPY);
-           DeleteDC(BitmapDC);
-           DeleteObject(memBmp);
-         end;
+      if hBmpCaptcha <> 0 then
+      begin
+        BitmapDC := CreateCompatibleDC(DC);
+        memBmp := SelectObject(BitmapDC, hBmpCaptcha);
+        BitBlt(DC,
+          (rc.Right - 130) div 2,
+          (rc.Bottom - 50) div 2,
+          130, // captcha picture width
+          50,  //                 height
+          BitmapDC, 0, 0, SRCCOPY);
+        DeleteDC(BitmapDC);
+        DeleteObject(memBmp);
+      end;
 
-         FrameRect(DC, rc, GetSysColorBrush(COLOR_BTNSHADOW));
+      FrameRect(DC, rc, GetSysColorBrush(COLOR_BTNSHADOW));
 
-         ReleaseDC(GetDlgItem(Dialog, VK_CAPTCHA_PIC), DC);
+      ReleaseDC(GetDlgItem(Dialog, VK_CAPTCHA_PIC), DC);
 
-         Result := True;
-       end;
-     WM_COMMAND:
-       begin
-         case wParam of
-           VK_CAPTCHA_OK:
-             begin
-               CaptchaValue := GetDlgString(dialog, VK_CAPTCHA_CODE);
-               EndDialog(Dialog, 0);
-               Result := True;
-             end;
-         end;
-       end;
+      Result := True;
+    end;
+    WM_COMMAND:
+    begin
+      case wParam of
+        VK_CAPTCHA_OK:
+        begin
+          CaptchaValue := GetDlgString(dialog, VK_CAPTCHA_CODE);
+          EndDialog(Dialog, 0);
+          Result := True;
+        end;
+      end;
+    end;
   end;
 end;
 
-function ProcessCaptcha(CaptchaId: String; CaptchaURL: String = ''): String;
+function ProcessCaptcha(CaptchaId: string; CaptchaURL: string = ''): string;
 var
-  TempDir, TempFile: String;
-  Buf: array[0..1023] of Char;
+  TempDir, TempFile: string;
+  Buf:               array[0..1023] of char;
 begin
   if CaptchaURL = '' then
     CaptchaURL := vk_url_prefix + vk_url_host + '/captcha.php?s=1&sid=' + CaptchaId;
@@ -180,7 +180,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_CaptchaProcessing) ... captcha URL is ' + CaptchaURL));
   if (CaptchaId <> '') and (CaptchaURL <> '') then
   begin
-    SetString(TempDir, Buf, GetTempPath(Sizeof(Buf)-1, Buf)); // getting path to Temp directory
+    SetString(TempDir, Buf, GetTempPath(Sizeof(Buf) - 1, Buf)); // getting path to Temp directory
     TempFile := TempDir + 'vk_captcha.jpg';
     if HTTP_NL_GetPicture(CaptchaURL, TempFile) then
     begin // file downloaded successfully
@@ -188,7 +188,8 @@ begin
       // ask user to input the value
       DialogBoxParamW(hInstance, MAKEINTRESOURCEW(WideString('VK_CAPTCHA')), 0, @DlgCaptcha, Windows.lParam(TempFile));
       Result := CaptchaValue;
-    end else
+    end
+    else
       Result := 'captcha_download_failed';
   end;
 end;

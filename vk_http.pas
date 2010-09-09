@@ -39,65 +39,64 @@ uses
 
   vk_global, // module with global variables and constant used
 
-  Windows,
-  SysUtils,
-  Classes;
+  Classes, SysUtils,
+  Windows;
 
-  procedure HTTP_NL_Init();
-  function HTTP_NL_Get(szUrl: String; szRequestType: Integer = REQUEST_GET): String;
-  function HTTP_NL_GetSession(szUrl: String; szRequestType: Integer = REQUEST_HEAD): String;
-  function HTTP_NL_Post(szUrl: String; szData: String; ContentType: String; Boundary: String; szHeaders: String = ''): String;
-  function HTTP_NL_PostPicture(szUrl: String; szData: String; Boundary: String): String;
-  function HTTP_NL_GetPicture(szUrl, szFileName: String): Boolean;
+procedure HTTP_NL_Init();
+function HTTP_NL_Get(szUrl: string; szRequestType: integer = REQUEST_GET): string;
+function HTTP_NL_GetSession(szUrl: string; szRequestType: integer = REQUEST_HEAD): string;
+function HTTP_NL_Post(szUrl: string; szData: string; ContentType: string; Boundary: string; szHeaders: string = ''): string;
+function HTTP_NL_PostPicture(szUrl: string; szData: string; Boundary: string): string;
+function HTTP_NL_GetPicture(szUrl, szFileName: string): boolean;
 
 implementation
 
 uses
+  htmlparse, StrUtils, vk_core; // module with core functions
 
-  vk_core, htmlparse, StrUtils; // module with core functions
-
-// =============================================================================
-// function initiliaze connection with internet
-// global var used: vk_hNetlibUser = contains handle to netlibuser created
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // function initiliaze connection with internet
+ // global var used: vk_hNetlibUser = contains handle to netlibuser created
+ // -----------------------------------------------------------------------------
 procedure HTTP_NL_Init();
-var nlu: TNETLIBUSER;
+var
+  nlu: TNETLIBUSER;
 begin
   FillChar(nlu, sizeof(nlu), 0);
   nlu.cbSize := sizeof(nlu);
-	nlu.flags := NUF_OUTGOING or NUF_HTTPCONNS or NUF_NOHTTPSOPTION;
-	nlu.szSettingsModule := piShortName;
-	nlu.szDescriptiveName := Translate('VKontakte HTTP connections');
-  vk_hNetlibUser := pluginLink^.CallService(MS_NETLIB_REGISTERUSER, 0,  Windows.lparam(@nlu));
+  nlu.flags := NUF_OUTGOING or NUF_HTTPCONNS or NUF_NOHTTPSOPTION;
+  nlu.szSettingsModule := piShortName;
+  nlu.szDescriptiveName := Translate('VKontakte HTTP connections');
+  vk_hNetlibUser := pluginLink^.CallService(MS_NETLIB_REGISTERUSER, 0, Windows.lparam(@nlu));
   Netlib_Log(vk_hNetlibUser, PChar('Netlib service registered.'));
 end;
 
-// =============================================================================
-// function to download webpage from the internet
-// szUrl = URL of the webpage to be retrieved
-// szRequestType = type of request (REQUEST_GET, REQUEST_HEAD)
-// return value = HTML string
-// global var used: vk_hNetlibUser = contains handle to netlibuser created
-// -----------------------------------------------------------------------------
-function HTTP_NL_Get(szUrl: String; szRequestType: Integer = REQUEST_GET): String;
-
-var nlhr: TNETLIBHTTPREQUEST;
-    nlhrReply: PNETLIBHTTPREQUEST;
-    szRedirUrl: String;
-    i: Integer;
-    szHost: String;
-
+ // =============================================================================
+ // function to download webpage from the internet
+ // szUrl = URL of the webpage to be retrieved
+ // szRequestType = type of request (REQUEST_GET, REQUEST_HEAD)
+ // return value = HTML string
+ // global var used: vk_hNetlibUser = contains handle to netlibuser created
+ // -----------------------------------------------------------------------------
+function HTTP_NL_Get(szUrl: string; szRequestType: integer = REQUEST_GET): string;
+var
+  nlhr:       TNETLIBHTTPREQUEST;
+  nlhrReply:  PNETLIBHTTPREQUEST;
+  szRedirUrl: string;
+  i:          integer;
+  szHost:     string;
+  sCookies:   string;
 begin
-  result := ' ';
+  Result := ' ';
 
   // create 'storage' for cookies
-  if Not Assigned(CookiesGlobal) Then
-  Begin
+  if not Assigned(CookiesGlobal) then
+  begin
     CookiesGlobal := TStringList.Create;
     CookiesGlobal.Sorted := True;
     CookiesGlobal.Duplicates := dupIgnore;
     CookiesGlobal.Delimiter := ' ';
-  End;
+  end;
 
   FillChar(nlhr, sizeof(nlhr), 0);
   nlhrReply := @nlhr;
@@ -110,16 +109,17 @@ begin
 
   nlhr.headersCount := 5;
   SetLength(nlhr.headers, 5);
-  nlhr.headers[0].szName  := 'User-Agent';
+  nlhr.headers[0].szName := 'User-Agent';
   nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
-  nlhr.headers[1].szName  := 'Connection';
+  nlhr.headers[1].szName := 'Connection';
   nlhr.headers[1].szValue := 'Keep-Alive';
-  nlhr.headers[2].szName  := 'Cache-Control';
+  nlhr.headers[2].szName := 'Cache-Control';
   nlhr.headers[2].szValue := 'no-cache';
-  nlhr.headers[3].szName  := 'Pragma';
+  nlhr.headers[3].szName := 'Pragma';
   nlhr.headers[3].szValue := 'no-cache';
-  nlhr.headers[4].szName  := 'Cookie';
-  nlhr.headers[4].szValue := PChar(CookiesGlobal.DelimitedText);
+  sCookies := CookiesGlobal.DelimitedText;
+  nlhr.headers[4].szName := 'Cookie';
+  nlhr.headers[4].szValue := PChar(sCookies);
 
   while (Result = ' ') do
   begin
@@ -127,96 +127,99 @@ begin
     // fast exit when Miranda terminating
     if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
     begin
-       Result := '';
-       Exit;
+      Result := '';
+      Exit;
     end;
 
-    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Get) Dowloading page: '+ szUrl));
+    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Get) Dowloading page: ' + szUrl));
 
     // download the page
     nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
-    Netlib_Log(vk_hNetlibUser, PChar('nlhrReply <> nil: '+ ifthen(nlhrReply <> nil, 'true', 'false')));
-    if (nlhrReply <> nil) Then
-    Begin
+    Netlib_Log(vk_hNetlibUser, PChar('nlhrReply <> nil: ' + ifthen(nlhrReply <> nil, 'true', 'false')));
+    if (nlhrReply <> nil) then
+    begin
       // read cookies & store it
-      For i:=0 To nlhrReply.headersCount-1 Do
-      Begin
+      for i := 0 to nlhrReply.headersCount - 1 do
+      begin
         // read cookie
         if nlhrReply.headers[i].szName = 'Set-Cookie' then
           CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
-      End;
+      end;
 
-      Netlib_Log(vk_hNetlibUser, PChar('nlhrReply.resultCode: '+ IntToStr(nlhrReply.resultCode)));
+      Netlib_Log(vk_hNetlibUser, PChar('nlhrReply.resultCode: ' + IntToStr(nlhrReply.resultCode)));
       case nlhrReply.resultCode of
 
         // if the receieved code is 200 OK
-        200:  begin
-                ConnectionErrorsCount := 0;
-                // save the retrieved data
-                Result := nlhrReply.pData;
-                if nlhrReply.dataLength = 0 Then
-                  Result := ''; // DATA_EMPTY;
-              end;
+        200:
+        begin
+          ConnectionErrorsCount := 0;
+          // save the retrieved data
+          Result := nlhrReply.pData;
+          if nlhrReply.dataLength = 0 then
+            Result := ''; // DATA_EMPTY;
+        end;
 
         // if the receieved code is 302 Moved, Found, etc
         // workaround for url forwarding
-        302:  begin
-                Netlib_Log(vk_hNetlibUser, PChar('szRequestType <> REQUEST_HEAD:'+ ifthen(szRequestType <> REQUEST_HEAD, 'true', 'false')));
-                if szRequestType <> REQUEST_HEAD then  // no need to redirect if REQUEST_HEAD
+        302:
+        begin
+          Netlib_Log(vk_hNetlibUser, PChar('szRequestType <> REQUEST_HEAD:' + ifthen(szRequestType <> REQUEST_HEAD, 'true', 'false')));
+          if szRequestType <> REQUEST_HEAD then  // no need to redirect if REQUEST_HEAD
+          begin
+            ConnectionErrorsCount := 0;
+            // get the url for the new location and save it to szInfo
+            // look for the reply header "Location"
+            for i := 0 to nlhrReply.headersCount - 1 do
+            begin
+              Netlib_Log(vk_hNetlibUser, PChar('"' + nlhrReply.headers[i].szName + '"'));
+              if nlhrReply.headers[i].szName = 'Location' then
+              begin
+                // gap: the code below will not work correctly in some cases
+                // if location url doesn't contain host name, we should add it
+                szHost := Copy(szUrl, Pos('://', szUrl) + 3, LastDelimiter('/', szUrl) - Pos('://', szUrl) - 3);
+                if Pos(szHost, nlhrReply.headers[i].szValue) = 0 then
                 begin
-                  ConnectionErrorsCount := 0;
-                  // get the url for the new location and save it to szInfo
-                  // look for the reply header "Location"
-                  For i:=0 To nlhrReply.headersCount-1 Do
-                  begin
-                    Netlib_Log(vk_hNetlibUser, PChar('"'+nlhrReply.headers[i].szName+'"'));
-                    if nlhrReply.headers[i].szName = 'Location' then
-                    begin
-                      // gap: the code below will not work correctly in some cases
-                      // if location url doesn't contain host name, we should add it
-                      szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
-                      if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
-                      begin
-                        if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
-                          szHost := szHost + '/';
-                        szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
-                      end
-                      Else
-                        szRedirUrl := nlhrReply.headers[i].szValue;
-                      Netlib_Log(vk_hNetlibUser, PChar('RedirUrl: '+ szRedirUrl));
-
-                      nlhr.szUrl := PChar(szRedirUrl);
-
-                      if Pos('http://pda.vkontakte.ru/index', szRedirUrl) = 0 then // block this page to support invisible mode
-                        Result := HTTP_NL_Get(szRedirUrl)                          // not the best solution
-                      else
-                        Result := 'div class="menu2"';
-
-                      CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
-                      Exit;
-                    end
-                  end
+                  if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                    szHost := szHost + '/';
+                  szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue;
                 end
-                 else
-                begin
-                  //alexei.emanov. Need to stop endless loop
-                  Result := '';
-                  Exit;
-                end;
-              end;
+                else
+                  szRedirUrl := nlhrReply.headers[i].szValue;
+                Netlib_Log(vk_hNetlibUser, PChar('RedirUrl: ' + szRedirUrl));
 
-        // return error code if the receieved code is neither 200 OK nor 302 Moved
-        else  begin
-                // change status of the protocol to offline
-                Inc(ConnectionErrorsCount);
-                if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
-                begin
-                  ConnectionErrorsCount := 0;
-                  vk_SetStatus(ID_STATUS_OFFLINE);
-                end;
-                // store the error code
-                Result := nlhrReply.pData;
+                nlhr.szUrl := PChar(szRedirUrl);
+
+                if Pos('http://pda.vkontakte.ru/index', szRedirUrl) = 0 then // block this page to support invisible mode
+                  Result := HTTP_NL_Get(szRedirUrl)                          // not the best solution
+                else
+                  Result := 'div class="menu2"';
+
+                CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+                Exit;
               end;
+            end;
+          end
+          else
+          begin
+            //alexei.emanov. Need to stop endless loop
+            Result := '';
+            Exit;
+          end;
+        end;
+
+          // return error code if the receieved code is neither 200 OK nor 302 Moved
+        else
+        begin
+          // change status of the protocol to offline
+          Inc(ConnectionErrorsCount);
+          if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
+          begin
+            ConnectionErrorsCount := 0;
+            vk_SetStatus(ID_STATUS_OFFLINE);
+          end;
+          // store the error code
+          Result := nlhrReply.pData;
+        end;
 
       end;
 
@@ -232,34 +235,33 @@ begin
         vk_SetStatus(ID_STATUS_OFFLINE);
       end;
       // store the error code
-      Result:='NetLib error occurred!';
+      Result := 'NetLib error occurred!';
     end;
   end;
 end;
 
-// =============================================================================
-// function to get Signature for vkontakte API
-// should be re-written
-// -----------------------------------------------------------------------------
-function HTTP_NL_GetSession(szUrl: String; szRequestType: Integer = REQUEST_HEAD): String;
-
-var nlhr: TNETLIBHTTPREQUEST;
-    nlhrReply: PNETLIBHTTPREQUEST;
-    szRedirUrl: String;
-    i: Integer;
-    szHost: String;
-
+ // =============================================================================
+ // function to get Signature for vkontakte API
+ // should be re-written
+ // -----------------------------------------------------------------------------
+function HTTP_NL_GetSession(szUrl: string; szRequestType: integer = REQUEST_HEAD): string;
+var
+  nlhr:       TNETLIBHTTPREQUEST;
+  nlhrReply:  PNETLIBHTTPREQUEST;
+  szRedirUrl: string;
+  i:          integer;
+  szHost:     string;
 begin
-  result := ' ';
+  Result := ' ';
 
   // create 'storage' for cookies
-  if Not Assigned(CookiesGlobal) Then
-  Begin
+  if not Assigned(CookiesGlobal) then
+  begin
     CookiesGlobal := TStringList.Create;
     CookiesGlobal.Sorted := True;
     CookiesGlobal.Duplicates := dupIgnore;
     CookiesGlobal.Delimiter := ' ';
-  End;
+  end;
 
   FillChar(nlhr, sizeof(nlhr), 0);
   nlhrReply := @nlhr;
@@ -272,15 +274,15 @@ begin
 
   nlhr.headersCount := 5;
   SetLength(nlhr.headers, 5);
-  nlhr.headers[0].szName  := 'User-Agent';
+  nlhr.headers[0].szName := 'User-Agent';
   nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
-  nlhr.headers[1].szName  := 'Connection';
+  nlhr.headers[1].szName := 'Connection';
   nlhr.headers[1].szValue := 'Keep-Alive';
-  nlhr.headers[2].szName  := 'Cache-Control';
+  nlhr.headers[2].szName := 'Cache-Control';
   nlhr.headers[2].szValue := 'no-cache';
-  nlhr.headers[3].szName  := 'Pragma';
+  nlhr.headers[3].szName := 'Pragma';
   nlhr.headers[3].szValue := 'no-cache';
-  nlhr.headers[4].szName  := 'Cookie';
+  nlhr.headers[4].szName := 'Cookie';
   nlhr.headers[4].szValue := PChar(CookiesGlobal.DelimitedText);
 
   while (Result = ' ') do
@@ -289,85 +291,88 @@ begin
     // fast exit when Miranda terminating
     if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
     begin
-       Result := '';
-       Exit;
+      Result := '';
+      Exit;
     end;
 
-    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Get) Dowloading page: '+ szUrl));
+    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Get) Dowloading page: ' + szUrl));
 
     // download the page
     nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
-    if (nlhrReply <> nil) Then
-    Begin
+    if (nlhrReply <> nil) then
+    begin
       // read cookies & store it
-      For i:=0 To nlhrReply.headersCount-1 Do
-      Begin
+      for i := 0 to nlhrReply.headersCount - 1 do
+      begin
         // read cookie
         if nlhrReply.headers[i].szName = 'Set-Cookie' then
           CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
-      End;
+      end;
 
       case nlhrReply.resultCode of
 
         // if the receieved code is 200 OK
-        200:  begin
-                ConnectionErrorsCount := 0;
-                // save the retrieved data
-                Result := nlhrReply.pData;
-                if nlhrReply.dataLength = 0 Then
-                  Result := ''; // DATA_EMPTY;
-              end;
+        200:
+        begin
+          ConnectionErrorsCount := 0;
+          // save the retrieved data
+          Result := nlhrReply.pData;
+          if nlhrReply.dataLength = 0 then
+            Result := ''; // DATA_EMPTY;
+        end;
 
         // if the receieved code is 302 Moved, Found, etc
         // workaround for url forwarding
-        302:  begin
-                  ConnectionErrorsCount := 0;
-                  // get the url for the new location and save it to szInfo
-                  // look for the reply header "Location"
-                  For i:=0 To nlhrReply.headersCount-1 Do
-                  begin
-                    if nlhrReply.headers[i].szName = 'Location' then
-                    begin
-                      // gap: the code below will not work correctly in some cases
-                      // if location url doesn't contain host name, we should add it
-                      szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
-                      if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
-                      begin
-                        if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
-                          szHost := szHost + '/';
-                        szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
-                      end
-                      Else
-                        szRedirUrl := nlhrReply.headers[i].szValue;
+        302:
+        begin
+          ConnectionErrorsCount := 0;
+          // get the url for the new location and save it to szInfo
+          // look for the reply header "Location"
+          for i := 0 to nlhrReply.headersCount - 1 do
+          begin
+            if nlhrReply.headers[i].szName = 'Location' then
+            begin
+              // gap: the code below will not work correctly in some cases
+              // if location url doesn't contain host name, we should add it
+              szHost := Copy(szUrl, Pos('://', szUrl) + 3, LastDelimiter('/', szUrl) - Pos('://', szUrl) - 3);
+              if Pos(szHost, nlhrReply.headers[i].szValue) = 0 then
+              begin
+                if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                  szHost := szHost + '/';
+                szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue;
+              end
+              else
+                szRedirUrl := nlhrReply.headers[i].szValue;
 
-                      nlhr.szUrl := PChar(szRedirUrl);
+              nlhr.szUrl := PChar(szRedirUrl);
 
-                      if Pos('session', szRedirUrl) > 0 then
-                      begin
-                        vk_id := TextBetween(szRedirUrl, 'mid%22%3A', '%2C'); // extract user's id
-                        vk_secret := TextBetween(szRedirUrl, 'secret%22%3A%22', '%22'); // extract user's id
-                        vk_session_id := TextBetween(szRedirUrl, 'sid%22%3A%22', '%22'); // extract session's id
-                        Result := vk_session_id;
-                      end;
-
-                      CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
-                      Exit;
-                    end
-                end;
+              if Pos('session', szRedirUrl) > 0 then
+              begin
+                vk_id := TextBetween(szRedirUrl, 'mid%22%3A', '%2C'); // extract user's id
+                vk_secret := TextBetween(szRedirUrl, 'secret%22%3A%22', '%22'); // extract user's id
+                vk_session_id := TextBetween(szRedirUrl, 'sid%22%3A%22', '%22'); // extract session's id
+                Result := vk_session_id;
               end;
 
-        // return error code if the receieved code is neither 200 OK nor 302 Moved
-        else  begin
-                // change status of the protocol to offline
-                Inc(ConnectionErrorsCount);
-                if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
-                begin
-                  ConnectionErrorsCount := 0;
-                  vk_SetStatus(ID_STATUS_OFFLINE);
-                end;
-                // store the error code
-                Result := nlhrReply.pData;
-              end;
+              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+              Exit;
+            end;
+          end;
+        end;
+
+          // return error code if the receieved code is neither 200 OK nor 302 Moved
+        else
+        begin
+          // change status of the protocol to offline
+          Inc(ConnectionErrorsCount);
+          if ConnectionErrorsCount = 2 then // disconnect only when second attemp unsuccessful
+          begin
+            ConnectionErrorsCount := 0;
+            vk_SetStatus(ID_STATUS_OFFLINE);
+          end;
+          // store the error code
+          Result := nlhrReply.pData;
+        end;
 
       end;
 
@@ -383,40 +388,40 @@ begin
         vk_SetStatus(ID_STATUS_OFFLINE);
       end;
       // store the error code
-      Result:='NetLib error occurred!';
+      Result := 'NetLib error occurred!';
     end;
   end;
 end;
 
 
-// =============================================================================
-// function to post data to the site
-// szUrl = URL of the webpage to be retrieved
-// szData = data to be posted
-// return value = HTML string
-// global var used: vk_hNetlibUser = contains handle to netlibuser created
-//
-// TODO: enable usage of szHeaders value
-//       re-write usage of Boundary (in to order just to pass values)
-// -----------------------------------------------------------------------------
-function HTTP_NL_Post(szUrl: String; szData: String; ContentType: String; Boundary: String; szHeaders: String = ''): String;
-var nlhr: TNETLIBHTTPREQUEST;
-    nlhrReply: PNETLIBHTTPREQUEST;
-    szRedirUrl: String;
-    szHost: String;
-    i: Integer;
+ // =============================================================================
+ // function to post data to the site
+ // szUrl = URL of the webpage to be retrieved
+ // szData = data to be posted
+ // return value = HTML string
+ // global var used: vk_hNetlibUser = contains handle to netlibuser created
 
+ // TODO: enable usage of szHeaders value
+ //       re-write usage of Boundary (in to order just to pass values)
+ // -----------------------------------------------------------------------------
+function HTTP_NL_Post(szUrl: string; szData: string; ContentType: string; Boundary: string; szHeaders: string = ''): string;
+var
+  nlhr:       TNETLIBHTTPREQUEST;
+  nlhrReply:  PNETLIBHTTPREQUEST;
+  szRedirUrl: string;
+  szHost:     string;
+  i:          integer;
 begin
-  result := ' ';
+  Result := ' ';
 
   // create 'storage' for cookies
-  if Not Assigned(CookiesGlobal) Then
-  Begin
+  if not Assigned(CookiesGlobal) then
+  begin
     CookiesGlobal := TStringList.Create;
     CookiesGlobal.Sorted := True;
     CookiesGlobal.Duplicates := dupIgnore;
     CookiesGlobal.Delimiter := ' ';
-  End;
+  end;
 
   FillChar(nlhr, sizeof(nlhr), 0);
   nlhrReply := @nlhr;
@@ -428,86 +433,89 @@ begin
   nlhr.szUrl := PChar(szUrl);
 
   nlhr.pData := PChar(szData);
-  nlhr.dataLength := Length(szData)+1;
+  nlhr.dataLength := Length(szData) + 1;
 
   nlhr.headersCount := 6;
   SetLength(nlhr.headers, 6);
-  nlhr.headers[0].szName  := 'User-Agent';
+  nlhr.headers[0].szName := 'User-Agent';
   nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
-  nlhr.headers[1].szName  := 'Connection';
+  nlhr.headers[1].szName := 'Connection';
   nlhr.headers[1].szValue := 'keep-alive';
-  nlhr.headers[2].szName  := 'Keep-Alive';
+  nlhr.headers[2].szName := 'Keep-Alive';
   nlhr.headers[2].szValue := '300';
-  nlhr.headers[3].szName  := 'Cookie';
+  nlhr.headers[3].szName := 'Cookie';
   nlhr.headers[3].szValue := PChar(CookiesGlobal.DelimitedText);
-  nlhr.headers[4].szName  := 'Content-Type';
+  nlhr.headers[4].szName := 'Content-Type';
   nlhr.headers[4].szValue := PChar(ContentType + '; boundary=' + Boundary);
-  nlhr.headers[5].szName  := 'X-Requested-With';
+  nlhr.headers[5].szName := 'X-Requested-With';
   nlhr.headers[5].szValue := 'XMLHttpRequest';
 
-  while (result = ' ') do
+  while (Result = ' ') do
   begin
 
     // fast exit when Miranda terminating
     if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
-       Exit;
+      Exit;
 
-    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Post) Dowloading page: '+ szUrl));
+    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Post) Dowloading page: ' + szUrl));
     // download the page
     nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
-    if (nlhrReply <> nil) Then
-    Begin
+    if (nlhrReply <> nil) then
+    begin
       // read cookies & store it
-      For i:=0 To nlhrReply.headersCount-1 Do
-      Begin
+      for i := 0 to nlhrReply.headersCount - 1 do
+      begin
         // read cookie
         if nlhrReply.headers[i].szName = 'Set-Cookie' then
           CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
-      End;
+      end;
 
       case nlhrReply.resultCode of
 
         // if the receieved code is 200 OK
-        200:  begin
-                // save the retrieved data
-                Result := nlhrReply.pData;
-                if nlhrReply.dataLength = 0 Then
-                  Result := ''; // DATA_EMPTY;
-              end;
+        200:
+        begin
+          // save the retrieved data
+          Result := nlhrReply.pData;
+          if nlhrReply.dataLength = 0 then
+            Result := ''; // DATA_EMPTY;
+        end;
 
         // if the receieved code is 302 Moved, Found, etc
         // workaround for url forwarding
-        302:  begin
-                // get the url for the new location and save it to szInfo
-                // look for the reply header "Location"
-                For i:=0 To nlhrReply.headersCount-1 Do
-                begin
-                  if nlhrReply.headers[i].szName = 'Location' then
-                  begin
-                    // if location url doesn't contain host name, we should add it
-                    szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
-                    if Pos(szHost, nlhrReply.headers[i].szValue) = 0 Then
-                    begin
-                      if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
-                        szHost := szHost + '/';
-                      szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
-                    end
-                    Else
-                      szRedirUrl := nlhrReply.headers[i].szValue;
-                    nlhr.szUrl := PChar(szRedirUrl);
+        302:
+        begin
+          // get the url for the new location and save it to szInfo
+          // look for the reply header "Location"
+          for i := 0 to nlhrReply.headersCount - 1 do
+          begin
+            if nlhrReply.headers[i].szName = 'Location' then
+            begin
+              // if location url doesn't contain host name, we should add it
+              szHost := Copy(szUrl, Pos('://', szUrl) + 3, LastDelimiter('/', szUrl) - Pos('://', szUrl) - 3);
+              if Pos(szHost, nlhrReply.headers[i].szValue) = 0 then
+              begin
+                if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                  szHost := szHost + '/';
+                szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue;
+              end
+              else
+                szRedirUrl := nlhrReply.headers[i].szValue;
+              nlhr.szUrl := PChar(szRedirUrl);
 
-                    Result := HTTP_NL_Get(szRedirUrl);
-                    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
-                    Exit;
-                  end
-                end;
-              end;
+              Result := HTTP_NL_Get(szRedirUrl);
+              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+              Exit;
+            end;
+          end;
+        end;
 
-        // return error code if the receieved code is neither 200 OK nor 302 Moved
-        else  begin
-                // store the error code
-                Result := nlhrReply.pData;
-              end;
+          // return error code if the receieved code is neither 200 OK nor 302 Moved
+        else
+        begin
+          // store the error code
+          Result := nlhrReply.pData;
+        end;
 
       end;
 
@@ -516,36 +524,36 @@ begin
     else
     begin
       // store the error code
-      Result:='NetLib error occurred!';
+      Result := 'NetLib error occurred!';
     end;
   end;
 end;
 
-// =============================================================================
-// function to post picture to the site
-// szUrl = URL of the webpage to be retrieved
-// szData = data to be posted
-// return value = HTML string
-// global var used: vk_hNetlibUser = contains handle to netlibuser created
-// -----------------------------------------------------------------------------
-function HTTP_NL_PostPicture(szUrl: String; szData: String; Boundary: String): String;
-var nlhr: TNETLIBHTTPREQUEST;
-    nlhrReply: PNETLIBHTTPREQUEST;
-    szRedirUrl: String;
-    szHost: String;
-    i: Integer;
-
+ // =============================================================================
+ // function to post picture to the site
+ // szUrl = URL of the webpage to be retrieved
+ // szData = data to be posted
+ // return value = HTML string
+ // global var used: vk_hNetlibUser = contains handle to netlibuser created
+ // -----------------------------------------------------------------------------
+function HTTP_NL_PostPicture(szUrl: string; szData: string; Boundary: string): string;
+var
+  nlhr:       TNETLIBHTTPREQUEST;
+  nlhrReply:  PNETLIBHTTPREQUEST;
+  szRedirUrl: string;
+  szHost:     string;
+  i:          integer;
 begin
-  result := ' ';
+  Result := ' ';
 
   // create 'storage' for cookies
-  if Not Assigned(CookiesGlobal) Then
-  Begin
+  if not Assigned(CookiesGlobal) then
+  begin
     CookiesGlobal := TStringList.Create;
     CookiesGlobal.Sorted := True;
     CookiesGlobal.Duplicates := dupIgnore;
     CookiesGlobal.Delimiter := ' ';
-  End;
+  end;
 
   FillChar(nlhr, sizeof(nlhr), 0);
   nlhrReply := @nlhr;
@@ -557,87 +565,91 @@ begin
   nlhr.szUrl := PChar(szUrl);
 
   nlhr.pData := PChar(szData);
-  nlhr.dataLength := Length(szData)+1;
+  nlhr.dataLength := Length(szData) + 1;
 
   nlhr.headersCount := 5;
   SetLength(nlhr.headers, 5);
-  nlhr.headers[0].szName  := 'User-Agent';
+  nlhr.headers[0].szName := 'User-Agent';
   nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
-  nlhr.headers[1].szName  := 'Connection';
+  nlhr.headers[1].szName := 'Connection';
   nlhr.headers[1].szValue := 'keep-alive';
-  nlhr.headers[2].szName  := 'Keep-Alive';
+  nlhr.headers[2].szName := 'Keep-Alive';
   nlhr.headers[2].szValue := '300';
-  nlhr.headers[3].szName  := 'Cookie';
+  nlhr.headers[3].szName := 'Cookie';
   nlhr.headers[3].szValue := PChar(CookiesGlobal.DelimitedText);
-  nlhr.headers[4].szName  := 'Content-Type';
-  nlhr.headers[4].szValue := PChar('multipart/form-data; boundary='+Boundary);
+  nlhr.headers[4].szName := 'Content-Type';
+  nlhr.headers[4].szValue := PChar('multipart/form-data; boundary=' + Boundary);
 
-  while (result = ' ') do
+  while (Result = ' ') do
   begin
 
     // fast exit when Miranda terminating
     if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
-       Exit;
+      Exit;
 
-    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Post) Dowloading page: '+ szUrl));
+    Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_Post) Dowloading page: ' + szUrl));
     // download the page
     nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
-    if (nlhrReply <> nil) Then
-    Begin
+    if (nlhrReply <> nil) then
+    begin
       // read cookies & store it
-      For i:=0 To nlhrReply.headersCount-1 Do
-      Begin
+      for i := 0 to nlhrReply.headersCount - 1 do
+      begin
         // read cookie
         if nlhrReply.headers[i].szName = 'Set-Cookie' then
           CookiesGlobal.Add(Copy(nlhrReply.headers[i].szValue, 0, Pos(';', nlhrReply.headers[i].szValue)));
-      End;
+      end;
 
       case nlhrReply.resultCode of
 
         // if the receieved code is 200 OK
-        200:  begin
-                if nlhrReply.dataLength = 0 then
-                  // DATA_EMPTY
-                  Result := ''
-                else
-                  // save the retrieved data
-                  Result := nlhrReply.pData;
-              end;
+        200:
+        begin
+          if nlhrReply.dataLength = 0 then
+            // DATA_EMPTY
+            Result := ''
+          else
+            // save the retrieved data
+            Result := nlhrReply.pData;
+        end;
 
         // if the receieved code is 302 Moved, Found, etc
         // workaround for url forwarding
-        302:  begin
-                Netlib_Log(vk_hNetlibUser, PChar('Code302: '+ szRedirUrl));
-                // get the url for the new location and save it to szInfo
-                // look for the reply header "Location"
-                For i:=0 To nlhrReply.headersCount-1 Do
-                begin
-                  if nlhrReply.headers[i].szName = 'Location' then
-                  begin
-                    // if location url doesn't contain host name, we should add it
-                    szHost := Copy(szUrl, Pos('://',szUrl)+3, LastDelimiter('/', szUrl)-Pos('://',szUrl)-3);
-                    if Pos(szHost, nlhrReply.headers[i].szValue) = 0 then
-                    begin
-                      if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
-                        szHost := szHost + '/';
-                      szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue
-                    end
-                    else szRedirUrl := nlhrReply.headers[i].szValue;
+        302:
+        begin
+          Netlib_Log(vk_hNetlibUser, PChar('Code302: ' + szRedirUrl));
+          // get the url for the new location and save it to szInfo
+          // look for the reply header "Location"
+          for i := 0 to nlhrReply.headersCount - 1 do
+          begin
+            if nlhrReply.headers[i].szName = 'Location' then
+            begin
+              // if location url doesn't contain host name, we should add it
+              szHost := Copy(szUrl, Pos('://', szUrl) + 3, LastDelimiter('/', szUrl) - Pos('://', szUrl) - 3);
+              if Pos(szHost, nlhrReply.headers[i].szValue) = 0 then
+              begin
+                if (RightStr(szHost, 1) <> '/') and (LeftStr(nlhrReply.headers[i].szValue, 1) <> '/') then
+                  szHost := szHost + '/';
+                szRedirUrl := 'http://' + szHost + nlhrReply.headers[i].szValue;
+              end
+              else
+                szRedirUrl := nlhrReply.headers[i].szValue;
 
-                    nlhr.szUrl := PChar(szRedirUrl);
+              nlhr.szUrl := PChar(szRedirUrl);
 
-                    Result := HTTP_NL_Get(szRedirUrl);
-                    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
-                    Exit;
-                  end;
-                end;
-              end;
+              Result := HTTP_NL_Get(szRedirUrl);
+              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+              Exit;
+            end;
+          end;
+        end;
 
-        // return error code if the receieved code is neither 200 OK nor 302 Moved
-        else  begin
-                // store the error code
-                Result := nlhrReply.pData;
-              end;
+          // return error code if the receieved code is neither 200 OK nor 302 Moved
+        else
+        begin
+          // store the error code
+          Result := nlhrReply.pData;
+        end;
 
       end;
 
@@ -646,36 +658,36 @@ begin
     else
     begin
       // store the error code
-      Result:='NetLib error occurred!';
+      Result := 'NetLib error occurred!';
     end;
   end;
 end;
 
 
-// =============================================================================
-// function to download a picture and save it to the file
-// szUrl = URL of the picture to be retrieved
-// szFileName = result file
-// return value = result of download (true/false)
-// global var used: vk_hNetlibUser = contains handle to netlibuser created
-// -----------------------------------------------------------------------------
-function HTTP_NL_GetPicture(szUrl, szFileName: String): Boolean;
-var nlhr: TNETLIBHTTPREQUEST;
-    nlhrReply: PNETLIBHTTPREQUEST;
-
-    hFile: THandle;
-    BytesWritten: DWord;
+ // =============================================================================
+ // function to download a picture and save it to the file
+ // szUrl = URL of the picture to be retrieved
+ // szFileName = result file
+ // return value = result of download (true/false)
+ // global var used: vk_hNetlibUser = contains handle to netlibuser created
+ // -----------------------------------------------------------------------------
+function HTTP_NL_GetPicture(szUrl, szFileName: string): boolean;
+var
+  nlhr:         TNETLIBHTTPREQUEST;
+  nlhrReply:    PNETLIBHTTPREQUEST;
+  hFile:        THandle;
+  BytesWritten: DWord;
 begin
   Result := False;
 
   // create 'storage' for cookies
-  if Not Assigned(CookiesGlobal) Then
-  Begin
+  if not Assigned(CookiesGlobal) then
+  begin
     CookiesGlobal := TStringList.Create;
     CookiesGlobal.Sorted := True;
     CookiesGlobal.Duplicates := dupIgnore;
     CookiesGlobal.Delimiter := ' ';
-  End;
+  end;
 
   FillChar(nlhr, sizeof(nlhr), 0);
   nlhrReply := @nlhr;
@@ -688,51 +700,51 @@ begin
 
   nlhr.headersCount := 5;
   SetLength(nlhr.headers, 5);
-  nlhr.headers[0].szName  := 'User-Agent';
+  nlhr.headers[0].szName := 'User-Agent';
   nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
-  nlhr.headers[1].szName  := 'Connection';
+  nlhr.headers[1].szName := 'Connection';
   nlhr.headers[1].szValue := 'Keep-Alive';
-  nlhr.headers[2].szName  := 'Cache-Control';
+  nlhr.headers[2].szName := 'Cache-Control';
   nlhr.headers[2].szValue := 'no-cache';
-  nlhr.headers[3].szName  := 'Pragma';
+  nlhr.headers[3].szName := 'Pragma';
   nlhr.headers[3].szValue := 'no-cache';
-  nlhr.headers[4].szName  := 'Cookie';
+  nlhr.headers[4].szName := 'Cookie';
   nlhr.headers[4].szValue := PChar(CookiesGlobal.DelimitedText);
 
   // fast exit when Miranda terminating
   if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
-     Exit;
+    Exit;
 
-  Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) Dowloading file: '+ szUrl));
+  Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) Dowloading file: ' + szUrl));
   // download the page
   nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
-  if (nlhrReply <> nil) Then
-    Begin
-      if (nlhrReply.resultCode = 200) then
-      Begin
+  if (nlhrReply <> nil) then
+  begin
+    if (nlhrReply.resultCode = 200) then
+    begin
 
-        if nlhrReply.dataLength > 0 Then // not empty
+      if nlhrReply.dataLength > 0 then // not empty
+      begin
+        // create directory first
+        Windows.CreateDirectory(PChar(ExtractFileDir(szFileName)), nil);
+        // write file
+        hFile := Windows.CreateFile(PChar(szFileName),
+          GENERIC_WRITE,
+          FILE_SHARE_WRITE,
+          nil,
+          CREATE_ALWAYS, // overwrite file, if exists
+          FILE_ATTRIBUTE_NORMAL, 0);
+        if hFile <> INVALID_HANDLE_VALUE then
         begin
-          // create directory first
-          Windows.CreateDirectory(PChar(ExtractFileDir(szFileName)), nil);
-          // write file
-          hFile := Windows.CreateFile(PChar(szFileName),
-                                      GENERIC_WRITE,
-                                      FILE_SHARE_WRITE,
-                                      nil,
-                                      CREATE_ALWAYS, // overwrite file, if exists
-                                      FILE_ATTRIBUTE_NORMAL, 0);
-          if hFile <> INVALID_HANDLE_VALUE then
-          begin
-            Windows.WriteFile(hFile, nlhrReply.pData^, nlhrReply.dataLength, BytesWritten, nil);
-            CloseHandle(hFile);
-            Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) ... file '+ szFileName + ' saved successfully'));
-          end;
-          Result := True;
+          Windows.WriteFile(hFile, nlhrReply.pData^, nlhrReply.dataLength, BytesWritten, nil);
+          CloseHandle(hFile);
+          Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetPicture) ... file ' + szFileName + ' saved successfully'));
         end;
+        Result := True;
       end;
-    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
     end;
+    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+  end;
 end;
 
 begin
