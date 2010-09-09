@@ -34,8 +34,8 @@ unit vk_folders;
 
 interface
 
-  procedure FoldersInit();
-  procedure FoldersDestroy();
+procedure FoldersInit();
+procedure FoldersDestroy();
 
 implementation
 
@@ -45,22 +45,22 @@ uses
 
   vk_global, // module with global variables and constant used
 
-  Windows,
-  SysUtils;
+  SysUtils, Windows;
 
   {$include api/m_folders.inc}
 
 var
- vk_hFolderAvatars: THandle;
+  vk_hFolderAvatars: THandle;
 
-// =============================================================================
-// function to initiate custom folders support
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // function to initiate custom folders support
+ // -----------------------------------------------------------------------------
 procedure FoldersInit();
-var pszDest: String; // path to profile
+var
+  pszDest: string; // path to profile
 begin
   vk_hFolderAvatars := FoldersRegisterCustomPath(piShortName, 'Avatars Cache', PROFILE_PATH + '\' + piShortName);
-  if vk_hFolderAvatars <> 0 Then
+  if vk_hFolderAvatars <> 0 then
     FolderAvatars := FoldersGetCustomPath(vk_hFolderAvatars)
   else
   begin
@@ -72,14 +72,13 @@ begin
   end;
 end;
 
-// =============================================================================
-// function to destroy custom folders support
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // function to destroy custom folders support
+ // -----------------------------------------------------------------------------
 procedure FoldersDestroy();
 begin
   pluginLink^.DestroyServiceFunction(vk_hFolderAvatars);
 end;
-
 
 
 begin

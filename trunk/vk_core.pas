@@ -36,48 +36,47 @@ unit vk_core;
 interface
 
 uses
-
   m_globaldefs,
   m_api,
 
-  vk_global, // module with global variables and constant used
-  vk_common, // module with common functions
-  vk_http, // module to connect with the site
+  vk_global,  // module with global variables and constant used
+  vk_common,  // module with common functions
+  vk_http,    // module to connect with the site
   vk_avatars, // module to support avatars
-  vk_msgs, // module to send/receive messages
+  vk_msgs,    // module to send/receive messages
   vk_xstatus, // module to support additional status
-  vk_opts, // my unit to work with options
-  vk_popup, // module to support popups
-  vk_wall, // module to work with the wall
+  vk_opts,    // my unit to work with options
+  vk_popup,   // module to support popups
+  vk_wall,    // module to work with the wall
 
   htmlparse, // module to simplify html parsing
 
-  Windows,
-  Messages,
-  SysUtils,
   Classes,
+  Commctrl, Messages,
   ShellAPI,
   StrUtils,
-  Commctrl;
+  SysUtils,
+  Windows;
 
-  function vk_SetStatus(NewStatus: Integer): Integer;
-  function vk_AddFriend(frID: Integer; frNick: WideString; frStatus: Integer; frFriend: Byte): Integer;
-  procedure SetStatusOffline();
-  function ContactDeleted(wParam: wParam; lParam: lParam): Integer; cdecl;
-  procedure UpdateDataInit();
-  procedure UpdateDataDestroy();
-  procedure vk_Logout();
-  function OnCreateAccMgrUI(wParam: wParam; lParam: lParam): Integer; cdecl;
+function vk_SetStatus(NewStatus: integer): integer;
+function vk_AddFriend(frID: integer; frNick: WideString; frStatus: integer; frFriend: byte): integer;
+procedure SetStatusOffline();
+function ContactDeleted(wParam: wParam; lParam: lParam): integer; cdecl;
+procedure UpdateDataInit();
+procedure UpdateDataDestroy();
+procedure vk_Logout();
+function OnCreateAccMgrUI(wParam: wParam; lParam: lParam): integer; cdecl;
 
-{$include res\dlgopt\i_const.inc} // contains list of ids used in dialogs
+{$include res\dlgopt\i_const.inc}// contains list of ids used in dialogs
 
 type
   TThreadConnect = class(TThread)
   private
-     { Private declarations }
+    { Private declarations }
   protected
     procedure Execute; override;
   end;
+
   TThreadDataUpdate = class(TThread)
   private
     { Private declarations }
@@ -86,157 +85,156 @@ type
   end;
 
 var
-  ThrIDConnect: TThreadConnect;
+  ThrIDConnect:    TThreadConnect;
   ThrIDDataUpdate: TThreadDataUpdate;
 
-  vk_UserLangId,
-  vk_UserLangHash: String;
+  vk_UserLangId, vk_UserLangHash: string;
 
 implementation
 
 //var
 
 
-// =============================================================================
-// Account Manager Login function
-// -----------------------------------------------------------------------------
-function DlgAccMgr(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+ // =============================================================================
+ // Account Manager Login function
+ // -----------------------------------------------------------------------------
+function DlgAccMgr(Dialog: HWnd; Msg: cardinal; wParam, lParam: DWord): boolean; stdcall;
 var
-  str: String;  // temp variable for types conversion
-  pc: PChar;
+  str: string;  // temp variable for types conversion
+  pc:  PChar;
 begin
-  Result:=False;
+  Result := False;
   case Msg of
-     WM_INITDIALOG:
-       begin
-         // translate all dialog texts
-         TranslateDialogDefault(Dialog);
-         // read login from settings, if exists
-         vk_o_login := DBReadString(0, piShortName, opt_UserName, nil);
-         SetDlgItemText(Dialog, VK_ACCMGR_EMAIL, PChar(vk_o_login)); // e-mail
-         if vk_o_login <> '' then
-           SetFocus(GetDlgItem(Dialog, VK_ACCMGR_PASS));
-         // read pass
-         vk_o_pass := DBReadString(0, piShortName, opt_UserPass, nil);
-         if trim(vk_o_pass) <> '' Then // decrypt password
-         begin
-           pluginLink^.CallService(MS_DB_CRYPT_DECODESTRING, SizeOf(vk_o_pass), Windows.lparam(vk_o_pass));
-           SetDlgItemText(dialog, VK_ACCMGR_PASS, PChar(vk_o_pass)); // password
-         end;
+    WM_INITDIALOG:
+    begin
+      // translate all dialog texts
+      TranslateDialogDefault(Dialog);
+      // read login from settings, if exists
+      vk_o_login := DBReadString(0, piShortName, opt_UserName, nil);
+      SetDlgItemText(Dialog, VK_ACCMGR_EMAIL, PChar(vk_o_login)); // e-mail
+      if vk_o_login <> '' then
+        SetFocus(GetDlgItem(Dialog, VK_ACCMGR_PASS));
+      // read pass
+      vk_o_pass := DBReadString(0, piShortName, opt_UserPass, nil);
+      if trim(vk_o_pass) <> '' then // decrypt password
+      begin
+        pluginLink^.CallService(MS_DB_CRYPT_DECODESTRING, SizeOf(vk_o_pass), Windows.lparam(vk_o_pass));
+        SetDlgItemText(dialog, VK_ACCMGR_PASS, PChar(vk_o_pass)); // password
+      end;
 
-         Result := True;
-       end;
-     WM_CLOSE:
-       begin
-         EndDialog(Dialog, 0);
-         Result := False;
-       end;
-     WM_NOTIFY:
-       begin
-         // if user pressed Apply
-         if PNMHdr(lParam)^.code = PSN_APPLY then
-           begin
-             SetLength(Str, 256);
-             pc := PChar(Str);
-             GetDlgItemText(Dialog, VK_ACCMGR_EMAIL, pc, 256);
-             DBWriteContactSettingString (0, piShortName, opt_UserName, pc);
-             vk_o_login := pc;
+      Result := True;
+    end;
+    WM_CLOSE:
+    begin
+      EndDialog(Dialog, 0);
+      Result := False;
+    end;
+    WM_NOTIFY:
+    begin
+      // if user pressed Apply
+      if PNMHdr(lParam)^.code = PSN_APPLY then
+      begin
+        SetLength(Str, 256);
+        pc := PChar(Str);
+        GetDlgItemText(Dialog, VK_ACCMGR_EMAIL, pc, 256);
+        DBWriteContactSettingString(0, piShortName, opt_UserName, pc);
+        vk_o_login := pc;
 
-             SetLength(Str, 256);
-             pc := PChar(Str);
-             GetDlgItemText(Dialog, VK_ACCMGR_PASS, pc, 256);
-             // encode password
-             pluginLink^.CallService(MS_DB_CRYPT_ENCODESTRING, SizeOf(pc), Windows.lparam(pc));
-             DBWriteContactSettingString(0, piShortName, opt_UserPass, pc);
-             vk_o_pass := pc;
+        SetLength(Str, 256);
+        pc := PChar(Str);
+        GetDlgItemText(Dialog, VK_ACCMGR_PASS, pc, 256);
+        // encode password
+        pluginLink^.CallService(MS_DB_CRYPT_ENCODESTRING, SizeOf(pc), Windows.lparam(pc));
+        DBWriteContactSettingString(0, piShortName, opt_UserPass, pc);
+        vk_o_pass := pc;
 
-             Result := True;
-           end;
-       end;
-     WM_COMMAND:
-       begin
-         case wParam of
-           VK_ACCMGR_NEWID:
-             begin
-               ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
-               Result := True;
-             end;
-         end;
-       end;
+        Result := True;
+      end;
+    end;
+    WM_COMMAND:
+    begin
+      case wParam of
+        VK_ACCMGR_NEWID:
+        begin
+          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
+          Result := True;
+        end;
+      end;
+    end;
   end;
 end;
 
-// =============================================================================
-// function to display dialog on Account Manager screen
-// -----------------------------------------------------------------------------
-function OnCreateAccMgrUI(wParam: wParam; lParam: lParam): Integer; cdecl;
+ // =============================================================================
+ // function to display dialog on Account Manager screen
+ // -----------------------------------------------------------------------------
+function OnCreateAccMgrUI(wParam: wParam; lParam: lParam): integer; cdecl;
 begin
   Result := CreateDialogParam(hInstance, MAKEINTRESOURCE('ACCMGR'), lParam, @DlgAccMgr, 0);
 end;
 
 
-// =============================================================================
-// Login Dialog function
-// this function is executed only when password OR login are not input
-// in the Options
-// -----------------------------------------------------------------------------
-function DlgLogin(Dialog: HWnd; Msg: Cardinal; wParam, lParam: DWord): Boolean; stdcall;
+ // =============================================================================
+ // Login Dialog function
+ // this function is executed only when password OR login are not input
+ // in the Options
+ // -----------------------------------------------------------------------------
+function DlgLogin(Dialog: HWnd; Msg: cardinal; wParam, lParam: DWord): boolean; stdcall;
 var
-  str: String;  // temp variable for types conversion
-  pc: PChar;    // temp variable for types conversion
+  str: string;   // temp variable for types conversion
+  pc:  PChar;    // temp variable for types conversion
 begin
   Result := False;
   case Msg of
-     WM_INITDIALOG:
-       begin
-         // translate all dialog texts
-         TranslateDialogDefault(Dialog);
-         // read login from settings, if exists
-         vk_o_login := DBReadString(0, piShortName, opt_UserName, nil);
-         SetDlgItemText(Dialog, VK_LOGIN_EMAIL, PChar(vk_o_login)); // e-mail
-         if vk_o_login <> '' then
-           SetFocus(GetDlgItem(Dialog, VK_LOGIN_PASS));
-       end;
-     WM_COMMAND:
-       begin
-         case wParam of
-           IDOK, VK_LOGIN_OK:
-             begin
-               SetLength(Str, 256);
-               pc := PChar(Str);
-               GetDlgItemText(Dialog, VK_LOGIN_EMAIL, pc, 256);
-               vk_o_login := pc;
+    WM_INITDIALOG:
+    begin
+      // translate all dialog texts
+      TranslateDialogDefault(Dialog);
+      // read login from settings, if exists
+      vk_o_login := DBReadString(0, piShortName, opt_UserName, nil);
+      SetDlgItemText(Dialog, VK_LOGIN_EMAIL, PChar(vk_o_login)); // e-mail
+      if vk_o_login <> '' then
+        SetFocus(GetDlgItem(Dialog, VK_LOGIN_PASS));
+    end;
+    WM_COMMAND:
+    begin
+      case wParam of
+        idOk, VK_LOGIN_OK:
+        begin
+          SetLength(Str, 256);
+          pc := PChar(Str);
+          GetDlgItemText(Dialog, VK_LOGIN_EMAIL, pc, 256);
+          vk_o_login := pc;
 
-               SetLength(Str, 256);
-               pc := PChar(Str);
-               GetDlgItemText(Dialog, VK_LOGIN_PASS, pc, 256);
-               vk_o_pass := pc;
-               if (vk_o_pass<>'') and (vk_o_login<>'') then
-               begin
-                 EndDialog(Dialog, 0);
-                 Result := True;
-               end;
-             end;
-           IDCANCEL, VK_LOGIN_CANCEL:
-             begin
-               EndDialog(Dialog, 0);
-               Result := True;
-             end;
-           VK_LOGIN_NEWID:
-             begin
-               ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
-               Result := True;
-             end;
-         end;
-       end;
+          SetLength(Str, 256);
+          pc := PChar(Str);
+          GetDlgItemText(Dialog, VK_LOGIN_PASS, pc, 256);
+          vk_o_pass := pc;
+          if (vk_o_pass <> '') and (vk_o_login <> '') then
+          begin
+            EndDialog(Dialog, 0);
+            Result := True;
+          end;
+        end;
+        idCancel, VK_LOGIN_CANCEL:
+        begin
+          EndDialog(Dialog, 0);
+          Result := True;
+        end;
+        VK_LOGIN_NEWID:
+        begin
+          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
+          Result := True;
+        end;
+      end;
+    end;
   end;
 end;
 
 
-// =============================================================================
-// function to change the status
-// -----------------------------------------------------------------------------
-function vk_SetStatus(NewStatus: Integer): Integer;
+ // =============================================================================
+ // function to change the status
+ // -----------------------------------------------------------------------------
+function vk_SetStatus(NewStatus: integer): integer;
 begin
   if Assigned(ThrIDConnect) then
   begin
@@ -245,8 +243,8 @@ begin
   end;
   if (NewStatus = vk_Status) then // if new status is equal to current status
   begin
-     Result := 0; // ok, but has nothing to do
-     exit;
+    Result := 0; // ok, but has nothing to do
+    exit;
   end;
   vk_StatusPrevious := vk_Status;
   vk_Status := NewStatus;
@@ -259,8 +257,10 @@ begin
     ID_STATUS_OCCUPIED,
     ID_STATUS_FREECHAT,
     ID_STATUS_ONTHEPHONE,
-    ID_STATUS_OUTTOLUNCH: vk_Status := ID_STATUS_ONLINE;
-    ID_STATUS_NA: vk_Status := ID_STATUS_INVISIBLE;
+    ID_STATUS_OUTTOLUNCH:
+      vk_Status := ID_STATUS_ONLINE;
+    ID_STATUS_NA:
+      vk_Status := ID_STATUS_INVISIBLE;
   end;
 
   if not Assigned(ThrIDConnect) then
@@ -268,29 +268,30 @@ begin
     // initiate new thread for connection & status update
     ThrIDConnect := TThreadConnect.Create(True);
     ThrIDConnect.FreeOnTerminate := True; // we can automatically terminate the thread
-    ThrIDConnect.Resume;          // since result is not so important
+    ThrIDConnect.Resume;                  // since result is not so important
   end;
 
   Result := 0;
 end;
 
-// =============================================================================
-// function to login to website
-// returns one of the following value:
-//  LOGINERR_WRONGPASSWORD = 1;
-//  LOGINERR_NONETWORK     = 2;
-//  LOGINERR_PROXYFAILURE  = 3;
-//  LOGINERR_BADUSERID     = 4;
-//  LOGINERR_NOSERVER      = 5;
-//  LOGINERR_TIMEOUT       = 6;
-//  LOGINERR_WRONGPROTOCOL = 7;
-//  LOGINERR_OTHERLOCATION = 8;
-//  if successfull = 0
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // function to login to website
+ // returns one of the following value:
+ //  LOGINERR_WRONGPASSWORD = 1;
+ //  LOGINERR_NONETWORK     = 2;
+ //  LOGINERR_PROXYFAILURE  = 3;
+ //  LOGINERR_BADUSERID     = 4;
+ //  LOGINERR_NOSERVER      = 5;
+ //  LOGINERR_TIMEOUT       = 6;
+ //  LOGINERR_WRONGPROTOCOL = 7;
+ //  LOGINERR_OTHERLOCATION = 8;
+ //  if successfull = 0
+ // -----------------------------------------------------------------------------
 function vk_Connect(): integer;
-var HTML: String; // html content of the page received
+var
+  HTML: string; // html content of the page received
 begin
-  if Assigned(CookiesGlobal) Then
+  if Assigned(CookiesGlobal) then
     CookiesGlobal.Clear; // clear cookies
 
   ErrorCode := 2; // zero out error code - LOGINERR_NONETWORK     = 2;
@@ -299,8 +300,8 @@ begin
   vk_o_login := DBReadString(0, piShortName, opt_UserName, '');
   vk_o_pass := DBReadString(0, piShortName, opt_UserPass, '');
 
-  if trim(vk_o_pass) <> '' Then // decrypt password
-      pluginLink^.CallService(MS_DB_CRYPT_DECODESTRING, SizeOf(vk_o_pass), Windows.lparam(vk_o_pass));
+  if trim(vk_o_pass) <> '' then // decrypt password
+    pluginLink^.CallService(MS_DB_CRYPT_DECODESTRING, SizeOf(vk_o_pass), Windows.lparam(vk_o_pass));
 
   if (vk_o_pass = '') or (vk_o_login = '') then
   begin
@@ -318,20 +319,20 @@ begin
   HTML := HTTP_NL_Get(Format(vk_url_pda_login, [vk_o_login, URLEncode(UTF8Encode(vk_o_pass))]));
 
   // no info received
-  If trim(HTML) = '' Then
+  if trim(HTML) = '' then
     ErrorCode := 6; // LOGINERR_TIMEOUT       = 6;
 
   // no internet connection or other netlib error
-  If trim(HTML) = 'NetLib error occurred!' Then
+  if trim(HTML) = 'NetLib error occurred!' then
     ErrorCode := 2; // LOGINERR_NONETWORK     = 2;
 
   // pass or login is incorrect
-  If Pos('<div id="error">', HTML) > 0 Then
+  if Pos('<div id="error">', HTML) > 0 then
     ErrorCode := 1; // LOGINERR_WRONGPASSWORD = 1;
 
   // OK
-  If Pos('div class="menu2"', HTML) > 0 Then
-  Begin
+  if Pos('div class="menu2"', HTML) > 0 then
+  begin
     ErrorCode := 0; // succesfull login!
 
     // get api related details
@@ -344,63 +345,64 @@ begin
     // vk_id := '';
 
     if (vk_session_id = '') or (vk_secret = '') or (vk_id = '') then
-     ShowPopupMsg(0, err_session_nodetail, 1); // TODO: once plugin is fully migrated to VK API
-                                               // here we should change error code and do not change
-                                               // status to Online
+      ShowPopupMsg(0, err_session_nodetail, 1); // TODO: once plugin is fully migrated to VK API
+    // here we should change error code and do not change
+    // status to Online
 
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Session details received: session id='+vk_session_id+', secret='+vk_secret+', vk_id='+vk_id+', vk_api_appid='+vk_api_appid));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Session details received: session id=' + vk_session_id + ', secret=' + vk_secret + ', vk_id=' + vk_id + ', vk_api_appid=' + vk_api_appid));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting user rights...'));
     HTML := HTTP_NL_Get(GenerateApiUrl('method=getUserSettings'));
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) User rights received: '+HTML));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) User rights received: ' + HTML));
 
-  End;
+  end;
 
   Result := ErrorCode;
 
   // GAP: result of connection / error message is not provided to the user
 end;
 
-// =============================================================================
-// procedure to logout from the server
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // procedure to logout from the server
+ // -----------------------------------------------------------------------------
 procedure vk_Logout();
 begin
   // GAP (?): result is not validated
   HTTP_NL_Get(vk_url_pda_logout, REQUEST_HEAD);
 end;
 
-// =============================================================================
-// procedure to add new contact into Miranda's list
-// returns Handle to added/existing contact
-// -----------------------------------------------------------------------------
-function vk_AddFriend(frID: Integer; frNick: WideString; frStatus: Integer; frFriend: Byte): Integer;
-var hContactNew: THandle; // handle to new contact
-    hContact: THandle;
-    DefaultGroup: WideString;
+ // =============================================================================
+ // procedure to add new contact into Miranda's list
+ // returns Handle to added/existing contact
+ // -----------------------------------------------------------------------------
+function vk_AddFriend(frID: integer; frNick: WideString; frStatus: integer; frFriend: byte): integer;
+var
+  hContactNew:  THandle; // handle to new contact
+  hContact:     THandle;
+  DefaultGroup: WideString;
 begin
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_AddFriend) Trying to add friend, id: '+IntToStr(frID)+', nick: '+String(frNick)));
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_AddFriend) Trying to add friend, id: ' + IntToStr(frID) + ', nick: ' + string(frNick)));
 
   // duplicate match
   hContact := GetContactByID(frID);
   if hContact <> 0 then // contact already exists in Miranda's list
-  Begin
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_AddFriend) ... friend already exists, id: '+IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0))+', nick: '+DBReadUnicode(hContact, piShortName, 'Nick', '')));
+  begin
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_AddFriend) ... friend already exists, id: ' + IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)) + ', nick: ' + DBReadUnicode(hContact, piShortName, 'Nick', '')));
     Result := hContact;
     // remove temporary settings
     DBDeleteContactSetting(hContact, 'CList', 'NotOnList');
     DBDeleteContactSetting(hContact, 'CList', 'Hidden');
     Exit;
-  End;
+  end;
 
   // if really new contact
   hContactNew := pluginLink^.CallService(MS_DB_CONTACT_ADD, 0, 0);
-  If hContactNew <> 0 Then
-  Begin
+  if hContactNew <> 0 then
+  begin
     DBWriteContactSettingDWord(hContactNew, piShortName, 'ID', frID);
     DBWriteContactSettingUnicode(hContactNew, piShortName, 'Nick', PWideChar(frNick));
     DBWriteContactSettingByte(hContactNew, piShortName, 'Friend', frFriend);
     if DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0) = 1 then
-      DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url_prefix + vk_url_host + vk_url_friend,[frID])));
+      DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url_prefix + vk_url_host + vk_url_friend, [frID])));
 
     // assign group for contact, if given in settings
     DefaultGroup := DBReadUnicode(0, piShortName, opt_UserDefaultGroup, nil);
@@ -409,10 +411,10 @@ begin
       PluginLink^.CallService(MS_CLIST_GROUPCREATE, 0, Windows.lParam(DefaultGroup));
       DBWriteContactSettingUnicode(hContactNew, 'CList', 'Group', PWideChar(WideString(DefaultGroup)));
     end;
-  End;
+  end;
   CallService(MS_PROTO_ADDTOCONTACT, hContactNew, lParam(PChar(piShortName)));
 
-  If hContactNew <> 0 Then
+  if hContactNew <> 0 then
   begin
     DBWriteContactSettingWord(hContactNew, piShortName, 'Status', frStatus);
     // remove temporary settings
@@ -424,20 +426,21 @@ begin
   Result := hContactNew;
 end;
 
-// =============================================================================
-// procedure to define contact's status
-// -----------------------------------------------------------------------------
-procedure SetContactStatus(hContact: THandle; Status: Word);
+ // =============================================================================
+ // procedure to define contact's status
+ // -----------------------------------------------------------------------------
+procedure SetContactStatus(hContact: THandle; Status: word);
 begin
-	if DBGetContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE) <> Status then
-	  DBWriteContactSettingWord(hContact, piShortName, 'Status', Status);
+  if DBGetContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE) <> Status then
+    DBWriteContactSettingWord(hContact, piShortName, 'Status', Status);
 end;
 
-// =============================================================================
-// function to get status of non-friend contact
-// -----------------------------------------------------------------------------
-function vk_GetContactStatus(ContactID: Integer): Integer;
-var HTML: String;
+ // =============================================================================
+ // function to get status of non-friend contact
+ // -----------------------------------------------------------------------------
+function vk_GetContactStatus(ContactID: integer): integer;
+var
+  HTML: string;
 begin
   Result := ID_STATUS_OFFLINE;
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetContactStatus) Getting status of non-friend contact ' + IntToStr(ContactID) + '...'));
@@ -446,10 +449,10 @@ begin
     HTML := HTTP_NL_Get(Format(vk_url_pda_friend, [ContactID])); // 1,5 Kb
     if Trim(HTML) <> '' then
     begin
-	    if Pos('<span class="online">Online</span>', HTML) > 0 then
-	      Result := ID_STATUS_ONLINE
-	    else
-	      Result := ID_STATUS_OFFLINE;
+      if Pos('<span class="online">Online</span>', HTML) > 0 then
+        Result := ID_STATUS_ONLINE
+      else
+        Result := ID_STATUS_OFFLINE;
     end;
   end
   else // ID_STATUS_INVISIBLE
@@ -457,42 +460,39 @@ begin
     HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_searchbyid, [ContactID]));  // 3 Kb
     if Trim(HTML) <> '' then
     begin
-	    if Pos('<span class=''bbb''>Online</span>', HTML) > 0 then
-	      Result := ID_STATUS_ONLINE
-	    else
-	      Result := ID_STATUS_OFFLINE;
+      if Pos('<span class=''bbb''>Online</span>', HTML) > 0 then
+        Result := ID_STATUS_ONLINE
+      else
+        Result := ID_STATUS_OFFLINE;
     end;
   end;
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetContactStatus) ... status of non-friend contact ' + IntToStr(ContactID) + ' is identified as ' + IntToStr(Result)));
 end;
 
-// =============================================================================
-// function to get list of friends, their statuses and additional statuses
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // function to get list of friends, their statuses and additional statuses
+ // -----------------------------------------------------------------------------
 function vk_GetFriends(): integer;
 type
   TFriends = record  // new type of record
-    ID: Integer;
-    Name: WideString;
-    InList: Boolean;  // friend exists in Miranda's list
-    Online: Boolean;  // friend is online
-    Deleted: Boolean; // friend is deleted from Miranda's list
-    AvatarURL: String;
-    Rating: Integer;
-    Group: Integer;
+    ID:        integer;
+    Name:      WideString;
+    InList:    boolean;  // friend exists in Miranda's list
+    Online:    boolean;  // friend is online
+    Deleted:   boolean;  // friend is deleted from Miranda's list
+    AvatarURL: string;
+    Rating:    integer;
+    Group:     integer;
   end;
-
 var
-  hContact: THandle;
-  HTML: String; // html content of the page received
-
-  FriendsOnline: Array of Integer;
-  FriendsDeleted: Array of Integer;
-  Friends: Array of TFriends;
-  TempList: TStringList;
-  i: Integer;
-  StrTemp1, StrTemp2: String;
-
+  hContact:           THandle;
+  HTML:               string; // html content of the page received
+  FriendsOnline:      array of integer;
+  FriendsDeleted:     array of integer;
+  Friends:            array of TFriends;
+  TempList:           TStringList;
+  i:                  integer;
+  StrTemp1, StrTemp2: string;
 begin
 
   // get friends online
@@ -502,27 +502,28 @@ begin
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
-	  HTML := TextBetween(HTML, 'friends'':[','],''universities');
+    HTML := TextBetween(HTML, 'friends'':[', '],''universities');
     if Trim(HTML) <> '' then
     begin
-		  TempList := TStringList.Create();
-		  TempList.Sorted := True; // list should be sorted and
-		  TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
+      TempList := TStringList.Create();
+      TempList.Sorted := True;          // list should be sorted and
+      TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
       while Pos('[', HTML) > 0 do
       begin
         TempList.Add(TextBetween(HTML, '[', ','));
         if Pos(']', HTML) > 0 then
           Delete(HTML, 1, Pos(']', HTML))
-        else break;
+        else
+          break;
       end;
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... ' + IntToStr(TempList.Count) + ' friend(s) online found'));
-		  For i:=0 to TempList.Count-1 Do
-		  Begin
-			  SetLength(FriendsOnline, Length(FriendsOnline)+1);
-			  TryStrToInt(TempList.Strings[i], FriendsOnline[High(FriendsOnline)]);
+      for i := 0 to TempList.Count - 1 do
+      begin
+        SetLength(FriendsOnline, Length(FriendsOnline) + 1);
+        TryStrToInt(TempList.Strings[i], FriendsOnline[High(FriendsOnline)]);
         Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found online friend with id: ' + TempList.Strings[i]));
-		  End;
-		  TempList.Free;
+      end;
+      TempList.Free;
     end;
   end;
 
@@ -532,17 +533,17 @@ begin
   if Trim(StrTemp1) <> '' then
   begin
     TempList := TStringList.Create();
-		TempList.Sorted := True; // list should be sorted and
+    TempList.Sorted := True;          // list should be sorted and
     TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
-		TempList.Delimiter := ',';
+    TempList.Delimiter := ',';
     TempList.DelimitedText := StrTemp1;
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... ' + IntToStr(TempList.Count) + ' deleted friend(s) found'));
-    For i:=0 to TempList.Count-1 Do
-    Begin
-      SetLength(FriendsDeleted, Length(FriendsDeleted)+1);
+    for i := 0 to TempList.Count - 1 do
+    begin
+      SetLength(FriendsDeleted, Length(FriendsDeleted) + 1);
       TryStrToInt(TempList.Strings[i], FriendsDeleted[High(FriendsDeleted)]);
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found deleted friend with id: ' + TempList.Strings[i]));
-    End;
+    end;
     TempList.Free;
   end;
 
@@ -553,7 +554,7 @@ begin
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
-    HTML := TextBetween(HTML, 'friends'':[',']]');
+    HTML := TextBetween(HTML, 'friends'':[', ']]');
     if Trim(HTML) <> '' then
     begin
       HTML := HTML + ']';
@@ -564,8 +565,8 @@ begin
         StrTemp1 := TextBetween(HTML, '[', ']');
         if Trim(StrTemp1) <> '' then
         begin
-          StrTemp2 := Trim(Copy(StrTemp1, 1, Pos(',', StrTemp1)-1));
-          SetLength(Friends, Length(Friends)+1);
+          StrTemp2 := Trim(Copy(StrTemp1, 1, Pos(',', StrTemp1) - 1));
+          SetLength(Friends, Length(Friends) + 1);
           if TryStrToInt(StrTemp2, Friends[High(Friends)].ID) then
           begin
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found friend with id: ' + StrTemp2));
@@ -599,7 +600,7 @@ begin
             end;
           end
           else
-            SetLength(Friends, Length(Friends)-1);
+            SetLength(Friends, Length(Friends) - 1);
         end;
 
         Delete(HTML, 1, Pos(']', HTML));
@@ -616,28 +617,28 @@ begin
 
   // checking each contact in our Miranda's list
   hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
-	while hContact <> 0 do
+  while hContact <> 0 do
   begin
     // by default MS_DB_CONTACT_FINDFIRST returns all contacts found
     // next line verifies that found contact belongs to our protocol
-    if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PChar(piShortName))) <> 0 Then
+    if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PChar(piShortName))) <> 0 then
     begin
       // if it is not our separate News contact or The wall contact
       if (DBGetContactSettingDWord(hContact, piShortName, 'ID', 0) <> DBGetContactSettingDWord(0, piShortName, opt_NewsSeparateContactID, 1234)) and
-         (DBGetContactSettingDWord(hContact, piShortName, 'ID', 0) <> DBGetContactSettingDWord(0, piShortName, opt_WallSeparateContactID, 666)) then
+        (DBGetContactSettingDWord(hContact, piShortName, 'ID', 0) <> DBGetContactSettingDWord(0, piShortName, opt_WallSeparateContactID, 666)) then
       begin
         // make all our contacts in Miranda by default not Friends
-  		  DBWriteContactSettingByte(hContact, piShortName, 'Friend', 0);
+        DBWriteContactSettingByte(hContact, piShortName, 'Friend', 0);
 
         // updating status & nick of existing contacts
-        for i:=Low(Friends) to High(Friends) do
-          if (Friends[i].ID = DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)) and (Friends[i].ID <> 0) Then
+        for i := Low(Friends) to High(Friends) do
+          if (Friends[i].ID = DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)) and (Friends[i].ID <> 0) then
           begin
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Updating data of existing contact, id: '+IntToStr(Friends[i].ID)+', nick: '+String(Friends[i].Name)));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Updating data of existing contact, id: ' + IntToStr(Friends[i].ID) + ', nick: ' + string(Friends[i].Name)));
             Friends[i].InList := True;
             DBWriteContactSettingUnicode(hContact, piShortName, 'Nick', PWideChar(Friends[i].Name));
-      	   	DBWriteContactSettingByte(hContact, piShortName, 'Friend', 1); // found on server list - making friend
-            if Friends[i].Deleted Then
+            DBWriteContactSettingByte(hContact, piShortName, 'Friend', 1); // found on server list - making friend
+            if Friends[i].Deleted then
               DBWriteContactSettingByte(hContact, 'CList', 'Hidden', 1);
             if Friends[i].Online then
               SetContactStatus(hContact, ID_STATUS_ONLINE)
@@ -650,21 +651,21 @@ begin
           if DBGetContactSettingByte(0, piShortName, opt_UserNonFriendsStatusSupport, 0) = 1 then // check status of non-friends?
           begin
             SetContactStatus(hContact,
-                             vk_GetContactStatus(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)));
+              vk_GetContactStatus(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)));
           end;
       end;
     end;
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
-	end;
+  end;
   // probably, new Friends appeared on the server - should add them to contact list
-  for i:=0 to High(Friends) do
+  for i := 0 to High(Friends) do
   begin
     if not Friends[i].InList then
     begin
       if Friends[i].Online then
-          vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_ONLINE, 1)
+        vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_ONLINE, 1)
       else
-          vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_OFFLINE, 1);
+        vk_AddFriend(Friends[i].ID, Friends[i].Name, ID_STATUS_OFFLINE, 1);
     end;
   end;
   SetLength(Friends, 0);
@@ -675,14 +676,13 @@ begin
 
 end;
 
-// =============================================================================
-// function to get hash to delete friend
-// (full id is required for this)
-// -----------------------------------------------------------------------------
-function vk_FriendGetHash(ContactFullID: Int64): String;
+ // =============================================================================
+ // function to get hash to delete friend
+ // (full id is required for this)
+ // -----------------------------------------------------------------------------
+function vk_FriendGetHash(ContactFullID: int64): string;
 var
-  HTML,
-  Hash: String;
+  HTML, Hash: string;
 begin
   Result := '';
 
@@ -704,25 +704,26 @@ begin
 
 end;
 
-// =============================================================================
-// procedure to delete friend from the server
-// -----------------------------------------------------------------------------
-procedure vk_DeleteFriend(FriendID: Integer);
-var Hash: String;
+ // =============================================================================
+ // procedure to delete friend from the server
+ // -----------------------------------------------------------------------------
+procedure vk_DeleteFriend(FriendID: integer);
+var
+  Hash: string;
 begin
   if FriendID <> 0 then
   begin
     Hash := vk_FriendGetHash(FriendID);
     if Trim(Hash) <> '' then
     begin
-      HTTP_NL_Get(Format(vk_url_frienddelete, [FriendID, Hash]), REQUEST_HEAD)   // GAP (?): result is not validated
+      HTTP_NL_Get(Format(vk_url_frienddelete, [FriendID, Hash]), REQUEST_HEAD);   // GAP (?): result is not validated
     end;
   end;
 end;
 
-// =============================================================================
-// procedure to make our user online on the server
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // procedure to make our user online on the server
+ // -----------------------------------------------------------------------------
 procedure vk_KeepOnline();
 begin
   // we don't care about result
@@ -730,28 +731,29 @@ begin
   HTTP_NL_Get(vk_url_pda_keeponline, REQUEST_HEAD);
 end;
 
-// =============================================================================
-// procedure to read OUR name and ID
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // procedure to read OUR name and ID
+ // -----------------------------------------------------------------------------
 procedure vk_GetUserNameID();
-var UserName, UserID: String;
-    HTML: String;
+var
+  UserName, UserID: string;
+  HTML:             string;
 begin
   // {"user": {"id": 999999, "name": "Name Nick Surname"}, ...
   HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_username);
   UserID := TextBetween(HTML, '"id":', ',');
   UserName := TextBetween(HTML, '"name":"', '"');
 
-  if UserName <> '' Then
-    DBWriteContactSettingUnicode (0, piShortName, 'Nick', PWideChar(HTMLDecodeW(UserName)));
-  if UserID <> '' Then
-    DBWriteContactSettingDWord (0, piShortName, 'ID', StrToInt(UserID));
+  if UserName <> '' then
+    DBWriteContactSettingUnicode(0, piShortName, 'Nick', PWideChar(HTMLDecodeW(UserName)));
+  if UserID <> '' then
+    DBWriteContactSettingDWord(0, piShortName, 'ID', StrToInt(UserID));
 end;
 
-// =============================================================================
-// procedure to join given group
-// -----------------------------------------------------------------------------
-procedure vk_JoinGroup(GroupID: Integer);
+ // =============================================================================
+ // procedure to join given group
+ // -----------------------------------------------------------------------------
+procedure vk_JoinGroup(GroupID: integer);
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_JoinGroup) Joining of the group ' + IntToStr(GroupID) + '...'));
   // GAP (?): result is not validated
@@ -759,33 +761,35 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_JoinGroup) ... finished joining of the group ' + IntToStr(GroupID)));
 end;
 
-// =============================================================================
-// procedure to change the status of all contacts to offline
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // procedure to change the status of all contacts to offline
+ // -----------------------------------------------------------------------------
 procedure SetStatusOffline();
-var hContact: THandle;
+var
+  hContact: THandle;
 begin
   hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
-	while hContact <> 0 do
+  while hContact <> 0 do
   begin
-    if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PChar(piShortName))) <> 0 Then
+    if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PChar(piShortName))) <> 0 then
       SetContactStatus(hContact, ID_STATUS_OFFLINE);
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
-	end;
+  end;
 end;
 
-// =============================================================================
-// function is called when
-// user deletes contact from list
-// this function deletes it from the server
-// -----------------------------------------------------------------------------
-function ContactDeleted(wParam: wParam; lParam: lParam): Integer; cdecl;
-var StrTemp: String;
+ // =============================================================================
+ // function is called when
+ // user deletes contact from list
+ // this function deletes it from the server
+ // -----------------------------------------------------------------------------
+function ContactDeleted(wParam: wParam; lParam: lParam): integer; cdecl;
+var
+  StrTemp: string;
 begin
   Result := 0;
-  if DBGetContactSettingByte(wParam, piShortName, 'Friend', 0) = 1 Then // delete from the server only contacts marked as Friend
+  if DBGetContactSettingByte(wParam, piShortName, 'Friend', 0) = 1 then // delete from the server only contacts marked as Friend
   begin
-    if DBGetContactSettingByte(0, piShortName, opt_UserDontDeleteFriendsFromTheServer, 0) = 0 Then
+    if DBGetContactSettingByte(0, piShortName, opt_UserDontDeleteFriendsFromTheServer, 0) = 0 then
       vk_DeleteFriend(DBGetContactSettingDWord(wParam, piShortName, 'ID', 0))
     else
     begin
@@ -799,37 +803,37 @@ begin
 end;
 
 
-// =============================================================================
-// procedure to start thread for regular data update
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // procedure to start thread for regular data update
+ // -----------------------------------------------------------------------------
 procedure UpdateDataInit();
 begin
   if not Assigned(ThrIDDataUpdate) then
     ThrIDDataUpdate := TThreadDataUpdate.Create(False);
 end;
 
-// =============================================================================
-// procedure to finish thread for regular data update
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // procedure to finish thread for regular data update
+ // -----------------------------------------------------------------------------
 procedure UpdateDataDestroy();
 begin
   if Assigned(ThrIDDataUpdate) then
-    begin
-      ThrIDDataUpdate.Terminate;
-      // WaitForSingleObject(ThrIDDataUpdate.Handle, 5000);
-      ThrIDDataUpdate.WaitFor;
-      FreeAndNil(ThrIDDataUpdate);
-    end;
+  begin
+    ThrIDDataUpdate.Terminate;
+    // WaitForSingleObject(ThrIDDataUpdate.Handle, 5000);
+    ThrIDDataUpdate.WaitFor;
+    FreeAndNil(ThrIDDataUpdate);
+  end;
 end;
 
-// =============================================================================
-// connection thread
-// -----------------------------------------------------------------------------
+ // =============================================================================
+ // connection thread
+ // -----------------------------------------------------------------------------
 procedure TThreadConnect.Execute;
 var
   ThreadNameInfo: TThreadNameInfo;
-  vk_Status_Temp: Integer;
-  HTML: String;
+  vk_Status_Temp: integer;
+  HTML:           string;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadConnect) Thread started...'));
 
@@ -840,46 +844,49 @@ begin
   ThreadNameInfo.FThreadID := $FFFFFFFF;
   ThreadNameInfo.FFlags := 0;
   try
-    RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
+    RaiseException($406D1388, 0, sizeof(ThreadNameInfo) div sizeof(longword), @ThreadNameInfo);
   except
   end;
 
   // change status to online or invisible
-  if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
-    Begin
-      // changing status to connecting first
-      vk_Status_Temp := vk_Status;
-      vk_Status := ID_STATUS_CONNECTING;
-      ProtoBroadcastAck(piShortName,
-        0,
-        ACKTYPE_STATUS,
-        ACKRESULT_SUCCESS,
-        THANDLE(vk_StatusPrevious),
-        vk_Status);
-      // connecting to the server
-      if not Terminated then // doing it only if thread is not being terminated
-        vk_Status := vk_Connect();
-      if vk_Status <> 0 Then // error occuried
-      begin
-        vk_Status := ID_STATUS_OFFLINE; // need to change status to offline
-        ProtoBroadcastAck(piShortName, 0, ACKTYPE_LOGIN, ACKRESULT_FAILED, 0, ErrorCode);
-        case ErrorCode of
-          LOGINERR_WRONGPASSWORD: ShowPopupMsg(0, 'Error: Your e-mail or password was rejected', 2);
-          LOGINERR_TIMEOUT: ShowPopupMsg(0, 'Error: Unknown error during sign on', 2);
-          LOGINERR_NONETWORK: ShowPopupMsg(0, 'Error: Cannot connect to the server', 2);
-        end;
-      end
-      else
-      begin
-        vk_Status := vk_Status_Temp;
-        HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_lang_dialog);
-        if Pos('doChangeLang', HTML) > 0 then
-        begin
-          HTML := TextBetween(HTML, 'doChangeLang(', ')');
-          vk_UserLangHash := TextBetween(HTML,', ''','''');
-        end;
+  if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) then
+  begin
+    // changing status to connecting first
+    vk_Status_Temp := vk_Status;
+    vk_Status := ID_STATUS_CONNECTING;
+    ProtoBroadcastAck(piShortName,
+      0,
+      ACKTYPE_STATUS,
+      ACKRESULT_SUCCESS,
+      THANDLE(vk_StatusPrevious),
+      vk_Status);
+    // connecting to the server
+    if not Terminated then // doing it only if thread is not being terminated
+      vk_Status := vk_Connect();
+    if vk_Status <> 0 then // error occuried
+    begin
+      vk_Status := ID_STATUS_OFFLINE; // need to change status to offline
+      ProtoBroadcastAck(piShortName, 0, ACKTYPE_LOGIN, ACKRESULT_FAILED, 0, ErrorCode);
+      case ErrorCode of
+        LOGINERR_WRONGPASSWORD:
+          ShowPopupMsg(0, 'Error: Your e-mail or password was rejected', 2);
+        LOGINERR_TIMEOUT:
+          ShowPopupMsg(0, 'Error: Unknown error during sign on', 2);
+        LOGINERR_NONETWORK:
+          ShowPopupMsg(0, 'Error: Cannot connect to the server', 2);
       end;
-    End;
+    end
+    else
+    begin
+      vk_Status := vk_Status_Temp;
+      HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_lang_dialog);
+      if Pos('doChangeLang', HTML) > 0 then
+      begin
+        HTML := TextBetween(HTML, 'doChangeLang(', ')');
+        vk_UserLangHash := TextBetween(HTML, ', ''', '''');
+      end;
+    end;
+  end;
 
   // really change the status
   ProtoBroadcastAck(piShortName,
@@ -895,29 +902,29 @@ begin
   // the code below should be executed only AFTER we informed miranda
   // that status is changed - otherwise other plugins are informed incorrectly
   if (vk_Status = ID_STATUS_OFFLINE) and
-     (not Terminated) and
-     (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 0) then
+    (not Terminated) and
+    (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 0) then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(TThreadConnect) ... changing status to offline'));
     UpdateDataDestroy(); // stop the thread for regular data update
-    SetStatusOffline(); // make all contacts offline
-    vk_Logout(); // logout from the site
+    SetStatusOffline();  // make all contacts offline
+    vk_Logout();         // logout from the site
   end;
-  if (vk_Status = ID_STATUS_INVISIBLE) Then
+  if (vk_Status = ID_STATUS_INVISIBLE) then
     vk_Logout(); // logout from the site
-  if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) Then
+  if (vk_Status = ID_STATUS_ONLINE) or (vk_Status = ID_STATUS_INVISIBLE) then
   begin
     if not Terminated then
       vk_GetUserNameID(); // update OUR name and id
-    // user agreed to join plugin's group (see OnModulesLoad)
+                          // user agreed to join plugin's group (see OnModulesLoad)
     if DBGetContactSettingByte(0, piShortName, opt_GroupPluginJoined, 0) = 2 then
     begin
-      DBWriteContactSettingByte (0, piShortName, opt_GroupPluginJoined, 3);
-        vk_JoinGroup(6929403); // id of plugins group
+      DBWriteContactSettingByte(0, piShortName, opt_GroupPluginJoined, 3);
+      vk_JoinGroup(6929403); // id of plugins group
     end;
     // write default value of last date & time of contacts' status update
     // so they will be updated again immediately in DataUpdate thread
-    DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeFriendsStatus, 539033600);
+    DBWriteContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeFriendsStatus, 539033600);
     if not Terminated then // doing it only if thread is not being terminated
       UpdateDataInit(); // start separate thread for online data update
   end;
@@ -931,30 +938,28 @@ begin
 end;
 
 type
-  ActionProc=procedure();
-// =============================================================================
-// update data thread
-// -----------------------------------------------------------------------------
+  ActionProc = procedure();
+ // =============================================================================
+ // update data thread
+ // -----------------------------------------------------------------------------
 procedure TThreadDataUpdate.Execute;
 
-procedure ExecIt(action:ActionProc; actionName:string);
-begin
-  try
-    Netlib_Log(vk_hNetlibUser, PChar(actionName+' started'));
-    action();
-    Netlib_Log(vk_hNetlibUser, PChar(actionName+' finished'));
-  except
-    on E : Exception do
-      Netlib_Log(vk_hNetlibUser, PChar(actionName+' exception: '+E.Message));
+  procedure ExecIt(action: ActionProc; actionName: string);
+  begin
+    try
+      Netlib_Log(vk_hNetlibUser, PChar(actionName + ' started'));
+      action();
+      Netlib_Log(vk_hNetlibUser, PChar(actionName + ' finished'));
+    except
+      on E: Exception do
+        Netlib_Log(vk_hNetlibUser, PChar(actionName + ' exception: ' + E.Message));
+    end;
   end;
-end;
 
 var
-  ThreadNameInfo: TThreadNameInfo;
-  ContactIDNews,
-  ContactIDWall: Integer;
-  CheckMessagePeriod: Integer;
-
+  ThreadNameInfo:               TThreadNameInfo;
+  ContactIDNews, ContactIDWall: integer;
+  CheckMessagePeriod:           integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Thread started...'));
 
@@ -963,7 +968,7 @@ begin
   ThreadNameInfo.FThreadID := $FFFFFFFF;
   ThreadNameInfo.FFlags := 0;
   try
-    RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo);
+    RaiseException($406D1388, 0, sizeof(ThreadNameInfo) div sizeof(longword), @ThreadNameInfo);
   except
   end;
 
@@ -990,11 +995,11 @@ begin
     end;
   end;
 
-  while true do // never ending cycle
+  while True do // never ending cycle
   begin
     try
       if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // if thread termination is requested OR
-         (ThrIDDataUpdate.Terminated) then  // miranda is being closed
+        (ThrIDDataUpdate.Terminated) then  // miranda is being closed
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... miranda is being terminated, updates finished, point 1'));
         break;
@@ -1005,12 +1010,12 @@ begin
         // updating contacts' statuses
         if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeFriendsStatus, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserUpdateFriendsStatus, 60)) / SecsPerDay then
         begin
-            // write new value of last date & time of contacts' status update
-            DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeFriendsStatus, DateTimeToFileDate(Now));
-            ExecIt(@vk_GetFriends, 'vk_GetFriends');
+          // write new value of last date & time of contacts' status update
+          DBWriteContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeFriendsStatus, DateTimeToFileDate(Now));
+          ExecIt(@vk_GetFriends, 'vk_GetFriends');
         end;
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // check again if thread termination is requested OR
-           (ThrIDDataUpdate.Terminated) then  // miranda is being closed
+          (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... miranda is being terminated, updates finished, point 2 (after contacts statuses update)'));
           break;
@@ -1021,16 +1026,17 @@ begin
         if (CheckMessagePeriod = 0) then
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Message receiving disabled'));
-        end else
-        if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgs, 539033600)) <= ((Now * SecsPerDay) - CheckMessagePeriod) / SecsPerDay then // code is equal to IncSecond function with negative value
-        begin
+        end
+        else
+          if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgs, 539033600)) <= ((Now * SecsPerDay) - CheckMessagePeriod) / SecsPerDay then // code is equal to IncSecond function with negative value
+          begin
             // write new value of last date & time of new message received
-            DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeMsgs, DateTimeToFileDate(Now));
+            DBWriteContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgs, DateTimeToFileDate(Now));
             ExecIt(@vk_GetMsgsFriendsEtc, 'vk_GetMsgsFriendsEtc');
-        end;
+          end;
 
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // check again if thread termination is requested OR
-           (ThrIDDataUpdate.Terminated) then  // miranda is being closed
+          (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... miranda is being terminated, updates finished, point 3 (after new msgs receiving)'));
           break;
@@ -1041,9 +1047,9 @@ begin
         begin
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeAvatars, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserAvatarsUpdateFreq, 60)) / SecsPerDay then
           begin
-              // write new value of last date & time of new message received
-              DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeAvatars, DateTimeToFileDate(Now));
-              ExecIt(@vk_AvatarsGet, 'vk_AvatarsGet');
+            // write new value of last date & time of new message received
+            DBWriteContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeAvatars, DateTimeToFileDate(Now));
+            ExecIt(@vk_AvatarsGet, 'vk_AvatarsGet');
           end;
         end;
 
@@ -1059,7 +1065,7 @@ begin
           begin
             // write new value of last date & time of new message received
             ExecIt(@vk_GetNews, 'vk_GetNews');
-            DBWriteContactSettingDWord (0, piShortName, opt_NewsLastUpdateDateTime, DateTimeToFileDate(Now));
+            DBWriteContactSettingDWord(0, piShortName, opt_NewsLastUpdateDateTime, DateTimeToFileDate(Now));
           end;
         end
         else  // if news are not supported
@@ -1069,7 +1075,7 @@ begin
             SetContactStatus(ContactIDNews, ID_STATUS_OFFLINE);
         end;
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // one more time...
-           (ThrIDDataUpdate.Terminated) then  // miranda is being closed
+          (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... miranda is being terminated, updates finished, point 5 (after news receiving)'));
           break;
@@ -1080,7 +1086,7 @@ begin
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_GroupsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_GroupsSecs, 300)) / SecsPerDay then
           begin
             // write new value of last date & time of new message received
-            DBWriteContactSettingDWord (0, piShortName, opt_GroupsLastUpdateDateTime, DateTimeToFileDate(Now));
+            DBWriteContactSettingDWord(0, piShortName, opt_GroupsLastUpdateDateTime, DateTimeToFileDate(Now));
             ExecIt(@vk_GetGroupsNews, 'vk_GetGroupsNews');
           end;
 
@@ -1089,12 +1095,12 @@ begin
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_CommentsLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_CommentsSecs, 300)) / SecsPerDay then
           begin
             // write new value of last date & time of new message received
-            DBWriteContactSettingDWord (0, piShortName, opt_CommentsLastUpdateDateTime, DateTimeToFileDate(Now));
+            DBWriteContactSettingDWord(0, piShortName, opt_CommentsLastUpdateDateTime, DateTimeToFileDate(Now));
             ExecIt(@vk_GetCommentsNews, 'vk_GetCommentsNews');
           end;
 
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // one more time...
-           (ThrIDDataUpdate.Terminated) then  // miranda is being closed
+          (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... miranda is being terminated, updates finished, point 5 (after news receiving)'));
           break;
@@ -1109,7 +1115,7 @@ begin
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_WallLastUpdateDateTime, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_WallUpdateFreq, 60)) / SecsPerDay then
           begin
             // write new value of last date & time of posts received
-            DBWriteContactSettingDWord (0, piShortName, opt_WallLastUpdateDateTime, DateTimeToFileDate(Now));
+            DBWriteContactSettingDWord(0, piShortName, opt_WallLastUpdateDateTime, DateTimeToFileDate(Now));
             vk_WallGetMessages(0);
           end;
         end
@@ -1120,7 +1126,7 @@ begin
             SetContactStatus(ContactIDWall, ID_STATUS_OFFLINE);
         end;
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // one more time...
-           (ThrIDDataUpdate.Terminated) then  // miranda is being closed
+          (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) ... miranda is being terminated, updates finished, point 6 (after msgs from the wall receiving)'));
           break;
@@ -1133,19 +1139,19 @@ begin
       begin
         if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeKeepOnline, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserKeepOnline, 360)) / SecsPerDay then
         begin
-            // write new value of last date & time of contacts' status update
-            DBWriteContactSettingDWord (0, piShortName, opt_LastUpdateDateTimeKeepOnline, DateTimeToFileDate(Now));
-            ExecIt(@vk_KeepOnline, 'vk_KeepOnline');
+          // write new value of last date & time of contacts' status update
+          DBWriteContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeKeepOnline, DateTimeToFileDate(Now));
+          ExecIt(@vk_KeepOnline, 'vk_KeepOnline');
         end;
       end;
 
-    Sleep(1000);
+      Sleep(1000);
     except
       on E: Exception do
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(TThreadDataUpdate) Exception (' + IntToStr(E.HelpContext) + '): ' + E.Message));
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or
-           (ThrIDDataUpdate.Terminated) then
+          (ThrIDDataUpdate.Terminated) then
           break;
       end;
     end;
