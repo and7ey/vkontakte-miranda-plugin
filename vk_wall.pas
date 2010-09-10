@@ -478,6 +478,7 @@ var
   Dialog, DialogLabel:      HWnd; // handles of the dialog and dialog lable reflecting processing status
   PopupsShowStatus:         boolean;
   defTimeout1, defTimeout2: integer;
+  jsoFeed:                  TlkJSONobject;
 begin
   // temporarily increase timeout periods for messages sending
   defTimeout1 := DBGetContactSettingDword(0, 'SRMM', 'MessageTimeout', 10000);
@@ -536,20 +537,25 @@ begin
         if Dialog <> 0 then
           SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_captcha_required)));
 
-        CaptchaId := GetJSONResponse(HTML, 'captcha_sid');
-        CaptchaUrl := GetJSONResponse(HTML, 'captcha_img');
+        jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
+        try
+          CaptchaId := jsoFeed.Field['error'].Field['captcha_sid'].Value;
+          CaptchaUrl := jsoFeed.Field['error'].Field['captcha_img'].Value;
 
-        CaptchaValue := ProcessCaptcha(CaptchaId, CaptchaUrl);
-        if CaptchaValue = 'captcha_download_failed' then // error - can't download captcha image
-        begin
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... unable to download captcha'));
-          if Dialog <> 0 then
-            SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_captcha_failed)));
-        end
-        else // ok
-        begin
-          Result := vk_WallPostMessage(MsgDetails, '^' + Format(vk_url_api_captcha_addition, [CaptchaId, CaptchaValue]));
-          Exit;
+          CaptchaValue := ProcessCaptcha(CaptchaId, CaptchaUrl);
+          if CaptchaValue = 'captcha_download_failed' then // error - can't download captcha image
+          begin
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostMessage) ... unable to download captcha'));
+            if Dialog <> 0 then
+              SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(TranslateW(wall_status_captcha_failed)));
+          end
+          else // ok
+          begin
+            Result := vk_WallPostMessage(MsgDetails, '^' + Format(vk_url_api_captcha_addition, [CaptchaId, CaptchaValue]));
+            Exit;
+          end;
+        finally
+          jsoFeed.Free;
         end;
       end;
       else // successful

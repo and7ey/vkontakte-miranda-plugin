@@ -116,8 +116,9 @@ function vk_SendMessage(ToID: integer; Text: WideString; sCaptcha: string = ''):
   // 1 - not successful (unknown reason)
   // 2 - msgs sent two often
 var
-  HTML:  string; // html content of the page received
-  sText: string;
+  HTML:    string; // html content of the page received
+  sText:   string;
+  jsoFeed: TlkJSONobject;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) Sending new message to id ' + IntToStr(ToID) + ', message text: ' + ansistring(Text)));
   Result := 1; // Unknown error occured
@@ -139,15 +140,20 @@ begin
         14:          // captcha needed
         begin
           Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... captcha input is required, getting it...'));
-          CaptchaId := GetJSONResponse(HTML, 'captcha_sid');
-          CaptchaUrl := GetJSONResponse(HTML, 'captcha_img');
+          jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
+          try
+            CaptchaId := jsoFeed.Field['error'].Field['captcha_sid'].Value;
+            CaptchaUrl := jsoFeed.Field['error'].Field['captcha_img'].Value;
 
-          CaptchaValue := ProcessCaptcha(CaptchaId, CaptchaUrl);
-          if CaptchaValue = 'captcha_download_failed' then // error - can't download captcha image
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... unable to download captcha'))
-          else // ok
-          begin
-            Result := vk_SendMessage(ToID, Text, '^' + Format(vk_url_api_captcha_addition, [CaptchaId, CaptchaValue]));
+            CaptchaValue := ProcessCaptcha(CaptchaId, CaptchaUrl);
+            if CaptchaValue = 'captcha_download_failed' then // error - can't download captcha image
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... unable to download captcha'))
+            else // ok
+            begin
+              Result := vk_SendMessage(ToID, Text, '^' + Format(vk_url_api_captcha_addition, [CaptchaId, CaptchaValue]));
+            end;
+          finally
+            jsoFeed.Free;
           end;
         end;
         else // successful
