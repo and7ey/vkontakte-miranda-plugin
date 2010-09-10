@@ -44,7 +44,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName   = 'VKontakte';
-  piVersion     = 0 shl 24 + 4 shl 16 + 1 shl 8 + 5;
+  piVersion     = 0 shl 24 + 4 shl 16 + 1 shl 8 + 6;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor      = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
