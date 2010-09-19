@@ -43,10 +43,10 @@ implementation
 uses
   m_globaldefs,
   m_api,
-
   vk_global, // module with global variables and constant used
 
-  SysUtils, Windows;
+  Windows,
+  SysUtils;
 
  // =============================================================================
  // function to display popup
@@ -182,7 +182,7 @@ end;
  // -----------------------------------------------------------------------------
 procedure PopupDestroy();
 begin
- // no code currently
+
 end;
 
 

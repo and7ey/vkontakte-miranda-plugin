@@ -27,9 +27,6 @@
  [ Known Issues ]
  See the code
 
- [ ToDo ]
- - check if right request is authorized/denied
-
  Contributors: LA
 -----------------------------------------------------------------------------}
 unit vk_auth;
@@ -39,7 +36,6 @@ interface
 uses
   m_globaldefs,
   m_api,
-  
   Windows;
 
 procedure AuthInit();
@@ -53,11 +49,12 @@ uses
   vk_global, // module with global variables and constant used
   vk_http,   // module to connect with the site
   vk_opts,   // unit to work with options
-  htmlparse, vk_captcha,
-  // module to simplify html parsing
+  vk_captcha,
+  htmlparse, // module to simplify html parsing
 
-  Classes, Messages,
-  SysUtils;
+  Messages,
+  SysUtils,
+  Classes;
 
 type
   PAuthRequest = ^TAuthRequest;
@@ -81,7 +78,7 @@ function vk_GetSecureIDAuthRequest(UserID: integer): string;
 var
   HTML: string;
 begin
-  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_auth_securityid, [UserID]));
+  HTML := HTTP_NL_Get(Format(vk_url + vk_url_auth_securityid, [UserID]));
   Result := TextBetween(HTML, 'id=\"h\" value=\"', '\"');
 end;
 
@@ -99,13 +96,12 @@ begin
     // GAP (?): we don't care about result as of now
     // we also don't need page html body, so request head only
     // text for verification - получил уведомление и подтвердит, что ¬ы его друг
-    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_authrequestsend, [ID, SecureID, MessageText]));
+    HTTP_NL_Get(Format(vk_url + vk_url_authrequestsend, [ID, SecureID, MessageText]));
   end;
 end;
 
  // =============================================================================
  // procedure to accept somebody's request to add us to their contact (friend's) list
- // TODO: we don't use ID passed currently, do we authorize right request?
  // -----------------------------------------------------------------------------
 procedure vk_AuthRequestReceivedAllow(ID: string);
 var
@@ -114,7 +110,7 @@ var
   sCaptchaValue, sHash: string;
 begin
   // first we have to get URL to accept request
-  HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
+  HTML := HTTP_NL_Get(vk_url_pda + vk_url_pda_authrequestreceived_requestid);
   RequestURL := TextBetween(HTML, 'addfriend', '"');
   RequestURL := vk_url_pda + '/addfriend' + RequestURL;
 
@@ -133,7 +129,6 @@ end;
 
  // =============================================================================
  // procedure to deny somebody's request to add us to their contact (friend's) list
- // TODO: we don't use ID passed currently, do we authorize right request?
  // -----------------------------------------------------------------------------
 procedure vk_AuthRequestReceivedDeny(ID: string);
 var
@@ -141,7 +136,7 @@ var
   RequestURL: string;
 begin
   // first we have to get URL to deny request
-  HTML := HTTP_NL_Get(vk_url_authrequestreceived_requestid);
+  HTML := HTTP_NL_Get(vk_url_pda + vk_url_pda_authrequestreceived_requestid);
   RequestURL := TextBetween(HTML, 'deletefriend', '"');
   RequestURL := vk_url_pda + '/deletefriend' + RequestURL;
 

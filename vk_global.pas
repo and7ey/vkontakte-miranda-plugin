@@ -38,18 +38,25 @@ interface
 uses
   m_globaldefs,
   m_api,
-
   Classes;
 
 const
   // constants required for PluginInfo
   piShortName   = 'VKontakte';
-  piVersion     = 0 shl 24 + 4 shl 16 + 1 shl 8 + 6;
+  piVersion     = 0 shl 24 + 4 shl 16 + 1 shl 8 + 7;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor      = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
   piCopyright   = '(c) 2008-2010 Andrey Lukyanov, Artyom Zhurkin';
   piHomepage    = 'http://vkontakte.ru/club6929403';
+
+var
+  vk_url_vkontakteru:  string = 'vkontakte.ru';
+  vk_url_mvkontakteru: string = 'm.vkontakte.ru';
+  vk_url_userapi:      string = 'userapi.com';
+  vk_url:              string;  // these values are defined in
+  vk_url_pda:          string;  // VKontakte.dpr, OnModulesLoad function
+  vk_url_uapi:         string;
 
 const
   // vkontakte API application id
@@ -57,10 +64,9 @@ const
 
   // URLs
   vk_url_prefix = 'http://';
-  // pda url const section
-  vk_url_pda    = vk_url_prefix + 'm.vkontakte.ru';
 
-  vk_url_api                     = 'http://api.vkontakte.ru/api.php';
+  vk_url_api_prefix              = 'api.';
+  vk_url_api_suffix              = '/api.php';
   vk_url_api_session             = '/login.php?app=' + vk_api_appid + '&layout=popup&type=browser&settings=16383'; // 1931262 - constant app id
   // in api related links fields should be separated by symbol ^
   vk_url_api_messages_send       = 'method=messages.send^uid=%d^message=%s';
@@ -79,31 +85,18 @@ const
   vk_url_api_photos_getbyid      = 'method=photos.getById^photos=%s';
   vk_url_api_video_get           = 'method=video.get^videos=%s';
 
-  vk_url_pda_inbox                     = vk_url_pda + '/inbox';
-  vk_url_pda_login                     = 'http://vkontakte.ru/login.php?pda=index&email=%s&pass=%s&expire=0';
-  // vk_url_pda_logout = vk_url_pda + '/logout';
-  vk_url_pda_logout                    = 'http://login.vk.com/?act=logout&vk=&hash=';
-  vk_url_pda_forgot                    = vk_url_pda + '/forgot';
-  vk_url_pda_sendmsg_secureid          = vk_url_pda + '/?act=write&to=%d';
-  vk_url_pda_mailsent                  = '/mailsent?pda=1';
-  vk_url_pda_sendmsg                   = 'to_reply=0&to_id=%d&chas=%s&message=%s';
-  vk_url_pda_sendmsg_captcha           = 'to_reply=0&to_id=%d&chas=%s&message=%s&captcha_sid=%s&captcha_key=%s';
-  vk_url_pda_friend                    = vk_url_pda + '/id%d';
-  vk_url_pda_keeponline                = vk_url_pda + '/profile.php';   // leads to online-on-site
-  vk_url_pda_msg                       = vk_url_pda + '/letter%d?';
-  vk_url_pda_setstatus_securityhash    = vk_url_pda + '/setstatus?pda=1';
-  vk_url_pda_setstatus                 = vk_url_pda + '/setstatus?pda=1&activityhash=%s&setactivity=%s';
-  vk_url_pda_statusdelete              = vk_url_pda + '/setstatus?pda=1&activityhash=%s&clearactivity=1';
-  vk_url_pda_news                      = vk_url_pda + '/news';
-  vk_url_pda_group_join                = vk_url_pda + '/groupenter?pda=1&gid=%d';
-  vk_url_authrequestreceived_requestid = vk_url_pda + '/friendsrequests';
+  vk_url_pda_login                         = '/login.php?pda=index&email=%s&pass=%s&expire=0';
+  // vk_url_pda_logout = 'http://login.vk.com/?act=logout&vk=&hash='; doesn't work
+  vk_url_pda_friend                        = '/id%d';
+  vk_url_pda_keeponline                    = '/id0';   // leads to online-on-site
+  vk_url_pda_news                          = '/news';
+  vk_url_pda_group_join                    = '/groupenter?pda=1&gid=%d';
+  vk_url_pda_authrequestreceived_requestid = '/friendsrequests';
 
   // general url const section
+  vk_url_captcha              = '/captcha.php?s=1&sid=%s';
   vk_url_feed_friendsonline   = '/friends.php?id=0&filter=online';
   vk_url_feed_friends         = '/friends.php?id=0';
-  // vk_url_feed_friendsonline = '/friendJS.php?act=online';
-  // vk_url_feed_friends = vk_url + '/friendJS.php';
-  // vk_url_friends_all = 'http://vkontakte.ru/friend.php';
   vk_url_register             = '/reg0';
   vk_url_forgot               = '/login.php?op=forgot';
   vk_url_friend               = '/id%d';    // leads to online-on-site, used in get info
@@ -113,53 +106,54 @@ const
   vk_url_audio                = '/audio.php?id=%d';
   vk_url_notes                = '/notes.php?id=%d';
   vk_url_questions            = '/questions.php?mid=%d';
-  vk_url_frienddelete         = 'http://vkontakte.ru/friends_ajax.php?act=decline_friend&fid=%d&hash=%s';
-  vk_url_friend_hash          = 'http://vkontakte.ru/id%d';
-  // vk_url_searchbyname = 'http://vkontakte.ru/search.php?act=adv&subm=1&first_name=%s&last_name=%s&o=0';
+  vk_url_frienddelete         = '/friends_ajax.php?act=decline_friend&fid=%d&hash=%s';
+  vk_url_friend_hash          = '/id%d';
   vk_url_search               = '/gsearch.php?section=people&name=1&ra=1&q=%s&sex=%d&status=%d&political=%d&bday_day=%d&bday_month=%d&bday_year=%d&country=%d&uni_city=%d&university=%d&faculty=%d&chair=%d&graduation=%d&edu_form=%d&online=%d';
   vk_url_search_suffix        = '&st=%d';
-  // vk_url_searchbyanydata = 'http://vkontakte.ru/search.php?q=%s&act=quick';
   vk_url_searchbyid           = '/search.php?id=%d';
   vk_url_feed2                = '/feed2.php?mask=mf';
   vk_url_username             = '/feed2.php?mask=u';  // http://vkontakte.ru/feed2.php?mask=ufpvmge
   vk_url_auth_securityid      = '/friend.php?act=a_add_form&fid=%d';
   vk_url_authrequestsend      = '/friend.php?act=addFriend&fid=%d&h=%s&message=%s';  // http://vkontakte.ru/friend.php?act=add&id=123456&h=8e30f2fe
-  // vk_url_authrequestreceivedallow = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=1';
-  // vk_url_authrequestreceiveddeny = 'http://vkontakte.ru/friend.php?act=ajax&fid=%d&n=0';
   vk_url_news                 = '/news.php?act=friends';
+  vk_url_news_feed_friends    = '/newsfeed.php?section=friends&filter=%d&timestamp=%d';
   vk_url_news_groups          = '/newsfeed.php?section=groups';
+  vk_url_news_feed_groups     = '/newsfeed.php?section=groups&filter=%d&timestamp=%d';
   vk_url_news_comments        = '/newsfeed.php?section=comments';
   vk_url_photo_my             = '/profileEdit.php?page=photo';
   vk_url_photo_my_delete      = '/profileEdit.php?page=photo2&subm=%s&hash=%s';
   vk_url_wall                 = '/wall.php';
   vk_url_wall_id              = '/wall.php?id=%d';
   vk_url_wall_hash            = '/wall.php?act=write&id=%d';
-  vk_url_wall_postmsg         = 'to_id=%d&act=sent&wall_hash=%s&message=%s';
-  vk_url_wall_postmsg_captcha = 'to_id=%d&act=sent&wall_hash=%s&message=%s&captcha_sid=%s&captcha_key=%s';
   vk_url_wall_postpic_upload  = '/graffiti.php?to_id=%d&group_id=0';
   vk_url_wall_postpic_getlast = '/graffiti.php?act=last';
   vk_url_wall_postpic         = '/wall.php?act=a_post_wall&grid=%s&to_id=%d&hash=%s&message=%s&media=graffiti&type=0&reply_to=0';
   vk_url_wall_postpic_captcha = '/wall.php?act=a_post_wall&grid=%s&to_id=%d&hash=%s&media=graffiti&type=0&reply_to=0&message=%s&captcha_sid=%s&captcha_key=%s';
   vk_lang_dialog              = '/lang.php?act=lang_dialog';
   vk_lang_change              = '/lang.php?act=change_lang&lang_id=%s&hash=%s';
-  vk_url_activityhistory      = '/profile.php?id=%d&activityhistory=1'; // for future usage
-  vk_url_currentactivity      = '/feed2.php?act=activity'; // for future usage
+
+  vk_url_userapi_login_prefix = ' http://login.';
+  vk_url_userapi_login_suffix = '/auth?login=force&site=2&email=%s&pass=%s';
+  vk_url_userapi_logout = '/auth?login=logout&site=2&sid=%s';
+  // vk_url_userapi_news_photos = '/data?act=updates_photos&from=0&to=3&sid=%s';
+
+  vk_url_wiki = 'http://code.google.com/p/vkontakte-miranda-plugin/wiki/SettingsHidden';
 
 const
   // error messages
   err = 'Unknown error occured.';
   err_messages_send: array [0..100] of string = (
-    err,                                               // 0
-    err,                                               // 1
+    err,                             // 0
+    err,                             // 1
     'Application is disabled. Enable your application or use test mode.', // 2
-    err,                                               // 3
-    'Incorrect signature.',                            // 4
-    'User authorization failed.',                      // 5
-    'Too many requests per second.',                   // 6
+    err,                             // 3
+    'Incorrect signature.',          // 4
+    'User authorization failed.',    // 5
+    'Too many requests per second.', // 6
     'Permission to perform this action is denied by user.', // 7
-    err,                                               // 8
-    'Flood control enabled for this action.',          // 9
-    err,                                               // 10
+    err,                             // 8
+    'Flood control enabled for this action.', // 9
+    err,                             // 10
     err, err, err, err, err, err, err, err, err, err,  // 11-20
     err, err, err, err, err, err, err, err, err, err,  // 21-30
     err, err, err, err, err, err, err, err, err, err,  // 31-40
@@ -168,12 +162,12 @@ const
     err, err, err, err, err, err, err, err, err, err,  // 61-70
     err, err, err, err, err, err, err, err, err, err,  // 71-80
     err, err, err, err, err, err, err, err, err, err,  // 81-90
-    err, err, err, err, err, err, err, err, err,       // 91-99
+    err, err, err, err, err, err, err, err, err, // 91-99
     'One of the parameters specified was missing or invalid.'); // 100
 
   err_sendmgs_offline  = 'You cannot send messages when you are offline.';
-  // err_sendmgs_freq = 'You cannot send messages more often than once in 1 second. Please try again later.';
   err_session_nodetail = 'No session details are received. Some functions will not work properly.';
+  err_userapi_session_nodetail = 'No UserAPI session details are received. Some functions will not work properly.';
 
   // questions
   qst_join_vk_group = 'Thank you for usage of VKontakte plugin!'#13#10#13#10'Would you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?'#13#10'If you press Cancel now, the same question will be asked again during next Miranda start.';
@@ -209,7 +203,9 @@ const
   opt_UserDefaultGroup: PChar                    = 'GroupDefault';
   opt_UserUpdateAddlStatus: PChar                = 'AddlStatusSupport';
   opt_UserAvatarsSupport: PChar                  = 'AvatarsSupport';
-  opt_UserPreferredHost: PChar                   = 'PreferredHost';
+  opt_UserPreferredHostVKontakteRu: PChar        = 'PreferredHostVKontakteRu';
+  opt_UserPreferredHostMVKontakteRu: PChar       = 'PreferredHostMVKontakteRu';
+  opt_UserPreferredHostUserApiCom: PChar         = 'PreferredHostUserApiCom';
   opt_UserAvatarsUpdateFreq: PChar               = 'AvatarsUpdateFreqSecs';
   opt_UserAvatarsUpdateWhenGetInfo: PChar        = 'AvatarsUpdateWhenGetInfo';
   opt_UserVKontakteURL: PChar                    = 'InfoVKontaktePageURL';
@@ -357,14 +353,14 @@ var
 
   FolderAvatars: string; // global variable to keep path to avatars folder
 
-  vk_url_host: string; // variable to keep VK host
-
   vk_o_login: string; // variables to keep user's login and pass
   vk_o_pass:  string;
 
   vk_session_id: string; // variable to keep current session's id - needed for VK API
   vk_id:         string; // variable to keep user's id
   vk_secret:     string;
+
+  vk_userapi_session_id: string; // variable to keep current session's id - needed for userapi
 
   ErrorCode:     byte; // global variable to keep error code of last exception
   CookiesGlobal: TStringList;

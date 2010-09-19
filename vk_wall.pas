@@ -36,17 +36,15 @@ interface
 uses
   m_globaldefs,
   m_api,
-
   vk_global, // module with global variables and constant used
   vk_opts,   // unit to work with options
   vk_http,   // module to connect with the site
   vk_popup,  // module to support popups
   vk_common, // module with common functions
-  
   htmlparse, // module to simplify html parsing
-  
-  Messages, uLkJSON,
-  Windows;
+  uLkJSON,
+  Windows,
+  Messages;
 
 type
   PMsgDetails = ^TMsgDetails;
@@ -77,10 +75,10 @@ uses
   vk_msgs,    // module to send/receive messages
   vk_captcha, // module to process captcha
 
-  Classes, SysUtils,
-  // to support TFileStream
-  CommCtrl,
+  SysUtils,
+  Classes, // to support TFileStream
   CommDlg,
+  CommCtrl,
   ShellAPI;
 
 const
@@ -184,7 +182,7 @@ begin
     begin
       if wParam = WM_USER + 1 then // menu item is chosen
       begin
-        ShellAPI.ShellExecute(0, 'open', PChar(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ContactID])), nil, nil, 0);
+        ShellAPI.ShellExecute(0, 'open', PChar(Format(vk_url + vk_url_wall_id, [ContactID])), nil, nil, 0);
         Result := True;
       end;
     end;
@@ -405,7 +403,7 @@ var
   StrTemp: string;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetFullID) Getting full id of contact ' + IntToStr(ContactID) + '...'));
-  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_id, [ContactID]));
+  HTML := HTTP_NL_Get(Format(vk_url + vk_url_wall_id, [ContactID]));
   if Trim(HTML) <> '' then
   begin
     StrTemp := TextBetween(HTML, '&id=', '">Написать на стене');
@@ -448,7 +446,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) Getting hash of contact ' + IntToStr(ContactFullID) + '...'));
 
   // getting encoded wall hash
-  HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_hash, [ContactFullID]));
+  HTML := HTTP_NL_Get(Format(vk_url + vk_url_wall_hash, [ContactFullID]));
   if Trim(HTML) <> '' then
   begin
     Hash := Trim(TextBetween(HTML, 'name="wall_hash" value="', '"'));
@@ -541,7 +539,6 @@ begin
         try
           CaptchaId := jsoFeed.Field['error'].Field['captcha_sid'].Value;
           CaptchaUrl := jsoFeed.Field['error'].Field['captcha_img'].Value;
-
           CaptchaValue := ProcessCaptcha(CaptchaId, CaptchaUrl);
           if CaptchaValue = 'captcha_download_failed' then // error - can't download captcha image
           begin
@@ -556,7 +553,7 @@ begin
           end;
         finally
           jsoFeed.Free;
-        end;
+        end;    
       end;
       else // successful
       begin
@@ -746,7 +743,7 @@ begin
                 SendMessageW(DialogLabel, WM_SETTEXT, 0, Windows.lParam(Result.Text));
               end;
 
-              HTML := HTTP_NL_PostPicture(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic_upload, [ContactID]), szDataFinal, Boundary);
+              HTML := HTTP_NL_PostPicture(Format(vk_url + vk_url_wall_postpic_upload, [ContactID]), szDataFinal, Boundary);
 
               // checking for error messages from server
               if Pos('413 Request Entity Too Large', HTML) > 0 then
@@ -775,7 +772,7 @@ begin
                     begin
                       Netlib_Log(vk_hNetlibUser, PChar('(vk_WallPostPicture) ... posting picture id ' + MsgID + '...'));
                       Result.Text := TranslateW(wall_status_posting_pic_posting);
-                      HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic, [MsgID, FullContactID, Hash, MsgID]), REQUEST_GET);
+                      HTML := HTTP_NL_Get(Format(vk_url + vk_url_wall_postpic, [MsgID, FullContactID, Hash, MsgID]), REQUEST_GET);
                       if HTML <> '' then // contains some strange symbols, so assume if not empty, then OK
                       begin
                         if Pos('captcha_sid', HTML) > 0 then // captcha!
@@ -804,7 +801,7 @@ begin
                           end
                           else // ok
                           begin
-                            HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_wall_postpic_captcha, [MsgId, FullContactID, Hash, MsgId, CaptchaId, CaptchaValue]), REQUEST_GET);
+                            HTML := HTTP_NL_Get(Format(vk_url + vk_url_wall_postpic_captcha, [MsgId, FullContactID, Hash, MsgId, CaptchaId, CaptchaValue]), REQUEST_GET);
                             if Pos('r/id' + IntToStr(ContactID), HTML) > 0 then
                             begin
                               Result.Text := TranslateW(wall_status_succ);
@@ -994,7 +991,7 @@ begin
               if (sMediaType = 'photo') then
               begin
                 sMsgText := TranslateW('photo') + ': ' +
-                  vk_url_prefix + vk_url_host + '/photo' +
+                  vk_url + '/photo' +
                   jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value + '_' +
                   jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
                 // sMsgText := 'photo: '+jsoFeed.Field['response'].Child[i].Field['media'].Field['thumb_src'].Value;
@@ -1012,7 +1009,7 @@ begin
                       jsoFeed.Field['response'].Child[i].Field['media'].Field['thumb_src'].Value;
                     { the code below doesn't work - from_id is unknown
                      sMsgText := 'graffiti: '+
-                                vk_url_prefix + vk_url_host + '/graffiti' +
+                                vk_url + '/graffiti' +
                                 jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
                     }
                   end
@@ -1020,14 +1017,14 @@ begin
                     if (sMediaType = 'video') then
                     begin
                       sMsgText := TranslateW('video') + ': ' +
-                        vk_url_prefix + vk_url_host + '/video' +
+                        vk_url + '/video' +
                         jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value + '_' +
                         jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value;
                     end
                     else
                       if (sMediaType = 'posted_photo') then
                       begin
-                        sMsgText := vk_url_prefix + vk_url_host + '/photos.php?act=posted&id=' +
+                        sMsgText := vk_url + '/photos.php?act=posted&id=' +
                           jsoFeed.Field['response'].Child[i].Field['media'].Field['item_id'].Value + '&oid=' +
                           jsoFeed.Field['response'].Child[i].Field['media'].Field['owner_id'].Value;
                       end;

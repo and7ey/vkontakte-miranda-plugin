@@ -34,8 +34,6 @@ E-mail или логин:
 Дополнительно
 [Connection settings]
 Настройки подключения
-[Preferred host]
-Сайт
 [Other settings]
 Дополнительные настройки
 [Send 'Keep-online' message each]
@@ -578,3 +576,5 @@ xСтатус
 видео
 [graffiti]
 граффити
+[No UserAPI session details are received. Some functions will not work properly.]
+Не получены детали сессии UserAPI. Некоторые функции плагина будут работать неправильно.

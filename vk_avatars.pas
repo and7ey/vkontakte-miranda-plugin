@@ -43,15 +43,14 @@ implementation
 uses
   m_globaldefs,
   m_api,
-  
   vk_global, // module with global variables and constant used
   vk_common, // module with common functions
   vk_http,   // module to connect with the site
-  
   htmlparse, // module to simplify html parsing
 
-  Classes, SysUtils,
-  Windows;
+  Windows,
+  SysUtils,
+  Classes;
 
 type
   TThreadAvatarMySet = class(TThread)
@@ -145,7 +144,7 @@ var
   ID, AvatarURL: string;
   intID:         integer;
 begin
-  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friends, '', 'multipart/form-data', '');
+  HTML := HTTP_NL_Post(vk_url + vk_url_feed_friends, '', 'multipart/form-data', '');
   HTML := TextBetween(HTML, 'friends'':[', ']]');
   if Trim(HTML) <> '' then
   begin
@@ -194,7 +193,7 @@ begin
       AvatarFile := TFileStream.Create(AvatarFileNameNew, fmOpenRead);
       SetLength(szData, AvatarFile.Size);
       AvatarFile.Read(szData[1], AvatarFile.Size);
-      HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_photo_my);
+      HTML := HTTP_NL_Get(vk_url + vk_url_photo_my);
       if Trim(HTML) <> '' then
       begin
         URLUpload := TextBetween(HTML, 'form enctype="multipart/form-data" method="post" action="', '"');
@@ -233,11 +232,11 @@ begin
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) Deleting our avatar... '));
     DBDeleteContactSetting(0, piShortName, 'AvatarFile');
-    HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_photo_my);
+    HTML := HTTP_NL_Get(vk_url + vk_url_photo_my);
     DelPhoto := TextBetween(HTML, 'delPhoto', '</form>');
     DSubm := TextBetween(DelPhoto, 'id="subm" value="', '"');
     DHash := TextBetween(DelPhoto, 'id="hash" value="', '"');
-    HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_photo_my_delete, [DSubm, DHash]));
+    HTML := HTTP_NL_Get(Format(vk_url + vk_url_photo_my_delete, [DSubm, DHash]));
   end;
 end;
 

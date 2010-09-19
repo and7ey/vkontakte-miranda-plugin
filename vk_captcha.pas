@@ -39,7 +39,8 @@ uses
   vk_http,   // module to connect with the site
   vk_common, // module with common functions
 
-  Messages, Windows;
+  Windows,
+  Messages;
 
 function DlgCaptcha(Dialog: HWnd; Msg: cardinal; wParam, lParam: DWord): boolean; stdcall;
 function ProcessCaptcha(CaptchaId: string; CaptchaURL: string = ''): string;
@@ -175,7 +176,7 @@ var
   Buf:               array[0..1023] of char;
 begin
   if CaptchaURL = '' then
-    CaptchaURL := vk_url_prefix + vk_url_host + '/captcha.php?s=1&sid=' + CaptchaId;
+    CaptchaURL := vk_url + Format(vk_url_captcha, [CaptchaId]);
   Netlib_Log(vk_hNetlibUser, PChar('(vk_CaptchaProcessing) ... captcha ID is ' + CaptchaId));
   Netlib_Log(vk_hNetlibUser, PChar('(vk_CaptchaProcessing) ... captcha URL is ' + CaptchaURL));
   if (CaptchaId <> '') and (CaptchaURL <> '') then

@@ -46,18 +46,17 @@ implementation
 uses
   m_globaldefs,
   m_api,
-
   vk_global,  // module with global variables and constant used
   vk_common,  // module with common functions
   vk_http,    // module to connect with the site
   vk_avatars, // module to support avatars
+  htmlparse,  // module to simplify html parsing
   vk_core,    // module with core functions
   vk_popup,   // module to support popups
-  
-  htmlparse,  // module to simplify html parsing
 
-  DateUtils, StrUtils,
-  SysUtils, uLkJSON;
+  uLkJSON,
+  StrUtils,
+  SysUtils, DateUtils;
 
 var
   vk_hGetInfo: THandle;
@@ -220,7 +219,7 @@ begin
       sTemp := GetInfo(HTML, 'domain');
       if Trim(sTemp) <> '' then
       begin
-        sTemp := vk_url_prefix + vk_url_host + '/' + sTemp;
+        sTemp := vk_url + '/' + sTemp;
         DBWriteContactSettingString(hContact, piShortName, 'Homepage', PChar(string(sTemp)));
       end;
     end;

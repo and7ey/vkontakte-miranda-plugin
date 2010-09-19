@@ -39,20 +39,16 @@ unit vk_opts;
 
 interface
 
-uses 
+uses Windows,
+  Messages,
+  SysUtils,
+  Commctrl,
+  ShellAPI,
   m_globaldefs,
   m_api,
-  
-  vk_common, // module with common functions
   vk_global, // module with global variables and constant used
-  vk_popup,  // module to support popups
-
-  Commctrl,
-  Messages,
-  ShellAPI,
-  SysUtils,
-  Windows;
-             
+  vk_common, // module with common functions
+  vk_popup;  // module to support popups
 
 {$include res\dlgopt\i_const.inc}// contains list of ids used in dialogs
 
@@ -65,7 +61,7 @@ function DlgProcOptionsNews(Dialog: HWnd; Message, wParam, lParam: DWord): boole
 function DlgProcOptionsGroups(Dialog: HWnd; Message, wParam, lParam: DWord): boolean; cdecl;
 function DlgProcOptionsComments(Dialog: HWnd; Message, wParam, lParam: DWord): boolean; cdecl;
 function DlgProcOptionsPopup(Dialog: HWnd; Message, wParam, lParam: DWord): boolean; cdecl;
-function DlgProcOptionsIgnore(Dialog: HWnd; Message, wParam, lParam: DWord): boolean; cdecl;
+// function DlgProcOptionsIgnore(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
 function OnOptInitialise(wParam, lParam: DWord): integer; cdecl;
 
 implementation
@@ -74,11 +70,10 @@ const
   IGNOREEVENT_MAX = 7;
   //  ignoreIdToPf1: array[0..IGNOREEVENT_MAX-1] of DWord = (PF1_IMRECV,PF1_URLRECV,PF1_FILERECV,-1,-1,-1,-1);
   //  ignoreIdToPf4: array[0..IGNOREEVENT_MAX-1] of DWord = (-1,-1,-1,-1,-1,-1,PF4_SUPPORTTYPING);
-  ignoreIdToPf1: array[0..IGNOREEVENT_MAX - 1] of integer = (-1, -1, -1, -1, -1, -1, -1);
-  ignoreIdToPf4: array[0..IGNOREEVENT_MAX - 1] of integer = (-1, -1, -1, -1, -1, -1, -1);
+  ignoreIdToPf1: array[0..IGNOREEVENT_MAX - 1] of DWord = (-1, -1, -1, -1, -1, -1, -1);
+  ignoreIdToPf4: array[0..IGNOREEVENT_MAX - 1] of DWord = (-1, -1, -1, -1, -1, -1, -1);
 
-var
-  TempNilArray: array of integer;
+// var TempNilArray: Array of Integer;
 
 function OnOptInitialise(wParam{addinfo}, lParam{0}: DWord): integer; cdecl;
 var
@@ -122,9 +117,9 @@ begin
   odp.pfnDlgProc := @DlgProcOptionsComments;
   PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
 
-  odp.szTab.a := 'Ignore';
-  odp.pszTemplate := 'SETTINGS_IGNORE'; // identifies template from res file
-  odp.pfnDlgProc := @DlgProcOptionsIgnore;
+  // odp.szTab.a := 'Ignore';
+  // odp.pszTemplate := 'SETTINGS_IGNORE'; // identifies template from res file
+  // odp.pfnDlgProc := @DlgProcOptionsIgnore;
   // PluginLink.CallService(MS_OPT_ADDPAGE, wParam, dword(@odp));
 
 
@@ -142,27 +137,25 @@ begin
   Result := 0;
 end;
 
-function GetMask(hContact: THandle): DWord;
-var
-  mask: DWord;
+{function GetMask(hContact: THandle): DWord;
+var mask: DWord;
 begin
-  mask := DBGetContactSettingDWord(hContact, piShortName, 'IgnoreMask', 0);
-  if mask = 0 then
-    if hContact = 0 then
-      mask := 0;
-  Result := mask;
+  mask := DBGetContactSettingDWord(hContact, piShortName, 'IgnoreMask', DWord(-1));
+  if mask = -1 then
+    if hContact = 0 then mask := 0;
+  result := mask;
 end;
 
-procedure SetListGroupIcons(hwndList: THandle; hFirstItem: THandle; hParentItem: THandle; var groupChildCount: array of integer);
+procedure SetListGroupIcons(hwndList: THandle; hFirstItem: THandle; hParentItem: THandle; var groupChildCount: Array of Integer);
 var
-  typeOfFirst:       integer;
-  iconOn:            array[0..IGNOREEVENT_MAX - 1] of integer; // = (1,1,1,1,1,1,1);
-  childCount:        array[0..IGNOREEVENT_MAX - 1] of integer; // = (0,0,0,0,0,0,0);
-  i:                 integer;
-  iImage:            integer;
+  typeOfFirst: Integer;
+  iconOn: array[0..IGNOREEVENT_MAX-1] of Integer; // = (1,1,1,1,1,1,1);
+  childCount: array[0..IGNOREEVENT_MAX-1] of Integer; // = (0,0,0,0,0,0,0);
+  i: Integer;
+  iImage: Integer;
   hItem, hChildItem: THandle;
 begin
-  for i := 0 to IGNOREEVENT_MAX - 1 do
+  for i:=0 to IGNOREEVENT_MAX-1 do
   begin
     iconOn[i] := 1;
     childCount[i] := 0;
@@ -176,11 +169,9 @@ begin
   while hItem <> 0 do
   begin
     hChildItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_CHILD, Windows.lParam(hItem)));
-    if hChildItem <> 0 then
-      SetListGroupIcons(hwndList, hChildItem, hItem, childCount);
-    for i := Low(iconOn) to High(iconOn) do
-      if (iconOn[i] <> 0) and (SendMessage(hwndList, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), i) = 0) then
-        iconOn[i] := 0;
+    if hChildItem <> 0 then SetListGroupIcons(hwndList, hChildItem, hItem, childCount);
+    for i:=Low(iconOn) to High(iconOn) do
+       if (iconOn[i] <> 0) and (SendMessage(hwndList, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), i) = 0) then iconOn[i] := 0;
     hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTGROUP, Windows.lParam(hItem)));
   end;
   // check contacts
@@ -190,57 +181,49 @@ begin
     hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTCONTACT, Windows.lParam(hFirstItem)));
   while hItem <> 0 do
   begin
-    for i := Low(iconOn) to High(iconOn) do
+    for i:=Low(iconOn) to High(iconOn) do
     begin
       iImage := SendMessage(hwndList, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), i);
       if (iconOn[i] <> 0) and (iImage = 0) then
         iconOn[i] := 0;
-      if (iImage <> $FF) then
-        Inc(childCount[i]);
+      if (iImage <> $FF) then Inc(childCount[i]);
     end;
     hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTCONTACT, Windows.lParam(hItem)));
   end;
   //set icons
-  for i := Low(iconOn) to High(iconOn) do
+  for i:=Low(iconOn) to High(iconOn) do
   begin
-    SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hParentItem), MAKELPARAM(i, IfThen(childCount[i] <> 0, IfThen(iconOn[i] <> 0, i + 3, 0), $FF)));
-    if (Length(groupChildCount) > 0) then
-      groupChildCount[i] := groupChildCount[i] + childCount[i];
+    SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hParentItem), MAKELPARAM(i,IfThen(childCount[i]<>0,IfThen(iconOn[i]<>0,i+3,0),$FF)));
+    if (Length(groupChildCount)>0) then groupChildCount[i] := groupChildCount[i] + childCount[i];
     // if(groupChildCount) groupChildCount[i]+=childCount[i];
   end;
   SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hParentItem), MAKELPARAM(IGNOREEVENT_MAX, 1));
-  SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hParentItem), MAKELPARAM(IGNOREEVENT_MAX + 1, 2));
+  SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hParentItem), MAKELPARAM(IGNOREEVENT_MAX+1, 2));
 end;
 
 
-procedure SetAllChildIcons(hwndList: THandle; hFirstItem: THandle; iColumn: integer; iImage: integer);
+procedure SetAllChildIcons(hwndList: THandle; hFirstItem: THandle; iColumn: Integer; iImage: Integer);
 var
-  typeOfFirst, iOldIcon: integer;
-  hItem, hChildItem:     THandle;
+  typeOfFirst, iOldIcon: Integer;
+  hItem, hChildItem: THandle;
 begin
   typeOfFirst := SendMessage(hwndList, CLM_GETITEMTYPE, Windows.wParam(hFirstItem), 0);
   // check groups
-  if (typeOfFirst = CLCIT_GROUP) then
-    hItem := hFirstItem
-  else
-    hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTGROUP, Windows.lParam(hFirstItem)));
+  if (typeOfFirst = CLCIT_GROUP) then hItem := hFirstItem
+    else hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTGROUP, Windows.lParam(hFirstItem)));
   while hItem <> 0 do
   begin
     hChildItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_CHILD, Windows.lParam(hItem)));
-    if (hChildItem <> 0) then
-      SetAllChildIcons(hwndList, hChildItem, iColumn, iImage);
+    if (hChildItem <> 0) then SetAllChildIcons(hwndList, hChildItem, iColumn, iImage);
     hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTGROUP, Windows.lParam(hItem)));
   end;
   // check contacts
-  if (typeOfFirst = CLCIT_CONTACT) then
-    hItem := hFirstItem
-  else
-    hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTCONTACT, Windows.lParam(hFirstItem)));
+  if (typeOfFirst = CLCIT_CONTACT) then hItem := hFirstItem
+    else hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTCONTACT, Windows.lParam(hFirstItem)));
   while hItem <> 0 do
   begin
     iOldIcon := SendMessage(hwndList, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), iColumn);
-    if (iOldIcon <> $FF) and (iOldIcon <> iImage) then
-      SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(iColumn, iImage));
+    if (iOldIcon <> $FF) and (iOldIcon <> iImage) then SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(iColumn, iImage));
     hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_NEXTCONTACT, Windows.lParam(hItem)));
   end;
 end;
@@ -248,7 +231,7 @@ end;
 
 procedure ResetListOptions(hwndList: THandle);
 var
-  i: integer;
+  i: Integer;
 begin
   SendMessage(hwndList, CLM_SETBKBITMAP, 0, Windows.lParam(HBitmap(0)));
   SendMessage(hwndList, CLM_SETBKCOLOR, GetSysColor(COLOR_WINDOW), 0);
@@ -256,15 +239,16 @@ begin
   SendMessage(hwndList, CLM_SETLEFTMARGIN, 4, 0);
   SendMessage(hwndList, CLM_SETINDENT, 10, 0);
   SendMessage(hwndList, CLM_SETHIDEEMPTYGROUPS, 1, 0);
-  for i := 0 to FONTID_MAX do
+  for i:=0 to FONTID_MAX do
     SendMessage(hwndList, CLM_SETTEXTCOLOR, i, GetSysColor(COLOR_WINDOWTEXT));
 end;
 
 
-procedure SetIconsForColumn(hwndList: THandle; hItem: THandle; hItemAll: THandle; iColumn: integer; iImage: integer);
+
+procedure SetIconsForColumn(hwndList: THandle; hItem: THandle; hItemAll: THandle; iColumn: Integer; iImage: Integer);
 var
-  itemType:  integer;
-  oldiImage: integer;
+  itemType: Integer;
+  oldiImage: Integer;
 begin
   itemType := SendMessage(hwndList, CLM_GETITEMTYPE, Windows.wParam(hItem), 0);
   if (itemType = CLCIT_CONTACT) then
@@ -272,21 +256,16 @@ begin
     oldiImage := SendMessage(hwndList, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), iColumn);
     if (oldiImage <> $FF) and (oldiImage <> iImage) then
       SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(iColumn, iImage));
-  end
-  else
+  end else
     if (itemType = CLCIT_INFO) then
     begin
-      if (hItem = hItemAll) then
-        SetAllChildIcons(hwndList, hItem, iColumn, iImage)
-      else
-        SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(iColumn, iImage)); //hItemUnknown
-    end
-    else
+      if (hItem = hItemAll) then SetAllChildIcons(hwndList, hItem, iColumn, iImage)
+        else SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(iColumn, iImage)); //hItemUnknown
+    end  else
       if (itemType = CLCIT_GROUP) then
       begin
         hItem := THandle(SendMessage(hwndList, CLM_GETNEXTITEM, CLGN_CHILD, Windows.lParam(hItem)));
-        if hItem <> 0 then
-          SetAllChildIcons(hwndList, hItem, iColumn, iImage);
+        if hItem <> 0 then SetAllChildIcons(hwndList, hItem, iColumn, iImage);
       end;
 end;
 
@@ -294,43 +273,43 @@ end;
 procedure InitialiseItem(hwndList: THandle; hContact: THandle; hItem: THandle; proto1Caps: DWord; proto4Caps: DWord);
 var
   mask: DWord;
-  i:    integer;
+  i: Integer;
 begin
   mask := GetMask(hContact);
-  for i := 0 to IGNOREEVENT_MAX - 1 do
-    if ((ignoreIdToPf1[i] = -1) and (ignoreIdToPf4[i] = -1)) or (((proto1Caps <> 0) and (ignoreIdToPf1[i] <> 0)) or ((proto4Caps <> 0) and (ignoreIdToPf4[i] <> 0))) then
-      SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(i, IfThen((mask and (1 shl i)) <> 0, i + 3, 0)));
+  for i:=0 to IGNOREEVENT_MAX-1 do
+    if ((ignoreIdToPf1[i] = -1) and (ignoreIdToPf4[i] = -1)) or (((proto1Caps <>0) and (ignoreIdToPf1[i] <> 0)) or ((proto4Caps <> 0) and (ignoreIdToPf4[i] <> 0))) then
+      SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(i,IfThen((mask and (1 shl i)) <> 0, i+3, 0)));
   SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(IGNOREEVENT_MAX, 1));
-  SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(IGNOREEVENT_MAX + 1, 2));
+  SendMessage(hwndList, CLM_SETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(IGNOREEVENT_MAX+1, 2));
 end;
 
 
 procedure SaveItemMask(hwndList: THandle; hContact: THandle; hItem: THandle; const pszSetting: PChar);
 var
-  mask:      DWord;
-  i, iImage: integer;
+  mask: DWord;
+  i, iImage: Integer;
 begin
   mask := 0;
-  for i := 0 to IGNOREEVENT_MAX - 1 do
+  for i := 0 to IGNOREEVENT_MAX-1 do
   begin
     iImage := SendMessage(hwndList, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(i, 0));
-    if (iImage and iImage <> $FF) then
-      mask := mask and (1 shl i);
+     if (iImage and iImage<>$FF) then mask := mask and (1 shl i);
   end;
   DBWriteContactSettingDWord(hContact, piShortName, 'IgnoreMask', mask);
 end;
 
 procedure SetAllContactIcons(hwndList: THandle);
 var
-  hContact, hItem:        THandle;
+  hContact, hItem: THandle;
   proto1Caps, proto4Caps: DWord;
-  szProto:                PChar;
+  szProto: PChar;
+
 begin
   hContact := THandle(pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0));
   while hContact <> 0 do
   begin
     hItem := THandle(SendMessage(hwndList, CLM_FINDCONTACT, Windows.wParam(hContact), 0));
-    if (hItem <> 0) and (SendMessage(hwndList, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(IGNOREEVENT_MAX, 0)) = $FF) then
+    if (hItem <> 0) and (SendMessage(hwndList, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(IGNOREEVENT_MAX,0))=$FF) then
     begin
       szProto := PChar(pluginLink^.CallService(MS_PROTO_GETCONTACTBASEPROTO, Windows.wParam(hContact), 0));
       if szProto = nil then
@@ -344,180 +323,172 @@ begin
         proto4Caps := CallProtoService(szProto, PS_GETCAPS, PFLAGNUM_4, 0);
       end;
       InitialiseItem(hwndList, hContact, hItem, proto1Caps, proto4Caps);
-      { unmark hidden contacts
-        if(!DBGetContactSettingByte(hContact,"CList","Hidden",0))
-   SendMessage(hwndList,CLM_SETCHECKMARK,(WPARAM)hItem,1);
-      }
+      // unmark hidden contacts
+      //  if(!DBGetContactSettingByte(hContact,"CList","Hidden",0))
+      // SendMessage(hwndList,CLM_SETCHECKMARK,(WPARAM)hItem,1);
+      //
     end;
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
   end;
 end;
 
 
-function DlgProcOptionsIgnore(Dialog: HWnd; Message, wParam, lParam: DWord): boolean; cdecl;
-var
-  hIml:                   HImageList;
-  i:                      integer;
-  hIcon:                  THandle;
-  hIcons:                 array[0..IGNOREEVENT_MAX + 2] of THandle;
-  hItemAll, hItemUnknown: THandle;
-  cii:                    TCLCINFOITEM;
-  hItem:                  THandle;
-  nm:                     PNMCLISTCONTROL;
-  hitFlags:               DWord;
-  iImage:                 integer;
-  hContact:               THandle;
+function DlgProcOptionsIgnore(Dialog: HWnd; Message, wParam, lParam: DWord): Boolean; cdecl;
+var hIml: HImageList;
+    i: Integer;
+    hIcon: THandle;
+    hIcons: Array[0..IGNOREEVENT_MAX+2] of THandle;
+    hItemAll, hItemUnknown: THandle;
+    cii: TCLCINFOITEM;
+
+    hItem: THandle;
+    nm: PNMCLISTCONTROL;
+    hitFlags: DWord;
+    iImage: Integer;
+
+    hContact: THandle;
+
 begin
   Result := False;
 
   case message of
     WM_INITDIALOG:
-    begin
-      TranslateDialogDefault(Dialog);
+      begin
+        TranslateDialogDefault(Dialog);
 
-      hIml := ImageList_Create(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), ILC_COLOR32 + ILC_MASK, 3 + IGNOREEVENT_MAX, 3 + IGNOREEVENT_MAX);
-      // ImageList_AddIcon_IconLibLoaded(hIml, SKINICON_OTHER_SMALLDOT);
-      // temp!!
-      // hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar(piShortName + '_small_dot')));
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_24')));
-      ImageList_AddIcon(hIml, hIcon);
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_25')));
-      ImageList_AddIcon(hIml, hIcon);
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_26')));
-      ImageList_AddIcon(hIml, hIcon);
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_27')));
-      ImageList_AddIcon(hIml, hIcon);
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_28')));
-      ImageList_AddIcon(hIml, hIcon);
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_29')));
-      ImageList_AddIcon(hIml, hIcon);
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_30')));
-      ImageList_AddIcon(hIml, hIcon);
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_31')));
-      ImageList_AddIcon(hIml, hIcon);
-      hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar(piShortName + '_popups')));
-      ImageList_AddIcon(hIml, hIcon);
-      ImageList_AddIcon(hIml, hIcon);
-      SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_SETEXTRAIMAGELIST, 0, Windows.lParam(hIml));
-      for i := Low(hIcons) to High(hIcons) do
-        hIcons[i] := ImageList_GetIcon(hIml, 1 + i, ILD_NORMAL);
-      SendDlgItemMessage(Dialog, VK_OPT_IGNORE_PIC1, STM_SETICON, Windows.wParam(hIcons[0]), 0);
-      SendDlgItemMessage(Dialog, VK_OPT_IGNORE_PIC2, STM_SETICON, Windows.wParam(hIcons[1]), 0);
-      ResetListOptions(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
-      SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_SETEXTRACOLUMNS, IGNOREEVENT_MAX + 2, 0);
+        hIml := ImageList_Create(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), ILC_COLOR32 + ILC_MASK, 3 + IGNOREEVENT_MAX, 3 + IGNOREEVENT_MAX);
+        // ImageList_AddIcon_IconLibLoaded(hIml, SKINICON_OTHER_SMALLDOT);
+        // temp!!
+        // hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar(piShortName + '_small_dot')));
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_24')));
+        ImageList_AddIcon(hIml, hIcon);
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_25')));
+        ImageList_AddIcon(hIml, hIcon);
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_26')));
+        ImageList_AddIcon(hIml, hIcon);
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_27')));
+        ImageList_AddIcon(hIml, hIcon);
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_28')));
+        ImageList_AddIcon(hIml, hIcon);
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_29')));
+        ImageList_AddIcon(hIml, hIcon);
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_30')));
+        ImageList_AddIcon(hIml, hIcon);
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar('core_main_31')));
+        ImageList_AddIcon(hIml, hIcon);
+        hIcon := PluginLink^.CallService(MS_SKIN2_GETICON, 0, Windows.lparam(PChar(piShortName + '_popups')));
+        ImageList_AddIcon(hIml, hIcon);
+        ImageList_AddIcon(hIml, hIcon);
+        SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_SETEXTRAIMAGELIST, 0, Windows.lParam(hIml));
+        for i:=Low(hIcons) to High(hIcons) do
+          hIcons[i] := ImageList_GetIcon(hIml, 1+i, ILD_NORMAL);
+        SendDlgItemMessage(Dialog, VK_OPT_IGNORE_PIC1, STM_SETICON, Windows.wParam(hIcons[0]), 0);
+        SendDlgItemMessage(Dialog, VK_OPT_IGNORE_PIC2, STM_SETICON, Windows.wParam(hIcons[1]), 0);
+        ResetListOptions(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
+        SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_SETEXTRACOLUMNS, IGNOREEVENT_MAX+2, 0);
 
-      ZeroMemory(@cii, sizeof(cii));
-      cii.cbSize := sizeof(cii);
-      cii.flags := CLCIIF_GROUPFONT;
-      cii.pszText.w := TranslateW('** All contacts **');
-      hItemAll := THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_ADDINFOITEM, 0, Windows.lParam(@cii)));
-      cii.pszText.w := TranslateW('** Unknown contacts **');
-      hItemUnknown := THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_ADDINFOITEM, 0, Windows.lParam(@cii)));
-      // InitialiseItem(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), 0, hItemUnknown, -1, -1);
-      SetAllContactIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
-      SetListGroupIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETNEXTITEM, CLGN_ROOT, 0)), hItemAll, TempNilArray);
+        ZeroMemory(@cii, sizeof(cii));
+        cii.cbSize := sizeof(cii);
+        cii.flags := CLCIIF_GROUPFONT;
+        cii.pszText.w := TranslateW('** All contacts **');
+        hItemAll := THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_ADDINFOITEM, 0, Windows.lParam(@cii)));
+        cii.pszText.w := TranslateW('** Unknown contacts **');
+        hItemUnknown := THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_ADDINFOITEM, 0, Windows.lParam(@cii)));
+        InitialiseItem(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), 0, hItemUnknown, -1, -1);
+        SetAllContactIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
+        SetListGroupIcons(GetDlgItem(Dialog,VK_OPT_IGNORE_LIST), THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETNEXTITEM, CLGN_ROOT, 0)), hItemAll, TempNilArray);
 
-      Result := True;
-      Exit;
-    end;
+        Result := True;
+        Exit;
+      end;
     WM_DESTROY:
-    begin
-      for i := Low(hIcons) to High(hIcons) do
-        DestroyIcon(hIcons[i]);
-      hIml := HImageList(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETEXTRAIMAGELIST, 0, 0));
-      ImageList_Destroy(hIml);
-      Result := True;
-      Exit;
-    end;
+      begin
+        for i:=Low(hIcons) to High(hIcons) do
+          DestroyIcon(hIcons[i]);
+        hIml := HImageList(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETEXTRAIMAGELIST, 0, 0));
+        ImageList_Destroy(hIml);
+        Result := True;
+        Exit;
+      end;
     WM_SETFOCUS:
-    begin
-      SetFocus(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
-    end;
+     begin
+       SetFocus(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
+     end;
     WM_NOTIFY:
-    begin
-      case PNMHdr(lParam)^.idFrom of
-        VK_OPT_IGNORE_LIST:
-        begin
-          case PNMHdr(lParam)^.code of
-            CLN_LISTREBUILT:
-              SetAllContactIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
-            CLN_CONTACTMOVED:
+      begin
+        case PNMHdr(lParam)^.idFrom of
+          VK_OPT_IGNORE_LIST:
             begin
-              SetListGroupIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETNEXTITEM, CLGN_ROOT, 0)), hItemAll, TempNilArray);
-            end;
-            CLN_OPTIONSCHANGED:
-            begin
-              ResetListOptions(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
-            end;
-            CLN_CHECKCHANGED:
-            begin
-              SendMessage(GetParent(Dialog), PSM_CHANGED, 0, 0);
-            end;
-            NM_CLICK:
-            begin
-              nm := PNMCLISTCONTROL(lParam);
-              if (nm.iColumn = -1) then
-                Exit;
-              hItem := THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_HITTEST, Windows.wParam(@hitFlags), MAKELPARAM(nm.pt.x, nm.pt.y)));
-              if (hItem = 0) then
-                Exit;
-              if (hitFlags and CLCHT_ONITEMEXTRA) = 0 then
-                Exit;
-              if nm.iColumn = IGNOREEVENT_MAX then   // ignore all
-              begin
-                for iImage := 0 to IGNOREEVENT_MAX - 1 do
-                  SetIconsForColumn(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), hItem, hItemAll, iImage, iImage + 3);
-              end
-              else
-                if nm.iColumn = IGNOREEVENT_MAX + 1 then // ignore none
-                begin
-                  for iImage := 0 to IGNOREEVENT_MAX - 1 do
-                    SetIconsForColumn(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), hItem, hItemAll, iImage, 0);
-                end
-                else
-                begin
-                  iImage := SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(nm.iColumn, 0));
-                  if iImage = 0 then
-                    iImage := nm.iColumn + 3
-                  else
-                    if iImage <> $FF then
-                      iImage := 0;
-                  SetIconsForColumn(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), hItem, hItemAll, nm.iColumn, iImage);
-                end;
-              SetListGroupIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETNEXTITEM, CLGN_ROOT, 0)), hItemAll, TempNilArray);
-              SendMessage(GetParent(Dialog), PSM_CHANGED, 0, 0);
-            end;
-          end;
-        end;
-        0:
-        begin
-          case PNMHdr(lParam)^.code of
-            PSN_APPLY:
-            begin
-              hContact := THandle(CallService(MS_DB_CONTACT_FINDFIRST, 0, 0));
-              while hContact <> 0 do
-              begin
-                hItem := THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_FINDCONTACT, Windows.wParam(hContact), 0));
-                if (hItem <> 0) then
-                  SaveItemMask(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), hContact, hItem, 'Mask1');
-                // hide not marked contacts
-                // if(SendDlgItemMessage(hwndDlg,VK_OPT_IGNORE_LIST,CLM_GETCHECKMARK,(WPARAM)hItem,0))
-                // DBDeleteContactSetting(hContact,"CList","Hidden");
-                // else
-                //DBWriteContactSettingByte(hContact,"CList","Hidden",1);
-
-                hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
+              case PNMHdr(lParam)^.code of
+                CLN_LISTREBUILT: SetAllContactIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
+                CLN_CONTACTMOVED:
+                  begin
+                    SetListGroupIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETNEXTITEM, CLGN_ROOT, 0)), hItemAll, TempNilArray);
+                  end;
+                CLN_OPTIONSCHANGED:
+                  begin
+                    ResetListOptions(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST));
+                  end;
+                CLN_CHECKCHANGED:
+                  begin
+                    SendMessage(GetParent(Dialog), PSM_CHANGED, 0, 0);
+                  end;
+                NM_CLICK:
+                  begin
+                    nm := PNMCLISTCONTROL(lParam);
+                    if (nm.iColumn = -1) then Exit;
+                    hItem := THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_HITTEST, Windows.wParam(@hitFlags), MAKELPARAM(nm.pt.x, nm.pt.y)));
+                    if (hItem = 0) then Exit;
+                    if (hitFlags and CLCHT_ONITEMEXTRA) = 0 then Exit;
+                    if nm.iColumn = IGNOREEVENT_MAX then   // ignore all
+                    begin
+                      for iImage:=0 to IGNOREEVENT_MAX-1 do
+                        SetIconsForColumn(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), hItem, hItemAll, iImage, iImage+3);
+                    end
+                    else if nm.iColumn = IGNOREEVENT_MAX+1 then // ignore none
+                      begin
+                        for iImage:=0 to IGNOREEVENT_MAX-1 do
+                          SetIconsForColumn(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), hItem, hItemAll, iImage, 0);
+                      end else
+                        begin
+                          iImage := SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETEXTRAIMAGE, Windows.wParam(hItem), MAKELPARAM(nm.iColumn, 0));
+                          if iImage = 0 then iImage := nm.iColumn+3
+                            else if iImage <> $FF then iImage := 0;
+                          SetIconsForColumn(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), hItem, hItemAll, nm.iColumn, iImage);
+                        end;
+                    SetListGroupIcons(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_GETNEXTITEM, CLGN_ROOT, 0)), hItemAll, TempNilArray);
+                    SendMessage(GetParent(Dialog), PSM_CHANGED, 0, 0);
+                  end;
               end;
-              Result := True;
-              Exit;
             end;
-          end;
+          0:
+            begin
+              case PNMHdr(lParam)^.code of
+                PSN_APPLY:
+                  begin
+                    hContact := THandle(CallService(MS_DB_CONTACT_FINDFIRST,0,0));
+                    while hContact <> 0 do
+                    begin
+                      hItem := THandle(SendDlgItemMessage(Dialog, VK_OPT_IGNORE_LIST, CLM_FINDCONTACT, Windows.wParam(hContact), 0));
+                      if (hItem <> 0) then SaveItemMask(GetDlgItem(Dialog, VK_OPT_IGNORE_LIST), hContact, hItem, 'Mask1');
+                      // hide not marked contacts
+                      // if(SendDlgItemMessage(hwndDlg,VK_OPT_IGNORE_LIST,CLM_GETCHECKMARK,(WPARAM)hItem,0))
+                      // DBDeleteContactSetting(hContact,"CList","Hidden");
+                      // else
+                      //DBWriteContactSettingByte(hContact,"CList","Hidden",1);
+
+                      hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
+                    end;
+                    Result := True;
+                    Exit;
+                  end;
+              end;
+            end;
         end;
       end;
-    end;
   end;
 end;
-
+}
 
 function DlgProcOptionsAcc(Dialog: HWnd; Message, wParam, lParam: DWord): boolean; cdecl;
 var
@@ -554,12 +525,12 @@ begin
       case word(wParam) of
         VK_OPT_NEWID: // create new account
         begin
-          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
+          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url + vk_url_register), nil, nil, 0);
           Result := True;
         end;
         VK_OPT_PASSLOST: // retrieve lost password
         begin
-          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_forgot), nil, nil, 0);
+          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url + vk_url_forgot), nil, nil, 0);
           Result := True;
         end;
       end;
@@ -631,16 +602,6 @@ begin
       val := DBGetContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, 1);
       CheckDlgButton(dialog, VK_OPT_AVATARSUPDWHENGETINFO, val);
 
-      val := DBGetContactSettingByte(0, piShortName, opt_UserPreferredHost, 1); // choose preferred VK host
-      case val of
-        1:
-          CheckRadioButton(dialog, VK_OPT_HOSTRU, VK_OPT_HOSTCOM, VK_OPT_HOSTRU);
-        2:
-          CheckRadioButton(dialog, VK_OPT_HOSTRU, VK_OPT_HOSTCOM, VK_OPT_HOSTCOM);
-        else
-          CheckRadioButton(dialog, VK_OPT_HOSTRU, VK_OPT_HOSTCOM, VK_OPT_HOSTRU);
-      end;
-
       // send Changed message - make sure we can save the dialog
       SendMessage(GetParent(dialog), PSM_CHANGED, 0, 0);
 
@@ -678,17 +639,6 @@ begin
         DBWriteContactSettingDWord(0, piShortName, opt_UserAvatarsUpdateFreq, val);
 
         DBWriteContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, byte(IsDlgButtonChecked(dialog, VK_OPT_AVATARSUPDWHENGETINFO)));
-
-        if IsDlgButtonChecked(dialog, VK_OPT_HOSTCOM) = BST_CHECKED then
-        begin
-          DBWriteContactSettingDWord(0, piShortName, opt_UserPreferredHost, 2);  // vk.com
-          vk_url_host := 'vk.com';
-        end
-        else
-        begin
-          DBWriteContactSettingDWord(0, piShortName, opt_UserPreferredHost, 1); // vkontakte.ru
-          vk_url_host := 'vkontakte.ru';
-        end;
 
         Result := True;
       end;
@@ -747,6 +697,13 @@ begin
     // code is executed, when user clicks on link in the Options
     WM_COMMAND:
     begin
+      case word(wParam) of
+        VK_OPT_MORE: // more options - open wiki page
+        begin
+          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_wiki), nil, nil, 0);
+          Result := True;
+        end;
+      end;
       SendMessage(GetParent(dialog), PSM_CHANGED, dialog, 0);
     end;
     // code is executed, when user pressed OK or Apply
