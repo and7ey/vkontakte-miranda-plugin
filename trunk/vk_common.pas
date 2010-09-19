@@ -36,9 +36,10 @@ interface
 uses
   vk_global, // module with global variables and constant used
 
-  Classes, Messages,
+  Windows,
+  Messages,
   SysUtils,
-  Windows;
+  Classes;
 
 type
   TFriendName = record
@@ -69,13 +70,13 @@ function GetJSONError(sResponse: string): integer;
 
 function UnixToDateTime(USec: longint): TDateTime;
 function DateTimeToUnix(dtDateTime: TDateTime): integer;
+function LocalUnixTimeToGMT(iDateTime: integer): integer;
 
 implementation
 
 uses
   m_globaldefs,
   m_api,
-
   uLkJSON, // module to parse JSON data
 
   htmlparse; // module to simplify html parsing
@@ -308,7 +309,10 @@ begin
   slParms.QuoteChar := #0;
   slParms.DelimitedText := sParms;
   slParms.Delimiter := '&';
-  Result := vk_url_api +
+  Result := vk_url_prefix +
+    vk_url_api_prefix +
+    vk_url_vkontakteru +
+    vk_url_api_suffix +
     '?api_id=' + vk_api_appid + // application id
     '&' +
     slParms.DelimitedText +
@@ -352,8 +356,7 @@ end;
 
  // =============================================================================
  // function to get error code response from the JSON
-// {"error":{"error_code":9,"error_msg":"Flood control enabled for this action","request_params":[{"key":"api_id","value":"1931262"},{"key":"method","value":"messages.send"},{"key":"uid","value":"1234567"},{"key":"message","value":"?"},{"key":"format","value":"JSON"},{"key":"sid","value":"91af4123345b8235c7b8cd80e170a18f49e9dfbcb966f8307a6904a0de"},{"key":"sig","value":"3f11234562712ab09f6c771cc088348e"},{"key":"v","value":"3.0"}]}}
-
+ // {"error":{"error_code":9,"error_msg":"Flood control enabled for this action","request_params":[{"key":"api_id","value":"1931262"},{"key":"method","value":"messages.send"},{"key":"uid","value":"1234567"},{"key":"message","value":"?"},{"key":"format","value":"JSON"},{"key":"sid","value":"91af4123345b8235c7b8cd80e170a18f49e9dfbcb966f8307a6904a0de"},{"key":"sig","value":"3f11234562712ab09f6c771cc088348e"},{"key":"v","value":"3.0"}]}}
  // TO DO: replace this code with usage of XML (m_xml.inc)
  // sample code: http://trac.miranda.im/mainrepo/browser/importtxt/trunk/BICQ5IP.inc
  // -----------------------------------------------------------------------------
@@ -382,6 +385,12 @@ const
   UnixStartDate: TDateTime = 25569; // 1970-01-01 00:00:00 in TDateTime
 begin
   Result := Trunc((dtDateTime - UnixStartDate) * 86400); // SecondsPerDay = 60*24*60; = 86400;
+end;
+
+function LocalUnixTimeToGMT(iDateTime: integer): integer;
+begin
+  Result :=  iDateTime * 2 -
+             PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL, iDateTime, 0);
 end;
 
 begin

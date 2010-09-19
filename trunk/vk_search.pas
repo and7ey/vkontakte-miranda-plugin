@@ -36,7 +36,6 @@ interface
 uses
   m_globaldefs,
   m_api,
-  
   Classes;
 
 type
@@ -77,7 +76,8 @@ uses
   htmlparse, // module to simplify html parsing
 
   Messages,
-  SysUtils, Windows;
+  Windows,
+  SysUtils;
 
 function SearchAdv(wnd: HWnd): DWord; forward;
 function SearchName(lParam: lParam): DWord; forward;
@@ -405,7 +405,7 @@ begin
   srchUEduForm := GetDlgComboBoxItem(wnd, VK_ADVSRCH_ED_STATUS);
   srchOnline := byte(IsDlgButtonChecked(wnd, VK_ADVSRCH_ONLINEONLY));
 
-  SearchURL := Format(vk_url_prefix + vk_url_host + vk_url_search, [srchFirstName + ' ' + srchLastName, srchSex, srchStatus, srchPolitical, srchBDDay, srchBDMonth, srchBDYear,
+  SearchURL := Format(vk_url + vk_url_search, [srchFirstName + ' ' + srchLastName, srchSex, srchStatus, srchPolitical, srchBDDay, srchBDMonth, srchBDYear,
     srchUCountry, srchUCity, srchUniversity, srchUFaculty, srchUChair, srchUGraduation, srchUEduForm, srchOnline]);
   // for debug - SetDlgItemText(wnd, VK_ADVSRCH_FIRSTNAME, PChar(SearchURL));
   vk_SearchFriends(SearchURL, SearchHandle, 2);
@@ -427,7 +427,7 @@ begin
 
   if TryStrToInt(srchID, srchIDInt) then // id provided should be numeric
   begin
-    SearchURL := Format(vk_url_prefix + vk_url_host + vk_url_searchbyid, [srchIDInt]);
+    SearchURL := Format(vk_url + vk_url_searchbyid, [srchIDInt]);
     vk_SearchFriends(SearchURL, SearchHandle, 1);
   end
   else
@@ -450,7 +450,7 @@ begin
   srchFirstName := sbn.pszFirstName;
   srchLastName := sbn.pszLastName;
 
-  SearchURL := Format(vk_url_prefix + vk_url_host + vk_url_search, [srchFirstName, srchLastName, 0, 0, 0, 0, 0, 0,
+  SearchURL := Format(vk_url + vk_url_search, [srchFirstName, srchLastName, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0]);
 
   vk_SearchFriends(SearchURL, SearchHandle, 2);

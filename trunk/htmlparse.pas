@@ -3,8 +3,8 @@ unit htmlparse;
 interface
 
 uses
-  Classes,
   SysUtils,
+  Classes,
   vk_global;
 
 function TextBetweenInc(WholeText: string; BeforeText: string; AfterText: string): string;
@@ -220,7 +220,7 @@ begin
       // fix id - remove leading backslash
       if (LinkText[1] = '/') then
         LinkText := Copy(LinkText, 2, Length(LinkText) - 1);
-      Insert(' (' + PAnsiChar(vk_url_prefix + vk_url_host) + '/' + LinkText + ')', WholeText, CloseTagStart + 4);
+      Insert(' (' + PAnsiChar(vk_url) + '/' + LinkText + ')', WholeText, CloseTagStart + 4);
       Delete(WholeText, CloseTagStart, 4);
       Delete(WholeText, OpenTagStart, OpenTagEnd - OpenTagStart + 1);
     end

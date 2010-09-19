@@ -44,21 +44,20 @@ implementation
 uses
   m_globaldefs,
   m_api,
-
-  htmlparse,  // module to simplify html parsing
-
   vk_global,  // module with global variables and constant used
   vk_common,  // module with common functions
   vk_info,    // module to get contact's info
+  htmlparse,  // module to simplify html parsing
   vk_opts,    // unit to work with options
   vk_auth,    // module to support authorization process
   vk_wall,    // module to work with VKontakte's wall
   vk_xstatus, // module to support additional status
 
-  Classes, Messages,
+  Messages,
   ShellAPI,
+  Windows,
   SysUtils,
-  Windows;
+  Classes;
 
 type
   TMenuItem = record
@@ -101,55 +100,55 @@ begin
   MenuContactPagesItems[1].flags := CMIF_HIDDEN; // don't change id of this item! it is used in vk_xstatus
 
   MenuContactPagesItems[2].Name := '&Main page VKontakte...';
-  MenuContactPagesItems[2].URL := vk_url_prefix + vk_url_host + vk_url_friend;
+  MenuContactPagesItems[2].URL := vk_url + vk_url_friend;
   MenuContactPagesItems[2].Icon := 'ICON_PROTO';
   MenuContactPagesItems[2].Position := 400000;
   MenuContactPagesItems[2].Proc := MenuContactPages;
 
   MenuContactPagesItems[3].Name := '&Photos VKontakte...';
-  MenuContactPagesItems[3].URL := vk_url_prefix + vk_url_host + vk_url_photos;
+  MenuContactPagesItems[3].URL := vk_url + vk_url_photos;
   MenuContactPagesItems[3].Icon := 'ICON_PHOTOS';
   MenuContactPagesItems[3].Position := 500000;
   MenuContactPagesItems[3].Proc := MenuContactPages;
 
   MenuContactPagesItems[4].Name := '&Friends VKontakte...';
-  MenuContactPagesItems[4].URL := vk_url_prefix + vk_url_host + vk_url_friends;
+  MenuContactPagesItems[4].URL := vk_url + vk_url_friends;
   MenuContactPagesItems[4].Icon := 'ICON_FRIENDS';
   MenuContactPagesItems[4].Position := 500001;
   MenuContactPagesItems[4].Proc := MenuContactPages;
 
   MenuContactPagesItems[5].Name := 'The &wall VKontakte...';
-  MenuContactPagesItems[5].URL := vk_url_prefix + vk_url_host + vk_url_wall_id;
+  MenuContactPagesItems[5].URL := vk_url + vk_url_wall_id;
   MenuContactPagesItems[5].Icon := 'ICON_POST';
   MenuContactPagesItems[5].Position := 500002;
   MenuContactPagesItems[5].Proc := MenuContactPages;
 
   MenuContactPagesItems[6].Name := '&Groups VKontakte...';
-  MenuContactPagesItems[6].URL := vk_url_prefix + vk_url_host + vk_url_groups;
+  MenuContactPagesItems[6].URL := vk_url + vk_url_groups;
   MenuContactPagesItems[6].Icon := 'ICON_GROUPS';
   MenuContactPagesItems[6].Position := 500003;
   MenuContactPagesItems[6].Proc := MenuContactPages;
 
   MenuContactPagesItems[7].Name := '&Audio VKontakte...';
-  MenuContactPagesItems[7].URL := vk_url_prefix + vk_url_host + vk_url_audio;
+  MenuContactPagesItems[7].URL := vk_url + vk_url_audio;
   MenuContactPagesItems[7].Icon := 'ICON_SOUND';
   MenuContactPagesItems[7].Position := 500004;
   MenuContactPagesItems[7].Proc := MenuContactPages;
 
   MenuContactPagesItems[8].Name := '&Notes VKontakte...';
-  MenuContactPagesItems[8].URL := vk_url_prefix + vk_url_host + vk_url_notes;
+  MenuContactPagesItems[8].URL := vk_url + vk_url_notes;
   MenuContactPagesItems[8].Icon := 'ICON_NOTES';
   MenuContactPagesItems[8].Position := 500005;
   MenuContactPagesItems[8].Proc := MenuContactPages;
 
   MenuContactPagesItems[9].Name := '&Questions VKontakte...';
-  MenuContactPagesItems[9].URL := vk_url_prefix + vk_url_host + vk_url_questions;
+  MenuContactPagesItems[9].URL := vk_url + vk_url_questions;
   MenuContactPagesItems[9].Icon := 'ICON_QUESTIONS';
   MenuContactPagesItems[9].Position := 500006;
   MenuContactPagesItems[9].Proc := MenuContactPages;
 
   MenuContactPagesItems[10].Name := 'W&rite on the wall VKontakte...';
-  MenuContactPagesItems[10].URL := vk_url_prefix + vk_url_host + vk_url_wall_id;
+  MenuContactPagesItems[10].URL := vk_url + vk_url_wall_id;
   MenuContactPagesItems[10].Icon := 'ICON_POST';
   MenuContactPagesItems[10].Position := 600000;
   MenuContactPagesItems[10].Proc := MenuContactWall; // don't change id of this item! it is used in vk_xstatus
@@ -162,49 +161,49 @@ end;
 procedure MenuMainItemsInit;
 begin
   MenuMainItems[1].Name := 'My &main page...';
-  MenuMainItems[1].URL := vk_url_prefix + vk_url_host + vk_url_friend;
+  MenuMainItems[1].URL := vk_url + vk_url_friend;
   MenuMainItems[1].Icon := 'ICON_PROTO';
   MenuMainItems[1].Position := 000000;
   MenuMainItems[1].Proc := MenuMainPages;
 
   MenuMainItems[2].Name := 'My &photos...';
-  MenuMainItems[2].URL := vk_url_prefix + vk_url_host + vk_url_photos;
+  MenuMainItems[2].URL := vk_url + vk_url_photos;
   MenuMainItems[2].Icon := 'ICON_PHOTOS';
   MenuMainItems[2].Position := 100000;
   MenuMainItems[2].Proc := MenuMainPages;
 
   MenuMainItems[3].Name := 'My &friends...';
-  MenuMainItems[3].URL := vk_url_prefix + vk_url_host + vk_url_friends;
+  MenuMainItems[3].URL := vk_url + vk_url_friends;
   MenuMainItems[3].Icon := 'ICON_FRIENDS';
   MenuMainItems[3].Position := 100001;
   MenuMainItems[3].Proc := MenuMainPages;
 
   MenuMainItems[4].Name := 'My &wall...';
-  MenuMainItems[4].URL := vk_url_prefix + vk_url_host + vk_url_wall_id;
+  MenuMainItems[4].URL := vk_url + vk_url_wall_id;
   MenuMainItems[4].Icon := 'ICON_POST';
   MenuMainItems[4].Position := 100002;
   MenuMainItems[4].Proc := MenuMainPages;
 
   MenuMainItems[5].Name := 'My &groups...';
-  MenuMainItems[5].URL := vk_url_prefix + vk_url_host + vk_url_groups;
+  MenuMainItems[5].URL := vk_url + vk_url_groups;
   MenuMainItems[5].Icon := 'ICON_GROUPS';
   MenuMainItems[5].Position := 100003;
   MenuMainItems[5].Proc := MenuMainPages;
 
   MenuMainItems[6].Name := 'My &audio...';
-  MenuMainItems[6].URL := vk_url_prefix + vk_url_host + vk_url_audio;
+  MenuMainItems[6].URL := vk_url + vk_url_audio;
   MenuMainItems[6].Icon := 'ICON_SOUND';
   MenuMainItems[6].Position := 100004;
   MenuMainItems[6].Proc := MenuMainPages;
 
   MenuMainItems[7].Name := 'My &notes...';
-  MenuMainItems[7].URL := vk_url_prefix + vk_url_host + vk_url_notes;
+  MenuMainItems[7].URL := vk_url + vk_url_notes;
   MenuMainItems[7].Icon := 'ICON_NOTES';
   MenuMainItems[7].Position := 100005;
   MenuMainItems[7].Proc := MenuMainPages;
 
   MenuMainItems[8].Name := 'My &questions...';
-  MenuMainItems[8].URL := vk_url_prefix + vk_url_host + vk_url_questions;
+  MenuMainItems[8].URL := vk_url + vk_url_questions;
   MenuMainItems[8].Icon := 'ICON_QUESTIONS';
   MenuMainItems[8].Position := 100006;
   MenuMainItems[8].Proc := MenuMainPages;
@@ -270,7 +269,7 @@ end;
  // -----------------------------------------------------------------------------
 function MenuMainOpenWebpage(wParam: WPARAM; lParam: LPARAM): integer; cdecl;
 begin
-  ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host), nil, nil, 0);
+  ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url), nil, nil, 0);
   Result := 0;
 end;
 

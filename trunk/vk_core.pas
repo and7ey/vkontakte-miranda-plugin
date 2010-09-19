@@ -38,12 +38,12 @@ interface
 uses
   m_globaldefs,
   m_api,
-
   vk_global,  // module with global variables and constant used
   vk_common,  // module with common functions
   vk_http,    // module to connect with the site
   vk_avatars, // module to support avatars
   vk_msgs,    // module to send/receive messages
+  vk_news,    // module to receive news
   vk_xstatus, // module to support additional status
   vk_opts,    // my unit to work with options
   vk_popup,   // module to support popups
@@ -51,12 +51,13 @@ uses
 
   htmlparse, // module to simplify html parsing
 
+  Windows,
+  Messages,
+  SysUtils,
   Classes,
-  Commctrl, Messages,
   ShellAPI,
   StrUtils,
-  SysUtils,
-  Windows;
+  Commctrl;
 
 function vk_SetStatus(NewStatus: integer): integer;
 function vk_AddFriend(frID: integer; frNick: WideString; frStatus: integer; frFriend: byte): integer;
@@ -156,7 +157,7 @@ begin
       case wParam of
         VK_ACCMGR_NEWID:
         begin
-          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
+          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url + vk_url_register), nil, nil, 0);
           Result := True;
         end;
       end;
@@ -222,7 +223,7 @@ begin
         end;
         VK_LOGIN_NEWID:
         begin
-          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url_prefix + vk_url_host + vk_url_register), nil, nil, 0);
+          ShellAPI.ShellExecute(0, 'open', PAnsiChar(vk_url + vk_url_register), nil, nil, 0);
           Result := True;
         end;
       end;
@@ -316,7 +317,7 @@ begin
   end;
 
   // here is real connection happens
-  HTML := HTTP_NL_Get(Format(vk_url_pda_login, [vk_o_login, URLEncode(UTF8Encode(vk_o_pass))]));
+  HTML := HTTP_NL_Get(Format(vk_url + vk_url_pda_login, [vk_o_login, URLEncode(UTF8Encode(vk_o_pass))]));
 
   // no info received
   if trim(HTML) = '' then
@@ -335,10 +336,11 @@ begin
   begin
     ErrorCode := 0; // succesfull login!
 
-    // get api related details
+    // ************************
+    // get API related details
     // http://vkontakte.ru/developers.php?o=-1&p=%D0%90%D0%B2%D1%82%D0%BE%D1%80%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F+Desktop-%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting session details...'));
-    HTTP_NL_GetSession(vk_url_prefix + vk_url_host + vk_url_api_session); // TODO: it is possible that nothing is received
+    HTTP_NL_GetSession(vk_url + vk_url_api_session); // TODO: it is possible that nothing is received
 
     // vk_session_id := '';
     // vk_secret := '';
@@ -354,6 +356,18 @@ begin
     HTML := HTTP_NL_Get(GenerateApiUrl('method=getUserSettings'));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) User rights received: ' + HTML));
 
+    // ************************
+    // get UserAPI details
+    // http://userapi.ru/?act=doc#authorization
+    vk_userapi_session_id := HTTP_NL_GetSessionUserAPI(vk_url_userapi_login_prefix +
+                                                       vk_url_userapi +
+                                                       Format(vk_url_userapi_login_suffix, [vk_o_login, URLEncode(UTF8Encode(vk_o_pass))])
+                                                       );
+    if vk_userapi_session_id = '' then // userapi authorization failed
+    begin
+      ShowPopupMsg(0, err_userapi_session_nodetail, 1);
+    end;
+
   end;
 
   Result := ErrorCode;
@@ -366,8 +380,12 @@ end;
  // -----------------------------------------------------------------------------
 procedure vk_Logout();
 begin
-  // GAP (?): result is not validated
-  HTTP_NL_Get(vk_url_pda_logout, REQUEST_HEAD);
+  // doesn't work
+  // HTTP_NL_Get(vk_url_pda_logout, REQUEST_HEAD);
+  if vk_userapi_session_id <> '' then
+     HTTP_NL_Get(Format(vk_url_userapi_login_prefix +
+                        vk_url_userapi +
+                        vk_url_userapi_logout, [vk_userapi_session_id]));
 end;
 
  // =============================================================================
@@ -402,7 +420,7 @@ begin
     DBWriteContactSettingUnicode(hContactNew, piShortName, 'Nick', PWideChar(frNick));
     DBWriteContactSettingByte(hContactNew, piShortName, 'Friend', frFriend);
     if DBGetContactSettingByte(0, piShortName, opt_UserVKontakteURL, 0) = 1 then
-      DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url_prefix + vk_url_host + vk_url_friend, [frID])));
+      DBWriteContactSettingString(hContactNew, piShortName, 'Homepage', PChar(Format(vk_url + vk_url_friend, [frID])));
 
     // assign group for contact, if given in settings
     DefaultGroup := DBReadUnicode(0, piShortName, opt_UserDefaultGroup, nil);
@@ -446,7 +464,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetContactStatus) Getting status of non-friend contact ' + IntToStr(ContactID) + '...'));
   if vk_Status = ID_STATUS_ONLINE then
   begin
-    HTML := HTTP_NL_Get(Format(vk_url_pda_friend, [ContactID])); // 1,5 Kb
+    HTML := HTTP_NL_Get(Format(vk_url_pda + vk_url_pda_friend, [ContactID])); // 1,5 Kb
     if Trim(HTML) <> '' then
     begin
       if Pos('<span class="online">Online</span>', HTML) > 0 then
@@ -457,7 +475,7 @@ begin
   end
   else // ID_STATUS_INVISIBLE
   begin
-    HTML := HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_url_searchbyid, [ContactID]));  // 3 Kb
+    HTML := HTTP_NL_Get(Format(vk_url + vk_url_searchbyid, [ContactID]));  // 3 Kb
     if Trim(HTML) <> '' then
     begin
       if Pos('<span class=''bbb''>Online</span>', HTML) > 0 then
@@ -498,7 +516,7 @@ begin
   // get friends online
   // status of friends is read only
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends from the server...'));
-  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friendsonline, '', 'multipart/form-data', '');
+  HTML := HTTP_NL_Post(vk_url + vk_url_feed_friendsonline, '', 'multipart/form-data', '');
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
@@ -550,7 +568,7 @@ begin
   // get full list of friends
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
   // HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed_friends);
-  HTML := HTTP_NL_Post(vk_url_prefix + vk_url_host + vk_url_feed_friends, '', 'multipart/form-data', '');
+  HTML := HTTP_NL_Post(vk_url + vk_url_feed_friends, '', 'multipart/form-data', '');
   if Trim(HTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
@@ -689,7 +707,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetHash) Getting hash of contact ' + IntToStr(ContactFullID) + '...'));
 
   // getting encoded wall hash
-  HTML := HTTP_NL_Get(Format(vk_url_friend_hash, [ContactFullID]));
+  HTML := HTTP_NL_Get(Format(vk_url + vk_url_friend_hash, [ContactFullID]));
   if Trim(HTML) <> '' then
   begin
     Hash := Trim(TextBetween(HTML, Format('removeFriend(%d, this, ''', [ContactFullID]), ''''));
@@ -716,7 +734,7 @@ begin
     Hash := vk_FriendGetHash(FriendID);
     if Trim(Hash) <> '' then
     begin
-      HTTP_NL_Get(Format(vk_url_frienddelete, [FriendID, Hash]), REQUEST_HEAD);   // GAP (?): result is not validated
+      HTTP_NL_Get(Format(vk_url + vk_url_frienddelete, [FriendID, Hash]), REQUEST_HEAD);   // GAP (?): result is not validated
     end;
   end;
 end;
@@ -728,7 +746,7 @@ procedure vk_KeepOnline();
 begin
   // we don't care about result
   // we also don't need page html body, so request head only
-  HTTP_NL_Get(vk_url_pda_keeponline, REQUEST_HEAD);
+  HTTP_NL_Get(vk_url_pda + vk_url_pda_keeponline, REQUEST_HEAD);
 end;
 
  // =============================================================================
@@ -740,7 +758,7 @@ var
   HTML:             string;
 begin
   // {"user": {"id": 999999, "name": "Name Nick Surname"}, ...
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_username);
+  HTML := HTTP_NL_Get(vk_url + vk_url_username);
   UserID := TextBetween(HTML, '"id":', ',');
   UserName := TextBetween(HTML, '"name":"', '"');
 
@@ -757,7 +775,7 @@ procedure vk_JoinGroup(GroupID: integer);
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_JoinGroup) Joining of the group ' + IntToStr(GroupID) + '...'));
   // GAP (?): result is not validated
-  HTTP_NL_Get(Format(vk_url_pda_group_join, [GroupID]), REQUEST_HEAD);
+  HTTP_NL_Get(Format(vk_url_pda + vk_url_pda_group_join, [GroupID]), REQUEST_HEAD);
   Netlib_Log(vk_hNetlibUser, PChar('(vk_JoinGroup) ... finished joining of the group ' + IntToStr(GroupID)));
 end;
 
@@ -879,7 +897,7 @@ begin
     else
     begin
       vk_Status := vk_Status_Temp;
-      HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_lang_dialog);
+      HTML := HTTP_NL_Get(vk_url + vk_lang_dialog);
       if Pos('doChangeLang', HTML) > 0 then
       begin
         HTML := TextBetween(HTML, 'doChangeLang(', ')');

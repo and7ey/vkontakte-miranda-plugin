@@ -36,7 +36,6 @@ interface
 procedure MsgsInit();
 procedure MsgsDestroy();
 procedure vk_GetMsgsFriendsEtc();
-procedure vk_GetNews();
 procedure vk_GetGroupsNews();
 procedure vk_GetCommentsNews();
 function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; MsgDate: TDateTime): boolean;
@@ -46,19 +45,19 @@ implementation
 uses
   m_globaldefs,
   m_api,
-
   vk_global,  // module with global variables and constant used
   vk_http,    // module to connect with the site
   vk_common,  // module with common functions
-  vk_core,   // module with core functions
   vk_wall,    // module to work with the wall
   vk_captcha, // module to process captcha
 
   htmlparse, // module to simplify html parsing
+  vk_core,   // module with core functions
 
   uLkJSON, // module to parse data from feed2.php (in JSON format)
 
-  SysUtils, Windows;
+  Windows,
+  SysUtils;
 
   {$include api/m_folders.inc}
 
@@ -144,7 +143,6 @@ begin
           try
             CaptchaId := jsoFeed.Field['error'].Field['captcha_sid'].Value;
             CaptchaUrl := jsoFeed.Field['error'].Field['captcha_img'].Value;
-
             CaptchaValue := ProcessCaptcha(CaptchaId, CaptchaUrl);
             if CaptchaValue = 'captcha_download_failed' then // error - can't download captcha image
               Netlib_Log(vk_hNetlibUser, PChar('(vk_SendMessage) ... unable to download captcha'))
@@ -224,7 +222,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Checking for new incoming messages, new authorization requests (friends) etc...'));
 
   // check for presence of new messages, friends etc. via the feed
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed2);
+  HTML := HTTP_NL_Get(vk_url + vk_url_feed2);
 
   // correct json text
   for i := 1 to length(HTML) - 2 do // don't check first and last symbols
@@ -328,7 +326,7 @@ begin
                             TranslateW('video') + ': ' +
                             jsoFeedAttachment.Field['response'].Child[1].Field['title'].Value + Chr(13) + Chr(10) +
                             jsoFeedAttachment.Field['response'].Child[1].Field['description'].Value + Chr(13) + Chr(10) +
-                            vk_url_prefix + vk_url_host + '/video' +
+                            vk_url + '/video' +
                             MsgAttachment;
                         finally
                           jsoFeedAttachment.Free;
@@ -667,6 +665,7 @@ end;
  // =============================================================================
  // procedure to get minimal news
  // -----------------------------------------------------------------------------
+{
 function vk_GetNewsMinimal(): TNewsRecords;
 var
   NewsPosStart, DayWrapPosStart: integer;
@@ -679,7 +678,7 @@ var
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsMinimal) Receiving minimal news...'));
 
-  HTML := HTTP_NL_Get(vk_url_pda_news);
+  HTML := HTTP_NL_Get(vk_url_pda + vk_url_pda_news);
   HTML := UTF8Decode(HTML);
 
   if Trim(HTML) <> '' then
@@ -741,7 +740,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) Receiving news...'));
 
   // get user lang id
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed2);
+  HTML := HTTP_NL_Get(vk_url + vk_url_feed2);
   vk_UserLangId := TextBetween(HTML, '"lang":{"id":"', '","p_id":');
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) LangId is: ' + vk_UserLangId));
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) LangHash is: ' + vk_UserLangHash));
@@ -749,15 +748,15 @@ begin
   if vk_UserLangId <> '0' then // change lang to Russian for correct parsing
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) Temporary changing site lang to Russian for parsing...'));
-    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, ['0', vk_UserLangHash]));
+    HTTP_NL_Get(Format(vk_url + vk_lang_change, ['0', vk_UserLangHash]));
   end;
 
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news);
+  HTML := HTTP_NL_Get(vk_url + vk_url_news);
 
   if vk_UserLangId <> '0' then // return user default lang
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetNewsFull) Now getting back user default site lang...'));
-    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
+    HTTP_NL_Get(Format(vk_url + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
   end;
 
   if Trim(HTML) <> '' then
@@ -853,7 +852,7 @@ end;
  // =============================================================================
  // procedure to get & display news
  // -----------------------------------------------------------------------------
-procedure vk_GetNews();
+procedure vk_GetNewsOld();
 var
   NewsAll:        TNewsRecords;
   CurrNews:       integer;
@@ -952,7 +951,7 @@ begin
     DBWriteContactSettingDWord(0, piShortName, opt_NewsLastNewsDateTime, DateTimeToFileDate(NewsAll[0].NTime));
   end;
 end;
-
+}
  // =============================================================================
  // procedure to parse groups news
  // -----------------------------------------------------------------------------
@@ -971,7 +970,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) Receiving groups news...'));
 
   // get user lang id
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed2);
+  HTML := HTTP_NL_Get(vk_url + vk_url_feed2);
   vk_UserLangId := TextBetween(HTML, '"lang":{"id":"', '","p_id":');
   Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) LangId is: ' + vk_UserLangId));
   Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) LangHash is: ' + vk_UserLangHash));
@@ -979,15 +978,15 @@ begin
   if vk_UserLangId <> '0' then // change lang to Russian for correct parsing
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) Temporary changing site lang to Russian for parsing...'));
-    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, ['0', vk_UserLangHash]));
+    HTTP_NL_Get(Format(vk_url + vk_lang_change, ['0', vk_UserLangHash]));
   end;
 
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news_groups);
+  HTML := HTTP_NL_Get(vk_url + vk_url_news_groups);
 
   if vk_UserLangId <> '0' then // return user default lang
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseGroupsNews) Now getting back user default site lang...'));
-    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
+    HTTP_NL_Get(Format(vk_url + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
   end;
 
   if Trim(HTML) <> '' then
@@ -998,7 +997,7 @@ begin
     DayWrapPosStart := Pos('feedDayWrap', HTML);
     while HasNews and (DayWrapPosStart > 0) do
     begin
-      HTMLDate := TextBetween(HTML, '<div class="feedDay">', '</div>');
+      HTMLDate := Trim(TextBetween(HTML, '<div class="feedDay">', '</div>'));
       if Pos('сегодня', HTMLDate) > 0 then
         DayTime := Date
       else
@@ -1119,6 +1118,8 @@ begin
           // cleanup NewsText - remove leading spaces
           while NewsText[1] = ' ' do
             Delete(NewsText, 1, 1);
+          // use local time for news
+          NewsAll[CurrNews].NTime := UnixToDateTime(LocalUnixTimeToGMT(DateTimeToUnix(NewsAll[CurrNews].NTime)));
           // display news
           vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
         end;
@@ -1133,7 +1134,7 @@ end;
 
  // =============================================================================
  // procedure to parse comments news
- // -------------------------------3----------------------------------------------
+ // -----------------------------------------------------------------------------
 function vk_ParseCommentsNews(): TNewsRecords;
 var
   DayWrapPosStart, feedTablePosStart, commentItemPosStart: integer;
@@ -1152,7 +1153,7 @@ begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) Receiving comments news...'));
 
   // get user lang id
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed2);
+  HTML := HTTP_NL_Get(vk_url + vk_url_feed2);
   vk_UserLangId := TextBetween(HTML, '"lang":{"id":"', '","p_id":');
   Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) LangId is: ' + vk_UserLangId));
   Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) LangHash is: ' + vk_UserLangHash));
@@ -1160,15 +1161,15 @@ begin
   if vk_UserLangId <> '0' then // change lang to Russian for correct parsing
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) Temporary changing site lang to Russian for parsing...'));
-    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, ['0', vk_UserLangHash]));
+    HTTP_NL_Get(Format(vk_url + vk_lang_change, ['0', vk_UserLangHash]));
   end;
 
-  HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_news_comments);
+  HTML := HTTP_NL_Get(vk_url + vk_url_news_comments);
 
   if vk_UserLangId <> '0' then // return user default lang
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseCommentsNews) Now getting back user default site lang...'));
-    HTTP_NL_Get(Format(vk_url_prefix + vk_url_host + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
+    HTTP_NL_Get(Format(vk_url + vk_lang_change, [vk_UserLangId, vk_UserLangHash]));
   end;
 
   if Trim(HTML) <> '' then
@@ -1336,7 +1337,7 @@ begin
           while NewsText[1] = ' ' do
             Delete(NewsText, 1, 1);
           // use local time for news
-          NewsAll[CurrNews].NTime := DateTimeToUnix(NewsAll[CurrNews].NTime) * 2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL, DateTimeToUnix(NewsAll[CurrNews].NTime), 0);
+          NewsAll[CurrNews].NTime := UnixToDateTime(LocalUnixTimeToGMT(DateTimeToUnix(NewsAll[CurrNews].NTime)));
           // display news
           vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
         end;

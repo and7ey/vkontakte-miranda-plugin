@@ -42,10 +42,10 @@ implementation
 uses
   m_globaldefs,
   m_api,
-
   vk_global, // module with global variables and constant used
 
-  SysUtils, Windows;
+  Windows,
+  SysUtils;
 
   {$include api/m_folders.inc}
 

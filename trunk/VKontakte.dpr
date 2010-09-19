@@ -23,31 +23,26 @@ library VKontakte;
 uses
   m_globaldefs in 'api\m_globaldefs.pas',
   m_api in 'api\m_api.pas',
-
-  uLkJSON in 'inc\uLkJSON.pas',
-
-  htmlparse in 'htmlparse.pas',
-
-  vk_auth,
-  vk_avatars,
-  vk_captcha,
-  vk_core,
-  vk_folders,
   vk_global,
   vk_http,
-  vk_info,
+  vk_core,
   vk_menu,
   vk_msgs,
-  vk_opts,
-  vk_popup,
-  vk_search,
-  vk_wall,
+  vk_news,
+  vk_auth,
+  vk_avatars,
   vk_xstatus,
-
+  vk_info,
+  vk_folders,
+  vk_search,
+  vk_popup,
+  vk_wall,
+  vk_opts,
+  Windows,
   SysUtils,
-  Windows;
-
-// module to parse data from feed2.php (in JSON format)
+  uLkJSON in 'inc\uLkJSON.pas',  // module to parse data from feed2.php (in JSON format)
+  htmlparse in 'htmlparse.pas',
+  vk_captcha in 'vk_captcha.pas';
 
 const
 
@@ -298,15 +293,10 @@ var
   function OnModulesLoad(wParam{0}, lParam{0}: DWord): integer; cdecl;
   begin
 
-    // get preferred VK host
-    case DBGetContactSettingByte(0, piShortName, opt_UserPreferredHost, 1) of
-      1:
-        vk_url_host := 'vkontakte.ru';
-      2:
-        vk_url_host := 'vk.com';
-      else
-        vk_url_host := 'vkontakte.ru';
-    end;
+    // get preferred vkontakte hosts
+    vk_url := vk_url_prefix + DBReadString(0, piShortName, opt_UserPreferredHostVKontakteRu, PChar(vk_url_vkontakteru));
+    vk_url_pda := vk_url_prefix + DBReadString(0, piShortName, opt_UserPreferredHostMVKontakteRu, PChar(vk_url_mvkontakteru));
+    vk_url_uapi := vk_url_prefix + DBReadString(0, piShortName, opt_UserPreferredHostUserApiCom, PChar(vk_url_userapi));
 
     // reset vk_UserLangId, vk_UserLangHash vars
     vk_UserLangId := '';

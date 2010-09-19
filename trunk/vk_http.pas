@@ -36,15 +36,16 @@ interface
 uses
   m_globaldefs,
   m_api,
-
   vk_global, // module with global variables and constant used
 
-  Classes, SysUtils,
-  Windows;
+  Windows,
+  SysUtils,
+  Classes;
 
 procedure HTTP_NL_Init();
 function HTTP_NL_Get(szUrl: string; szRequestType: integer = REQUEST_GET): string;
 function HTTP_NL_GetSession(szUrl: string; szRequestType: integer = REQUEST_HEAD): string;
+function HTTP_NL_GetSessionUserAPI(szUrl: string): string;
 function HTTP_NL_Post(szUrl: string; szData: string; ContentType: string; Boundary: string; szHeaders: string = ''): string;
 function HTTP_NL_PostPicture(szUrl: string; szData: string; Boundary: string): string;
 function HTTP_NL_GetPicture(szUrl, szFileName: string): boolean;
@@ -52,7 +53,7 @@ function HTTP_NL_GetPicture(szUrl, szFileName: string): boolean;
 implementation
 
 uses
-  htmlparse, StrUtils, vk_core; // module with core functions
+  vk_core, htmlparse, StrUtils; // module with core functions
 
  // =============================================================================
  // function initiliaze connection with internet
@@ -194,7 +195,7 @@ begin
                 else
                   Result := 'div class="menu2"';
 
-                CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+                CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(nlhrReply));
                 Exit;
               end;
             end;
@@ -241,7 +242,7 @@ begin
 end;
 
  // =============================================================================
- // function to get Signature for vkontakte API
+ // function to get Session details for vkontakte API
  // should be re-written
  // -----------------------------------------------------------------------------
 function HTTP_NL_GetSession(szUrl: string; szRequestType: integer = REQUEST_HEAD): string;
@@ -354,7 +355,7 @@ begin
                 Result := vk_session_id;
               end;
 
-              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(nlhrReply));
               Exit;
             end;
           end;
@@ -393,6 +394,69 @@ begin
   end;
 end;
 
+
+ // =============================================================================
+ // function to get Signature for UserAPI
+ // -----------------------------------------------------------------------------
+function HTTP_NL_GetSessionUserAPI(szUrl: string): string;
+var
+  nlhr:      TNETLIBHTTPREQUEST;
+  nlhrReply: PNETLIBHTTPREQUEST;
+  i:         integer;
+begin
+  Result := '';
+
+
+  FillChar(nlhr, sizeof(nlhr), 0);
+  // nlhrReply := @nlhr;
+
+  // initialize the netlib request
+  nlhr.cbSize := sizeof(nlhr);
+  nlhr.requestType := REQUEST_GET;
+  nlhr.flags := NLHRF_DUMPASTEXT or NLHRF_HTTP11;
+  nlhr.szUrl := PChar(szUrl);
+
+  nlhr.headersCount := 4;
+  SetLength(nlhr.headers, 4);
+  nlhr.headers[0].szName := 'User-Agent';
+  nlhr.headers[0].szValue := 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)';
+  nlhr.headers[1].szName := 'Connection';
+  nlhr.headers[1].szValue := 'Keep-Alive';
+  nlhr.headers[2].szName := 'Cache-Control';
+  nlhr.headers[2].szValue := 'no-cache';
+  nlhr.headers[3].szName := 'Pragma';
+  nlhr.headers[3].szValue := 'no-cache';
+
+  // fast exit when Miranda terminating
+  if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) then
+  begin
+    Result := '';
+    Exit;
+  end;
+
+  Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetSessionUserAPI) Dowloading page: ' + szUrl));
+
+  // download the page
+  nlhrReply := PNETLIBHTTPREQUEST(PluginLink^.CallService(MS_NETLIB_HTTPTRANSACTION, Windows.WParam(vk_hNetlibUser), Windows.lParam(@nlhr)));
+  if (nlhrReply <> nil) then
+  begin
+    if nlhrReply.resultCode = 302 then
+    begin
+      // look for the reply header "Location" with session id
+      for i := 0 to nlhrReply.headersCount - 1 do
+        if nlhrReply.headers[i].szName = 'Location' then
+        begin
+          if Pos('sid', nlhrReply.headers[i].szValue) > 0 then
+          begin
+            Result := TextBetween(nlhrReply.headers[i].szValue + ' ', 'sid=', ' ');
+            Netlib_Log(vk_hNetlibUser, PChar('(HTTP_NL_GetSessionUserAPI) Session id received: ' + Result));
+          end;
+        end;
+    end;
+  end;
+  CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhr));
+  CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(nlhrReply));
+end;
 
  // =============================================================================
  // function to post data to the site
@@ -504,7 +568,7 @@ begin
               nlhr.szUrl := PChar(szRedirUrl);
 
               Result := HTTP_NL_Get(szRedirUrl);
-              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(nlhrReply));
               Exit;
             end;
           end;
@@ -638,7 +702,7 @@ begin
               nlhr.szUrl := PChar(szRedirUrl);
 
               Result := HTTP_NL_Get(szRedirUrl);
-              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+              CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(nlhrReply));
               Exit;
             end;
           end;
@@ -743,7 +807,7 @@ begin
         Result := True;
       end;
     end;
-    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(@nlhrReply));
+    CallService(MS_NETLIB_FREEHTTPREQUESTSTRUCT, 0, lParam(nlhrReply));
   end;
 end;
 

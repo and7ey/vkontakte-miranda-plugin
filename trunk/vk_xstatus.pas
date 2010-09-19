@@ -38,7 +38,6 @@ interface
 uses
   m_globaldefs,
   m_api,
-  
   Windows;
 
 procedure AddlStatusInit();
@@ -58,9 +57,10 @@ uses
 
   htmlparse, // module to simplify html parsing
 
+  uLkJSON,
   CommCtrl,
-  Messages, SysUtils,
-  uLkJSON;
+  SysUtils,
+  Messages;
 
 const
   opt_AddlStatus: PChar = 'AddlStatus';   // List of settings in DB file
@@ -162,39 +162,42 @@ begin
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... reading XStatus from the server for contact ' + IntToStr(iContactID)));
             HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [iContactID])));
 
-            jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
-            try
-              if Assigned(jsoFeed) then
-                MsgText := jsoFeed.Field['response'].Field['activity'].Value;
-              iMsgTime := jsoFeed.Field['response'].Field['time'].Value;
-            finally
-              jsoFeed.Free;
-            end;
-
-            if (Trim(MsgText) <> '') and (iMsgTime > 0) then
+            if Pos('response', HTML) > 0 then
             begin
-              MsgText := HTMLDecodeW(MsgText);
-              bXStatusNew := True;
-              if DBReadUnicode(hContact, piShortName, 'XStatusMsg', '') <> MsgText then
-              begin // xstatus changed! write new values
-                DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusMsg', PWideChar(MsgText));
-                DBWriteContactSettingDWord(hContact, piShortName, 'XStatusTime', iMsgTime);
-                // DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusName', TranslateW('Current')); // required for clist_modern to display status
+              jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
+              try
+                if Assigned(jsoFeed) then
+                  MsgText := jsoFeed.Field['response'].Field['activity'].Value;
+                iMsgTime := jsoFeed.Field['response'].Field['time'].Value;
+              finally
+                jsoFeed.Free;
+              end;
 
-                DBDeleteContactSetting(hContact, piShortName, 'XStatusId');
-                MsgText := AnsiLowerCase(MsgText);
-                for i := Low(xStatuses) + 2 to High(xStatuses) do
-                begin
-                  if (Pos(AnsiLowerCase(xStatuses[i].Text), MsgText) <> 0) or
-                    (Pos(AnsiLowerCase(string(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText) <> 0) then
+              if (Trim(MsgText) <> '') and (iMsgTime > 0) then
+              begin
+                MsgText := HTMLDecodeW(MsgText);
+                bXStatusNew := True;
+                if DBReadUnicode(hContact, piShortName, 'XStatusMsg', '') <> MsgText then
+                begin // xstatus changed! write new values
+                  DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusMsg', PWideChar(MsgText));
+                  DBWriteContactSettingDWord(hContact, piShortName, 'XStatusTime', iMsgTime);
+                  // DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusName', TranslateW('Current')); // required for clist_modern to display status
+
+                  DBDeleteContactSetting(hContact, piShortName, 'XStatusId');
+                  MsgText := AnsiLowerCase(MsgText);
+                  for i := Low(xStatuses) + 2 to High(xStatuses) do
                   begin
-                    DBWriteContactSettingByte(hContact, piShortName, 'XStatusId', i);
-                    StatusAddlSetIcon(hContact, xStatuses[i].IconExtraIndex);
-                    break;
+                    if (Pos(AnsiLowerCase(xStatuses[i].Text), MsgText) <> 0) or
+                      (Pos(AnsiLowerCase(string(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText) <> 0) then
+                    begin
+                      DBWriteContactSettingByte(hContact, piShortName, 'XStatusId', i);
+                      StatusAddlSetIcon(hContact, xStatuses[i].IconExtraIndex);
+                      break;
+                    end;
                   end;
-                end;
 
-                pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.wParam(hContact), 0); // inform other plugins that we've updated xstatus for a contact
+                  pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.wParam(hContact), 0); // inform other plugins that we've updated xstatus for a contact
+                end;
               end;
             end;
 
