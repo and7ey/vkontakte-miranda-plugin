@@ -416,83 +416,85 @@ begin
       end; // receiving of new messages completed
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking for new incoming messages finished'));
 
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking new authorization requests count'));
-      FeedMsgs := FeedRoot.Field['friends'] as TlkJSONobject;
-      if Assigned(FeedMsgs) then
-        FriendsCount := FeedMsgs.getInt('count')
-      else
-        FriendsCount := 0;
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... ' + IntToStr(MsgsCount) + ' new authorization request(s) received'));
-      if FriendsCount > 0 then // got new authorization request(s)!
+      if DBGetContactSettingByte(0, piShortName, opt_UserAuthorizationsReceive, 1) = 1 then
       begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... getting new authorization request(s) details'));
-        FeedMsgsItems := FeedMsgs.Field['items'] as TlkJSONobject;
-        for i := 0 to FriendsCount - 1 do // now processing all authorization requests one-by-one
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking new authorization requests count'));
+        FeedMsgs := FeedRoot.Field['friends'] as TlkJSONobject;
+        if Assigned(FeedMsgs) then
+          FriendsCount := FeedMsgs.getInt('count')
+        else
+          FriendsCount := 0;
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... ' + IntToStr(MsgsCount) + ' new authorization request(s) received'));
+        if FriendsCount > 0 then // got new authorization request(s)!
         begin
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', getting id and name'));
-          MsgID := FeedMsgsItems.NameOf[i];
-          MsgSenderName := HTMLDecodeW(FeedMsgsItems.getWideString(i));
-          // {"user":{"id":123456},"friends":{"count":2,"items":{"1234567":"Петр &#9793; Ф-Ф &#9793; Владимиров","26322232":"Даниил Петров"}},"messages":{"count":0},"events":{"count":0},"groups":{"count":0},"photos":{"count":0},"videos":{"count":0},"notes":{"count":0},"opinions":{"count":0},"questions":{"count":0},"gifts":{"count":0},"lang":{"id":"0","p_id":0},"activity":{"updated":0}}
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', from id: ' + MsgID));
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', from person: ' + string(MsgSenderName)));
-          if (Trim(MsgID) <> '') and (TryStrToInt(MsgID, MsgSender)) {and (Trim(MsgSenderName)<>'')} then
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... getting new authorization request(s) details'));
+          FeedMsgsItems := FeedMsgs.Field['items'] as TlkJSONobject;
+          for i := 0 to FriendsCount - 1 do // now processing all authorization requests one-by-one
           begin
-            // everything seems to be OK, may proceed
-            // temporary add contact if required
-            TempFriend := GetContactByID(MsgSender);
-            if TempFriend = 0 then
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', getting id and name'));
+            MsgID := FeedMsgsItems.NameOf[i];
+            MsgSenderName := HTMLDecodeW(FeedMsgsItems.getWideString(i));
+            // {"user":{"id":123456},"friends":{"count":2,"items":{"1234567":"Петр &#9793; Ф-Ф &#9793; Владимиров","26322232":"Даниил Петров"}},"messages":{"count":0},"events":{"count":0},"groups":{"count":0},"photos":{"count":0},"videos":{"count":0},"notes":{"count":0},"opinions":{"count":0},"questions":{"count":0},"gifts":{"count":0},"lang":{"id":"0","p_id":0},"activity":{"updated":0}}
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', from id: ' + MsgID));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', from person: ' + string(MsgSenderName)));
+            if (Trim(MsgID) <> '') and (TryStrToInt(MsgID, MsgSender)) {and (Trim(MsgSenderName)<>'')} then
             begin
-              Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... temporary add contact to our list'));
-              // add sender to our contact list
-              // now we don't read user's status, so it is added as offline
-              TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
-              // and make it as temporary contact
-              DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
-              DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
+              // everything seems to be OK, may proceed
+              // temporary add contact if required
+              TempFriend := GetContactByID(MsgSender);
+              if TempFriend = 0 then
+              begin
+                Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... temporary add contact to our list'));
+                // add sender to our contact list
+                // now we don't read user's status, so it is added as offline
+                TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
+                // and make it as temporary contact
+                DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
+                DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
+              end;
+
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', adding to miranda database'));
+
+              FillChar(pre, SizeOf(pre), 0);
+              pre.flags := PREF_UTF;
+              MsgDate := Now;
+              pre.timestamp := DateTimeToUnix(MsgDate);
+
+              // GAP(?): use AnsiStrings below, as unicode not supported
+              //blob is: uin( DWORD ), hContact( HANDLE ), nick( ASCIIZ ), first( ASCIIZ ), last( ASCIIZ ), email( ASCIIZ ), reason( ASCIIZ )
+              MsgText := '(text of authorization request is not supported currently)';
+              pre.lParam := sizeof(DWORD) + sizeof(THANDLE) + Length(ansistring(MsgSenderName)) + Length(MsgID) + Length(ansistring(MsgText)) + 8;
+              pCurBlob := AllocMem(pre.lParam);
+              pre.szMessage := PChar(pCurBlob);
+              PDWORD(pCurBlob)^ := 0;
+              Inc(pCurBlob, sizeof(DWORD));
+              PHANDLE(pCurBlob)^ := TempFriend;
+              Inc(pCurBlob, sizeof(THANDLE));
+              StrCopy(pCurBlob, PChar(ansistring(MsgSenderName)));
+              // lstrcpyw(pCurBlob, PWideChar(MsgSenderName));
+              Inc(pCurBlob, Length(ansistring(MsgSenderName)) + 1);
+              pCurBlob^ := #0;            //firstName
+              Inc(pCurBlob);
+              pCurBlob^ := #0;            //lastName
+              Inc(pCurBlob);
+              pCurBlob^ := #0;            //e-mail
+              Inc(pCurBlob);
+              StrCopy(pCurBlob, PChar(ansistring(MsgText))); //reason
+              // lstrcpyw(pCurBlob, PWideChar(MsgText));
+
+              FillChar(ccs_chain, SizeOf(ccs_chain), 0);
+              ccs_chain.szProtoService := PSR_AUTH; // so, AuthRequestReceived will be called,
+              ccs_chain.hContact := TempFriend;     // if filtering is passed
+              ccs_chain.wParam := 0;
+              ccs_chain.flags := 0;
+              ccs_chain.lParam := Windows.lParam(@pre);
+              PluginLink^.CallService(MS_PROTO_CHAINRECV, 0, Windows.lParam(@ccs_chain));
             end;
-
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', adding to miranda database'));
-
-            FillChar(pre, SizeOf(pre), 0);
-            pre.flags := PREF_UTF;
-            MsgDate := Now;
-            pre.timestamp := DateTimeToUnix(MsgDate);
-
-            // GAP(?): use AnsiStrings below, as unicode not supported
-            //blob is: uin( DWORD ), hContact( HANDLE ), nick( ASCIIZ ), first( ASCIIZ ), last( ASCIIZ ), email( ASCIIZ ), reason( ASCIIZ )
-            MsgText := '(text of authorization request is not supported currently)';
-            pre.lParam := sizeof(DWORD) + sizeof(THANDLE) + Length(ansistring(MsgSenderName)) + Length(MsgID) + Length(ansistring(MsgText)) + 8;
-            pCurBlob := AllocMem(pre.lParam);
-            pre.szMessage := PChar(pCurBlob);
-            PDWORD(pCurBlob)^ := 0;
-            Inc(pCurBlob, sizeof(DWORD));
-            PHANDLE(pCurBlob)^ := TempFriend;
-            Inc(pCurBlob, sizeof(THANDLE));
-            StrCopy(pCurBlob, PChar(ansistring(MsgSenderName)));
-            // lstrcpyw(pCurBlob, PWideChar(MsgSenderName));
-            Inc(pCurBlob, Length(ansistring(MsgSenderName)) + 1);
-            pCurBlob^ := #0;            //firstName
-            Inc(pCurBlob);
-            pCurBlob^ := #0;            //lastName
-            Inc(pCurBlob);
-            pCurBlob^ := #0;            //e-mail
-            Inc(pCurBlob);
-            StrCopy(pCurBlob, PChar(ansistring(MsgText))); //reason
-            // lstrcpyw(pCurBlob, PWideChar(MsgText));
-
-            FillChar(ccs_chain, SizeOf(ccs_chain), 0);
-            ccs_chain.szProtoService := PSR_AUTH; // so, AuthRequestReceived will be called,
-            ccs_chain.hContact := TempFriend;     // if filtering is passed
-            ccs_chain.wParam := 0;
-            ccs_chain.flags := 0;
-            ccs_chain.lParam := Windows.lParam(@pre);
-            PluginLink^.CallService(MS_PROTO_CHAINRECV, 0, Windows.lParam(@ccs_chain));
           end;
         end;
-      end;
-
-      FeedRoot.Free;
-
+        FeedRoot.Free;
+      end else
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking of new authorization requests skipped'));
     end;
   end;
 

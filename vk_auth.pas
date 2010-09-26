@@ -50,6 +50,7 @@ uses
   vk_http,   // module to connect with the site
   vk_opts,   // unit to work with options
   vk_captcha,
+  vk_popup,
   htmlparse, // module to simplify html parsing
 
   Messages,
@@ -84,20 +85,24 @@ end;
 
  // =============================================================================
  // procedure to request authorization
+ // TODO: no text of authorization is supported now due to User API restrictions
  // -----------------------------------------------------------------------------
 procedure vk_AuthRequestSend(ID: integer; MessageText: WideString);
 var
-  SecureID: string;
+  sHTML: string;
 begin
-  SecureID := vk_GetSecureIDAuthRequest(ID);
-  if Trim(SecureID) <> '' then
+  if vk_userapi_session_id <> '' then
   begin
-    MessageText := URLEncode(MessageText); // encode all Russian and other characters
-    // GAP (?): we don't care about result as of now
-    // we also don't need page html body, so request head only
-    // text for verification - получил уведомление и подтвердит, что ¬ы его друг
-    HTTP_NL_Get(Format(vk_url + vk_url_authrequestsend, [ID, SecureID, MessageText]));
-  end;
+    sHTML := HTTP_NL_Get(Format(vk_url_uapi + vk_url_userapi_friends_add, [ID, vk_userapi_session_id]));
+    if Pos('-', sHTML) = 0 then // successful
+    begin
+      ShowPopupMsg(0, err_userapi_auth_successful, 1);
+    end
+    else
+      ShowPopupMsg(0, err_userapi_auth_failed, 2);
+  end
+  else
+    ShowPopupMsg(0, err_userapi_session_nodetail_auth, 2);
 end;
 
  // =============================================================================

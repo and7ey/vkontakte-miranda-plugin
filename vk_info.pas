@@ -96,13 +96,14 @@ var
       begin
         sTemp := FeedInfo.Field['response'].Child[0].Field[sFieldName].Value;
         sTemp := Trim(HTMLDecodeW(sTemp));
-        case bType of
-          0:
-            DBWriteContactSettingUnicode(iContact, PChar(sSection), PChar(sParmName), PWideChar(sTemp));
-          1:
-            DBWriteContactSettingByte(iContact, PChar(sSection), PChar(sParmName), StrToInt(sTemp));
-          2:
-            DBWriteContactSettingString(iContact, PChar(sSection), PChar(sParmName), PChar(string(sTemp)));
+        if Trim(sTemp) <> '' then
+          case bType of
+            0:
+              DBWriteContactSettingUnicode(iContact, PChar(sSection), PChar(sParmName), PWideChar(sTemp));
+            1:
+              DBWriteContactSettingByte(iContact, PChar(sSection), PChar(sParmName), StrToInt(sTemp));
+            2:
+              DBWriteContactSettingString(iContact, PChar(sSection), PChar(sParmName), PChar(string(sTemp)));
         end;
         Result := True;
         FeedInfo.Free;
@@ -230,7 +231,7 @@ begin
       sTemp := GetInfo(HTML, 'photo_medium');
       if Trim(sTemp) <> '' then
         try
-          vk_AvatarGetAndSave(IntToStr(DBGetContactSettingDWord(hContact, piShortName, 'ID', 0)), sTemp); // update avatar for a contact
+          vk_AvatarGetAndSave(IntToStr(ContactID), sTemp); // update avatar for a contact
         except
         end;
     end;

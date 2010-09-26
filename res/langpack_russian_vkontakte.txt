@@ -159,7 +159,7 @@ xСтатус
 [Groups]
 Группы
 [Groups news support settings]
-Настройки новостеq групп
+Настройки новостей групп
 [Receive groups news]
 Получать новости групп
 [Check for groups news each]
@@ -578,3 +578,13 @@ xСтатус
 граффити
 [No UserAPI session details are received. Some functions will not work properly.]
 Не получены детали сессии UserAPI. Некоторые функции плагина будут работать неправильно.
+[No UserAPI session details are received. Sending of authorization request failed.]
+Не получены детали сессии UserAPI. Отправка запроса на добавление в друзья невозможна.
+[Sending of authorization request failed.]
+Отправка запроса на добавление в друзья не удалась.
+[Authorization request has been sent.]
+Запрос на добавление в друзья отправлен.
+[No UserAPI session details are received. Getting of status of contact non-friend %d failed.]
+Не получены детали сессии UserAPI. Получение статуса контакта не-друга %d невозможно.
+[No session details are received. Search by id failed.]
+Не получены детали сессии. Поиск контакта по id невозможен.

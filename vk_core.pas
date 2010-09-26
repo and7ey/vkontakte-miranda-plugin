@@ -38,16 +38,16 @@ interface
 uses
   m_globaldefs,
   m_api,
-  vk_global,  // module with global variables and constant used
-  vk_common,  // module with common functions
-  vk_http,    // module to connect with the site
   vk_avatars, // module to support avatars
+  vk_common,  // module with common functions
+  vk_global,  // module with global variables and constant used
+  vk_http,    // module to connect with the site
   vk_msgs,    // module to send/receive messages
   vk_news,    // module to receive news
-  vk_xstatus, // module to support additional status
   vk_opts,    // my unit to work with options
   vk_popup,   // module to support popups
   vk_wall,    // module to work with the wall
+  vk_xstatus, // module to support additional status
 
   htmlparse, // module to simplify html parsing
 
@@ -354,6 +354,7 @@ begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Session details received: session id=' + vk_session_id + ', secret=' + vk_secret + ', vk_id=' + vk_id + ', vk_api_appid=' + vk_api_appid));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting user rights...'));
     HTML := HTTP_NL_Get(GenerateApiUrl('method=getUserSettings'));
+    HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [0])));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) User rights received: ' + HTML));
 
     // ************************
@@ -458,33 +459,23 @@ end;
  // -----------------------------------------------------------------------------
 function vk_GetContactStatus(ContactID: integer): integer;
 var
-  HTML: string;
+  sHTML:   string;
+  iStatus: integer;
 begin
   Result := ID_STATUS_OFFLINE;
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetContactStatus) Getting status of non-friend contact ' + IntToStr(ContactID) + '...'));
-  if vk_Status = ID_STATUS_ONLINE then
+
+  if vk_userapi_session_id <> '' then
   begin
-    HTML := HTTP_NL_Get(Format(vk_url_pda + vk_url_pda_friend, [ContactID])); // 1,5 Kb
-    if Trim(HTML) <> '' then
-    begin
-      if Pos('<span class="online">Online</span>', HTML) > 0 then
-        Result := ID_STATUS_ONLINE
-      else
-        Result := ID_STATUS_OFFLINE;
-    end;
+    sHTML := HTTP_NL_Get(Format(vk_url_uapi + vk_url_userapi_profile, [ContactID, vk_userapi_session_id]));
+    sHTML := TextBetween(sHTML, '"on":', ',');
+    TryStrToInt(sHTML, iStatus);
+    if iStatus = 1 then
+      Result := ID_STATUS_ONLINE;
   end
-  else // ID_STATUS_INVISIBLE
-  begin
-    HTML := HTTP_NL_Get(Format(vk_url + vk_url_searchbyid, [ContactID]));  // 3 Kb
-    if Trim(HTML) <> '' then
-    begin
-      if Pos('<span class=''bbb''>Online</span>', HTML) > 0 then
-        Result := ID_STATUS_ONLINE
-      else
-        Result := ID_STATUS_OFFLINE;
-    end;
-  end;
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetContactStatus) ... status of non-friend contact ' + IntToStr(ContactID) + ' is identified as ' + IntToStr(Result)));
+  else
+    ShowPopupMsg(0, Format(err_userapi_session_nodetail_profile_status, [ContactID]), 2);
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetContactStatus) ... status of non-friend contact ' + IntToStr(ContactID) + ' is identified as ' + IntToStr(iStatus) + ' (1 - online, 0 - offline)'));
 end;
 
  // =============================================================================
@@ -567,7 +558,6 @@ begin
 
   // get full list of friends
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
-  // HTML := HTTP_NL_Get(vk_url_prefix + vk_url_host + vk_url_feed_friends);
   HTML := HTTP_NL_Post(vk_url + vk_url_feed_friends, '', 'multipart/form-data', '');
   if Trim(HTML) <> '' then
   begin

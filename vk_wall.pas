@@ -934,7 +934,7 @@ var
   HTMLAudio:         string;
   sAudioID:          string;
   sSenderID, sMsgID: string;
-  sSenderName, sSenderNameFull, sMsgText: WideString;
+  sSenderNameFull, sMsgText: WideString;
   MsgDate:           TDateTime;
   iSenderStatus, iSenderID, iMsgDate, iMsgID: integer;
   sMediaType:        string;
@@ -1043,8 +1043,12 @@ begin
           // add only new posts
           if iMsgDate > DBGetContactSettingDWord(0, piShortName, opt_WallLastPostID, 0) then
           begin
-            if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
-            begin // getting message in the separate contact, so getting details of a sender
+            // read senders name if we use separate contact for wall message OR
+            // if message is posted by unknown user
+            TempFriend := GetContactByID(iSenderID);
+            if (DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1) or
+               (TempFriend = 0) then
+            begin
               HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getprofiles, [IntToStr(iSenderID), 'first_name,last_name,nickname,sex,online'])));
               if Pos('error', HTML) > 0 then
               begin
@@ -1062,7 +1066,10 @@ begin
                   jsoFeedProfile.Free;
                 end;
               end;
+            end;
 
+            if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
+            begin // getting message in the separate contact
               TempFriend := vk_AddFriend(DBGetContactSettingDWord(0, piShortName, opt_WallSeparateContactID, 666), // separate contact ID, 666 by default
                 DBReadUnicode(0, piShortName, opt_WallSeparateContactName, TranslateW('The wall')), // separate contact nick, translated 'The wall' by default
                 ID_STATUS_ONLINE, // status
@@ -1079,7 +1086,7 @@ begin
               begin
                 Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) ... wall message id ' + sMsgID + ' received from unknown contact ' + sSenderID + ', adding him/her to the contact list temporarily'));
                 // add sender to our contact list
-                TempFriend := vk_AddFriend(iSenderID, sSenderName, iSenderStatus, 0);
+                TempFriend := vk_AddFriend(iSenderID, sSenderNameFull, iSenderStatus, 0);
                 // and make it as temporary contact
                 DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
                 DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
