@@ -137,7 +137,7 @@ var
 begin
   if DBGetContactSettingByte(0, piShortName, opt_UserUpdateAddlStatus, 1) = 1 then
   begin
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Updating of contact''s XStatus...'));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) Updating of contact''s XStatus...'));
 
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
     while hContact <> 0 do
@@ -159,7 +159,7 @@ begin
           if iContactID > 0 then
           begin
             // {"response":{"id":-1,"time":0,"activity":""}}
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... reading XStatus from the server for contact ' + IntToStr(iContactID)));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) ... reading XStatus from the server for contact ' + IntToStr(iContactID)));
             HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [iContactID])));
 
             if Pos('response', HTML) > 0 then
@@ -211,7 +211,7 @@ begin
         // delete old statuses and statuses of offline contacts (if not updated)
         if bXStatusNew = False then
         begin
-          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... deleting old additional statuses'));
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) ... deleting old additional statuses'));
           DBDeleteContactSetting(hContact, piShortName, 'XStatusMsg');
           DBDeleteContactSetting(hContact, piShortName, 'XStatusTime');
           DBDeleteContactSetting(hContact, piShortName, 'XStatusId');
@@ -222,7 +222,7 @@ begin
       hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDNEXT, hContact, 0);
     end;
 
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... updating of contact''s XStatus finished'));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) ... updating of contact''s XStatus finished'));
   end;
 end;
 

@@ -1,7 +1,7 @@
 (*
     VKontakte plugin for Miranda IM: the free IM client for Microsoft Windows
 
-    Copyright (c) 2008-2009 Andrey Lukyanov
+    Copyright (c) 2008-2010 Andrey Lukyanov
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -57,7 +57,8 @@ var
  // -----------------------------------------------------------------------------
 procedure FoldersInit();
 var
-  pszDest: string; // path to profile
+  pszDest:        string; // path to profile
+  pszProfileName: string;
 begin
   vk_hFolderAvatars := FoldersRegisterCustomPath(piShortName, 'Avatars Cache', PROFILE_PATH + '\' + piShortName);
   if vk_hFolderAvatars <> 0 then
@@ -68,7 +69,14 @@ begin
     SetLength(pszDest, MAX_PATH);
     pluginLink^.CallService(MS_DB_GETPROFILEPATH, MAX_PATH, Windows.lParam(@pszDest[1]));
     SetLength(pszDest, StrLen(@pszDest[1]));
-    FolderAvatars := pszDest + '\' + piShortName;
+    SetLength(pszProfileName, MAX_PROFILE_LEN);
+    pluginLink^.CallService(MS_DB_GETPROFILENAME, MAX_PROFILE_LEN, Windows.lParam(@pszProfileName[1]));
+    SetLength(pszProfileName, StrLen(@pszProfileName[1]));
+    if Pos('.dat', pszProfileName) > 0 then
+      Delete(pszProfileName, Length(pszProfileName) - 3, 4);
+
+    Windows.CreateDirectory(PChar(pszDest + '\' + pszProfileName + '\AvatarCache'), nil); // create directory AvatarCache  
+    FolderAvatars := pszDest + '\' + pszProfileName + '\AvatarCache\' + piShortName;
   end;
 end;
 

@@ -36,6 +36,11 @@ interface
 uses
   m_globaldefs,
   m_api,
+
+  vk_popup,
+
+  uLkJSON,
+
   Classes;
 
 type
@@ -271,6 +276,8 @@ var
   FriendStatus:       string;
   FriendID, FriendFullName, FriendGraduated, FriendFaculty: WideString;
 begin
+  // HTML := HTTP_NL_Post('http://vkontakte.ru/gsearch.php?section=people&q=%E0%ED%E4%F0%E5%E9%20%EB%F3%EA%FC%FF%ED%EE%E2&name=1&ajax=1', '', 'multipart/form-data', '');
+
   SearchURL := SearchURL + vk_url_search_suffix;
 
   HTML := HTTP_NL_Get(Format(SearchURL, [0]));
@@ -354,6 +361,101 @@ begin
     ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SUCCESS, SearchID, 0);
 end;
 
+
+ // =============================================================================
+ // procedure to find contact by id
+ // vkontakte api
+ // -----------------------------------------------------------------------------
+procedure vk_SearchFriendID(ID: integer; SearchID: integer; SearchPages: integer);
+var
+  sHTML:              WideString;
+  jsoFeed:            TlkJSONobject;
+  FriendGraduated:    WideString;
+  csr:                CUSTOMSEARCHRESULTS_VK;  // variables for customer search results
+  columns:            array [0..3] of TChar;
+  wsFriendID,
+  wsFriendFirstName,
+  wsFriendLastName,
+  wsFriendNick,
+  wsFriendFullName,
+  wsFriendGraduated,
+  wsFriendFaculty:    WideString;
+begin
+  if vk_session_id <> '' then
+  begin
+    sHTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_search_id, [ID, 'first_name,last_name,nickname,education,online'])));
+    if (Trim(sHTML) <> '') and (sHTML <> '{"response":{}}') and (Pos('error', sHTML) = 0) then
+    begin
+      // for unicode should use columns[0].W, see mRadio Mod for example
+      columns[0].w := 'ID';
+      columns[1].w := 'Nick';
+      columns[2].w := 'Graduated';
+      columns[3].w := 'Faculty';
+      csr.nSize := SizeOf(csr);
+      csr.nFieldCount := 4;
+      csr.szFields := @columns;
+      csr.psr.cbSize := 0; // sending just column names
+      ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SEARCHRESULT, SearchID, DWord(@csr));
+
+      jsoFeed := TlkJSON.ParseText(sHTML) as TlkJSONobject;
+      try
+        FillChar(csr, sizeof(csr), 0);
+        csr.psr.cbSize := sizeOf(csr.psr);
+        wsFriendID := WideString(IntToStr(ID));
+        csr.psr.nick := PWideChar(wsFriendID);
+        wsFriendFirstName := WideString(jsoFeed.Field['response'].Child[0].Field['first_name'].Value);
+        wsFriendLastName := WideString(jsoFeed.Field['response'].Child[0].Field['last_name'].Value);
+        wsFriendNick := WideString(jsoFeed.Field['response'].Child[0].Field['nickname'].Value);
+        wsFriendFullName := wsFriendFirstName + ' ' + wsFriendNick + ' ' + wsFriendLastName;
+        wsFriendFullName := HTMLDecodeW(wsFriendFullName);
+        csr.psr.firstName := PWideChar(wsFriendFullName);
+        if Pos('university_name', sHTML) > 0 then
+        begin
+          wsFriendGraduated := WideString(jsoFeed.Field['response'].Child[0].Field['university_name'].Value);
+          wsFriendGraduated := HTMLDecodeW(wsFriendGraduated);
+        end;
+        csr.psr.lastName := PWideChar(FriendGraduated);
+        if Pos('faculty_name', sHTML) > 0 then
+        begin
+          wsFriendFaculty := WideString(jsoFeed.Field['response'].Child[0].Field['faculty_name'].Value);
+          wsFriendFaculty := HTMLDecodeW(wsFriendFaculty);
+        end;
+        csr.psr.email := PWideChar(wsFriendFaculty); // PWideChar(FriendFaculty);
+
+        csr.psr.id := ID;
+        csr.psr.Status := ID_STATUS_OFFLINE;
+        // contact status is not returned now by api, hence the code below is disabled
+        // if FeedInfo.Field['response'].Child[0].Field['online'].Value = 1 then
+        //   csr.psr.Status := ID_STATUS_ONLINE;
+
+        columns[0].w := PWideChar(wsFriendID);
+        columns[1].w := PWideChar(wsFriendFullName);
+        columns[2].w := PWideChar(wsFriendGraduated);
+        columns[3].w := PWideChar(wsFriendFaculty);
+
+        csr.nSize := SizeOf(csr);
+        csr.nFieldCount := 4;
+        csr.szFields := @columns;
+        // add contacts to search results
+        ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SEARCHRESULT, SearchID, DWord(@csr));
+
+      finally
+        jsoFeed.Free;
+      end;
+
+    end;
+  end
+  else
+  begin
+    ShowPopupMsg(0, err_session_nodetail_profile_search, 2);
+    // search failed, but we say that it is OK, since miranda doesn't support search failure - ACKRESULT_FAILED
+  end;
+
+  ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SUCCESS, SearchID, 0);
+
+end;
+
+
  // =============================================================================
  // procedure to initiate search support functionality
  // -----------------------------------------------------------------------------
@@ -418,7 +520,6 @@ end;
  // -----------------------------------------------------------------------------
 function SearchID(ContactID: PChar): DWord;
 var
-  SearchURL: string;
   srchID:    string;
   srchIDInt: integer;
 begin
@@ -427,8 +528,7 @@ begin
 
   if TryStrToInt(srchID, srchIDInt) then // id provided should be numeric
   begin
-    SearchURL := Format(vk_url + vk_url_searchbyid, [srchIDInt]);
-    vk_SearchFriends(SearchURL, SearchHandle, 1);
+    vk_SearchFriendID(srchIDInt, SearchHandle, 1);
   end
   else
     ProtoBroadcastAck(piShortName, 0, ACKTYPE_SEARCH, ACKRESULT_SUCCESS, SearchHandle, 0);
@@ -450,8 +550,8 @@ begin
   srchFirstName := sbn.pszFirstName;
   srchLastName := sbn.pszLastName;
 
-  SearchURL := Format(vk_url + vk_url_search, [srchFirstName, srchLastName, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0]);
+  {SearchURL := Format(vk_url + vk_url_search, [srchFirstName, srchLastName, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0]);}
 
   vk_SearchFriends(SearchURL, SearchHandle, 2);
 

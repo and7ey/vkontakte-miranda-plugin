@@ -43,7 +43,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName   = 'VKontakte';
-  piVersion     = 0 shl 24 + 4 shl 16 + 1 shl 8 + 7;
+  piVersion     = 0 shl 24 + 4 shl 16 + 1 shl 8 + 9;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor      = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -84,6 +84,7 @@ const
   vk_url_api_audio_getbyid       = 'method=audio.getById^audios=%s';
   vk_url_api_photos_getbyid      = 'method=photos.getById^photos=%s';
   vk_url_api_video_get           = 'method=video.get^videos=%s';
+  vk_url_api_search_id           = 'method=getProfiles^uids=%d^fields=%s';
 
   vk_url_pda_login                         = '/login.php?pda=index&email=%s&pass=%s&expire=0';
   // vk_url_pda_logout = 'http://login.vk.com/?act=logout&vk=&hash='; doesn't work
@@ -134,7 +135,10 @@ const
 
   vk_url_userapi_login_prefix = ' http://login.';
   vk_url_userapi_login_suffix = '/auth?login=force&site=2&email=%s&pass=%s';
-  vk_url_userapi_logout = '/auth?login=logout&site=2&sid=%s';
+  vk_url_userapi_logout       = '/auth?login=logout&site=2&sid=%s';
+  vk_url_userapi_friends_add  = '/data?act=add_friend&id=%d&sid=%s';
+  vk_url_userapi_profile      = '/data?act=profile&id=%d&sid=%s';
+  vk_url_userapi_search_byid  = '/data?act=profile&id=%d&sid=%s';
   // vk_url_userapi_news_photos = '/data?act=updates_photos&from=0&to=3&sid=%s';
 
   vk_url_wiki = 'http://code.google.com/p/vkontakte-miranda-plugin/wiki/SettingsHidden';
@@ -167,7 +171,12 @@ const
 
   err_sendmgs_offline  = 'You cannot send messages when you are offline.';
   err_session_nodetail = 'No session details are received. Some functions will not work properly.';
+  err_session_nodetail_profile_search = 'No session details are received. Search by id failed.';
   err_userapi_session_nodetail = 'No UserAPI session details are received. Some functions will not work properly.';
+  err_userapi_session_nodetail_auth = 'No UserAPI session details are received. Sending of authorization request failed.';
+  err_userapi_auth_failed = 'Sending of authorization request failed.';
+  err_userapi_auth_successful = 'Authorization request has been sent.';
+  err_userapi_session_nodetail_profile_status = 'No UserAPI session details are received. Getting of status of contact non-friend %d failed.';
 
   // questions
   qst_join_vk_group = 'Thank you for usage of VKontakte plugin!'#13#10#13#10'Would you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?'#13#10'If you press Cancel now, the same question will be asked again during next Miranda start.';
@@ -210,6 +219,7 @@ const
   opt_UserAvatarsUpdateWhenGetInfo: PChar        = 'AvatarsUpdateWhenGetInfo';
   opt_UserVKontakteURL: PChar                    = 'InfoVKontaktePageURL';
   opt_UserAddlStatusForOffline: PChar            = 'AddlStatusForOfflineContacts';
+  opt_UserAuthorizationsReceive: PChar           = 'AuthorizationsReceive';
   opt_UserUseLocalTimeForIncomingMessages: PChar = 'MsgIncUseLocalTime';
   opt_UserDontDeleteFriendsFromTheServer: PChar  = 'FriendsDontDeleteFromTheServer';
   opt_UserNonFriendsStatusSupport: PChar         = 'NonFriendsStatusSupport';
