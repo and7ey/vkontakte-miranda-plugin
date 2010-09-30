@@ -935,7 +935,6 @@ var
   sAudioID:          string;
   sSenderID, sMsgID: string;
   sSenderNameFull, sMsgText: WideString;
-  MsgDate:           TDateTime;
   iSenderStatus, iSenderID, iMsgDate, iMsgID: integer;
   sMediaType:        string;
   TempFriend:        integer;
@@ -958,7 +957,7 @@ begin
         iSenderID := jsoFeed.Field['response'].Child[i].Field['from_id'].Value;
         iMsgID := jsoFeed.Field['response'].Child[i].Field['id'].Value;
         iMsgDate := jsoFeed.Field['response'].Child[i].Field['date'].Value;
-        MsgDate := UnixToDateTime(iMsgDate);
+        // MsgDate := UnixToDateTime(iMsgDate);
         sMsgText := jsoFeed.Field['response'].Child[i].Field['text'].Value;
 
 
@@ -1095,7 +1094,7 @@ begin
 
             Netlib_Log(vk_hNetlibUser, PChar('(vk_WallGetMessages) ... adding wall message to miranda database...'));
             // everything seems to be OK, may add this message to Miranda DB
-            vk_ReceiveMessage(TempFriend, sMsgText, MsgDate);
+            vk_ReceiveMessage(TempFriend, sMsgText, iMsgDate);
             DBWriteContactSettingDWord(0, piShortName, opt_WallLastPostID, iMsgDate); // log id (time and date) of last post
 
           end;

@@ -354,7 +354,6 @@ begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Session details received: session id=' + vk_session_id + ', secret=' + vk_secret + ', vk_id=' + vk_id + ', vk_api_appid=' + vk_api_appid));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting user rights...'));
     HTML := HTTP_NL_Get(GenerateApiUrl('method=getUserSettings'));
-    HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [0])));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) User rights received: ' + HTML));
 
     // ************************
@@ -1043,6 +1042,18 @@ begin
             ExecIt(@vk_GetMsgsFriendsEtc, 'vk_GetMsgsFriendsEtc');
           end;
 
+        // messages synchronization, if required
+        if DBGetContactSettingByte(0, piShortName, opt_UserMessagesSynchronizationSupport, 1) = 1 then
+        begin
+          if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgsSynch, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserMessagesSynchronization, 3600)) / SecsPerDay then
+          begin
+            // write new value of last date & time of new message received
+            DBWriteContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgsSynch, DateTimeToFileDate(Now));
+            ExecIt(@vk_GetMsgsSynch, 'vk_GetMsgsSynch');
+          end;
+        end;
+
+
         if (PluginLink^.CallService(MS_SYSTEM_TERMINATED, 0, 0) = 1) or // check again if thread termination is requested OR
           (ThrIDDataUpdate.Terminated) then  // miranda is being closed
         begin
@@ -1129,7 +1140,7 @@ begin
         end
         else // wall messages are not supported
         begin
-          // if we used separate contact for News, then make the contact offline
+          // if we used separate contact for The Wall, then make the contact offline
           if DBGetContactSettingByte(0, piShortName, opt_WallSeparateContactUse, 0) = 1 then
             SetContactStatus(ContactIDWall, ID_STATUS_OFFLINE);
         end;
