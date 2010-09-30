@@ -35,11 +35,12 @@ interface
 
 procedure MsgsInit();
 procedure MsgsDestroy();
+procedure vk_GetMsgsSynch();
 procedure vk_GetMsgsFriendsEtc();
 procedure vk_GetGroupsNews();
 procedure vk_GetCommentsNews();
-function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; MsgDate: TDateTime): boolean;
-
+function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; iMsgDate: integer;
+                           iAddlFlags: integer = 0): boolean;
 implementation
 
 uses
@@ -67,9 +68,26 @@ const
   msg_status_failed           = 'Message sending failed (incorrect code?)';
   msg_status_captcha_failed   = 'Message sending failed. Unable to get the captcha';
 
+  PREF_CREATESENT = 16; // one more option for PSR_MESSAGE defined in m_protosvc.inc
+
+
+type // type to keep message
+  TMessage = record
+    bOutgoing:  boolean;
+    bReadState: boolean;
+    iMsgID:     integer;
+    iMsgDate:   integer; // unix format
+    iMsgSender: integer;
+    sMsgText:   WideString;
+  end;
+
+type
+  TMessages = array of TMessage;
+
+
 type // type to keep news
   TNewsRecord = record
-    NTime: TDateTime;
+    NTime: integer;
     ID:    integer;
     NType: string;       // add_photo = photo
                          // movie = video
@@ -166,18 +184,21 @@ begin
 end;
 
  // =============================================================================
- // function to add received message into Miranda's DB
+ // function to add received/sent message into Miranda's DB
+ // bChainType = 0 - received (default value)
+ // bChainType = 1 - sent
  // -----------------------------------------------------------------------------
-function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; MsgDate: TDateTime): boolean;
+function vk_ReceiveMessage(FromID: THandle; MsgText: WideString; iMsgDate: integer;
+                           iAddlFlags: integer = 0): boolean;
 var
   ccs_chain: TCCSDATA;
   pre:       TPROTORECVEVENT; // varibable required to add message to Miranda
 begin
   Result := False;
   FillChar(pre, SizeOf(pre), 0);
-  pre.flags := PREF_UTF;
+  pre.flags := PREF_UTF + iAddlFlags;
   pre.szMessage := PChar(UTF8Encode(MsgText)); // encode msg to utf8
-  pre.timestamp := DateTimeToUnix(MsgDate);
+  pre.timestamp := iMsgDate;
   pre.lParam := 0;
   // now we need to initiate incoming message event
   // we can add message without this event (with usage of MS_DB_EVENT_ADD directly),
@@ -187,63 +208,288 @@ begin
   ccs_chain.szProtoService := PSR_MESSAGE;  // so, ProtoMessageReceive will be called,
   ccs_chain.hContact := FromID;             // if filtering is passed
   ccs_chain.wParam := 0;
-  ccs_chain.flags := PREF_UTF; // it is utf8 message
+  ccs_chain.flags := PREF_UTF + iAddlFlags; // it is utf8 message
   ccs_chain.lParam := Windows.lParam(@pre);
+
   if PluginLink^.CallService(MS_PROTO_CHAINRECV, 0, Windows.lParam(@ccs_chain)) = 0 then // successful?
     Result := True;
 end;
 
  // =============================================================================
- // function to receive new messages
+ // function to add received message into Miranda's DB
+ // but with additional check to verify that message not here yet
+ // -----------------------------------------------------------------------------
+function vk_ReceiveMessageCheckUnique(hFromID: THandle; MsgText: WideString; iMsgDate: DWord; bSent: boolean = false): boolean;
+var
+  dbei:   TDBEVENTINFO;
+  hEvent: THandle;
+  iFlags: integer;
+begin
+  Result := False;
+  // look for presence of the same message in db
+  // if here - no need to add the same again
+  hEvent := pluginLink^.CallService(MS_DB_EVENT_FINDLAST, hFromID, 0);
+  while hEvent <> 0 do
+  begin
+    FillChar(dbei, SizeOf(dbei), 0);
+    dbei.cbSize := SizeOf(dbei);
+    dbei.cbBlob := PluginLink^.CallService(MS_DB_EVENT_GETBLOBSIZE, hEvent, 0);
+    dbei.pBlob := AllocMem(dbei.cbBlob);
+    PluginLink^.CallService(MS_DB_EVENT_GET, hEvent, Windows.lParam(@dbei));
+    if (dbei.szModule = piShortName) and
+      (dbei.eventType = EVENTTYPE_MESSAGE) then
+    begin // some message of our protocol found
+      if dbei.timestamp < iMsgDate then // no need to further check
+      begin
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_AddMessageToDBUnique) ... have not found such message in the database'));
+        break;
+      end;
+      if dbei.timestamp = iMsgDate then // duplicate request
+      begin
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_AddMessageToDBUnique) ... message found in the database, skipped'));
+        FreeMem(dbei.pBlob);
+        exit;
+      end;
+    end;
+    hEvent := pluginLink^.CallService(MS_DB_EVENT_FINDPREV, hEvent, 0);
+    FreeMem(dbei.pBlob);
+  end;
+
+  iFlags := PREF_CREATEREAD;
+  if bSent = true then
+    iFlags := iFlags + PREF_CREATESENT;
+  Result := vk_ReceiveMessage(hFromID, MsgText, iMsgDate, iFlags);
+end;
+
+// =============================================================================
+// procedure to parse all messages received
+// valid messages are added to result TMessages array
+// -----------------------------------------------------------------------------
+function vk_ParseMsgs(sHTML: string): TMessages;
+var
+  jsoFeed,
+  jsoFeedAttachment: TlkJSONobject;
+  iMsgsCount,
+  i, ii, temppos: integer;
+  bOutgoing:  boolean;
+  bReadState: boolean;
+  iMsgID:     integer;
+  iMsgDate:   integer; // unix format
+  iMsgSender: integer;
+  sMsgText,
+  sMsgTitle,
+  sMsgAttachment:   WideString;
+  sHTMLAttachment: string;
+  iLevel: integer;
+
+begin
+ if Pos('response', sHTML) > 0 then
+ begin
+   jsoFeed := TlkJSON.ParseText(sHTML) as TlkJSONobject;
+   try
+     iMsgsCount := jsoFeed.Field['response'].Count;
+     for i := iMsgsCount - 1 downto 1 do
+     begin
+       Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseMsgs) ... processing message ' + IntToStr(i)));
+       bReadState := jsoFeed.Field['response'].Child[i].Field['read_state'].Value;
+       bOutgoing := jsoFeed.Field['response'].Child[i].Field['out'].Value;
+       iMsgID := jsoFeed.Field['response'].Child[i].Field['mid'].Value;
+       iMsgDate := jsoFeed.Field['response'].Child[i].Field['date'].Value;
+       // iMsgDate := LocalUnixTimeToGMT(iMsgDate);
+       iMsgSender := jsoFeed.Field['response'].Child[i].Field['uid'].Value;
+       Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseMsgs) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), from id: ' + IntToStr(iMsgSender) + ', sent on ' + IntToStr(iMsgDate)));
+       sMsgText := jsoFeed.Field['response'].Child[i].Field['body'].Value;
+       sMsgTitle := jsoFeed.Field['response'].Child[i].Field['title'].Value;
+       Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseMsgs) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), title: ' + string(sMsgTitle) + ', text: ' + string(sMsgText)));
+       iLevel := 2;
+       if Pos('attachments', GenerateReadableText(jsoFeed.Field['response'].Child[i], iLevel)) > 0 then
+       begin
+         if Trim(sMsgText) <> '' then
+           sMsgText := sMsgText + Chr(13) + Chr(10) + Chr(13) + Chr(10);
+         // only 1 attachment can be now
+         // for ia := 0 to FeedMRoot.Field['response'].Child[i].Field['attachments'].Count-1 do
+         sMsgAttachment := jsoFeed.Field['response'].Child[i].Field['attachments'].Child[0].Value;
+         if Pos('audio', sMsgAttachment) > 0 then // audio is attached to the message
+         begin
+           sMsgAttachment := TextBetween(sMsgAttachment, '[[audio', ']]');
+           sHTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_audio_getbyid, [sMsgAttachment])));
+           jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
+           try
+             sMsgText := sMsgText +
+               TranslateW('audio') + ': ' +
+               jsoFeedAttachment.Field['response'].Child[0].Field['artist'].Value + ' - ' +
+               jsoFeedAttachment.Field['response'].Child[0].Field['title'].Value + Chr(13) + Chr(10) +
+               jsoFeedAttachment.Field['response'].Child[0].Field['url'].Value;
+           finally
+             jsoFeedAttachment.Free;
+           end;
+         end
+         else
+           if Pos('photo', sMsgAttachment) > 0 then // photo is attached to the message
+           begin
+             sMsgAttachment := TextBetween(sMsgAttachment, '[[photo', ']]');
+             sHTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_photos_getbyid, [sMsgAttachment])));
+             jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
+             try
+               sMsgText := sMsgText +
+                 TranslateW('photo') + ': ' + Chr(13) + Chr(10) +
+                 jsoFeedAttachment.Field['response'].Child[0].Field['src'].Value;
+             finally
+               jsoFeedAttachment.Free;
+             end;
+           end
+           else
+             if Pos('video', sMsgAttachment) > 0 then // video is attached to the message
+             begin
+               sMsgAttachment := TextBetween(sMsgAttachment, '[[video', ']]');
+               sHTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_video_get, [sMsgAttachment])));
+               jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
+               try
+                 sMsgText := sMsgText +
+                   TranslateW('video') + ': ' +
+                   jsoFeedAttachment.Field['response'].Child[1].Field['title'].Value + Chr(13) + Chr(10) +
+                   jsoFeedAttachment.Field['response'].Child[1].Field['description'].Value + Chr(13) + Chr(10) +
+                   vk_url + '/video' +
+                   sMsgAttachment;
+               finally
+                 jsoFeedAttachment.Free;
+               end;
+             end;
+       end; // end of attachments parsing
+
+       if (iMsgID > 0) and (iMsgDate > 0) and (iMsgSender > 0) and (sMsgText <> '') then
+       begin
+         // remove empty subject, if user would like to
+         if DBGetContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, 1) = 1 then
+         begin
+           Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseMsgs) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), removing empty subject'));
+           sMsgTitle := StringReplaceW(sMsgTitle, 'Re:  ...', '', []);
+           sMsgTitle := StringReplaceW(sMsgTitle, ' ... ', '', []);
+           if Length(sMsgTitle) > 4 then
+             if (sMsgTitle[1] = 'R') and (sMsgTitle[2] = 'e') and (sMsgTitle[3] = '(') then
+             begin
+               ii := 4;
+               while (sMsgTitle[ii] in [widechar('0')..widechar('9')]) and (ii <= Length(sMsgTitle) - 1) do
+                 Inc(ii);
+               temppos := PosEx('):  ...', sMsgTitle);
+               if (temppos = ii) then
+                 Delete(sMsgTitle, 1, temppos + 6);
+             end;
+         end; // end of empty subject removal
+         if Trim(sMsgTitle) <> '' then
+           sMsgText := sMsgTitle + ': <br><br>' + sMsgText;
+         sMsgText := StringReplaceW(sMsgText, '<br>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
+         sMsgText := HTMLDecodeW(sMsgText);
+         sMsgText := Trim(sMsgText);
+         Netlib_Log(vk_hNetlibUser, PChar('(vk_ParseMsgs) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), re-formatted text: ' + string(sMsgText)));
+
+         // add message to the final array
+         SetLength(Result, High(Result) + 2);
+         Result[High(Result)].bOutgoing := bOutgoing;
+         Result[High(Result)].bReadState := bReadState;
+         Result[High(Result)].iMsgID := iMsgID;
+         Result[High(Result)].iMsgDate := iMsgDate;
+         Result[High(Result)].iMsgSender := iMsgSender;
+         Result[High(Result)].sMsgText := sMsgText;
+      end;
+     end;
+   finally
+     jsoFeed.Free;
+   end;
+ end;
+end;
+
+
+// =============================================================================
+// procedure to read old messages from the site, if they are not in miranda's DB
+// -----------------------------------------------------------------------------
+procedure vk_GetMsgsSynch();
+var
+  sHTML:        string;
+  iLastMessage,
+  i:            integer;
+  aMessages:    TMessages;
+  hContact:     THandle;
+begin
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsSynch) Synchronizing old messages. Getting incoming messages ...'));
+  iLastMessage := DBGetContactSettingDword(0, piShortName, opt_MsgsLastMsgDateTime, 0);
+  sHTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_messages_synch_inc, [iLastMessage])));
+  aMessages := vk_ParseMsgs(sHTML);
+  for i := 0 to High(aMessages) do
+    if aMessages[i].bReadState = true then // process already read messages only
+    begin
+      hContact := GetContactByID(aMessages[i].iMsgSender);
+      if hContact > 0 then // process messages from the contacts in our list only
+      begin
+        vk_ReceiveMessageCheckUnique(hContact, aMessages[i].sMsgText, aMessages[i].iMsgDate);
+      end;
+    end;
+  SetLength(aMessages, 0);
+
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsSynch) Synchronizing old messages. Getting outgoing messages ...'));
+  sHTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_messages_synch_out, [iLastMessage])));
+  aMessages := vk_ParseMsgs(sHTML);
+  for i := 0 to High(aMessages) do
+    begin
+      hContact := GetContactByID(aMessages[i].iMsgSender);
+      if hContact > 0 then // process messages from the contacts in our list only
+      begin
+        vk_ReceiveMessageCheckUnique(hContact, aMessages[i].sMsgText, aMessages[i].iMsgDate, true); // add as sent messages
+      end;
+    end;
+  SetLength(aMessages, 0);
+
+  DBWriteContactSettingDWord(0, piShortName, opt_MsgsLastMsgDateTime, DateTimeToUnix(Now));
+end;
+
+// =============================================================================
+// procedure to receive new messages
 // (it is called from separate thread, so minimum number of WRITE global variables is used)
 // -----------------------------------------------------------------------------
 procedure vk_GetMsgsFriendsEtc();
 var
-  HTML, HTMLInbox, HTMLAttachment:   string; // html content of the pages received
+  sHTML, sHTMLInbox:                   string; // html content of the pages received
   MsgsCount:                         integer; // temp variable to keep number of new msgs received
   FriendsCount:                      integer; // temp variable to keep number of new authorization requests received
-  MsgID:                             string;
-  iMsgID:                            integer;
-  iLevel:                            integer;
-  MsgText, MsgTitle, MsgAttachment:  WideString;
-  MsgSenderName:                     WideString;
-  i, ii, temppos:                    integer;
-  iMsgDate:                          integer;
+  sMsgID:                             string;
+  sMsgText:                          WideString;
+  sMsgSenderName:                    WideString;
+  i:                                 integer;
   MsgDate:                           TDateTime;
   MsgSender:                         integer;
   ccs_chain:                         TCCSDATA;
   pCurBlob:                          PChar;
-  TempFriend:                        integer; // id of temp contact if msg received from unknown contact
+  hTempFriend:                       THandle; // id of temp contact if msg received from unknown contact
   pre:                               TPROTORECVEVENT; // varibable required to add message to Miranda
-  FeedRoot, FeedMsgs, FeedMsgsItems: TlkJSONobject; // objects to keep parsed JSON data
-  FeedMRoot, FeedProfile:            TlkJSONobject; // objects to keep messages received in JSON format
-  jsoFeedAttachment:                 TlkJSONobject;
+  FeedRoot, FeedMsgs, FeedMsgsItems,
+  jsoFeedProfile:                    TlkJSONobject; // objects to keep parsed JSON data
+  aMessages:                         TMessages;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) Checking for new incoming messages, new authorization requests (friends) etc...'));
 
   // check for presence of new messages, friends etc. via the feed
-  HTML := HTTP_NL_Get(vk_url + vk_url_feed2);
+  sHTML := HTTP_NL_Get(vk_url + vk_url_feed2);
 
   // correct json text
-  for i := 1 to length(HTML) - 2 do // don't check first and last symbols
+  for i := 1 to length(sHTML) - 2 do // don't check first and last symbols
   begin
-    if HTML[i] = '{' then
-      if (HTML[i + 1] <> '"') and (HTML[i - 1] = ':') then
-        Insert('"', HTML, i + 1);
+    if sHTML[i] = '{' then
+      if (sHTML[i + 1] <> '"') and (sHTML[i - 1] = ':') then
+        Insert('"', sHTML, i + 1);
 
-    if (HTML[i] = ',') then
-      if (HTML[i + 1] <> '"') and (HTML[i - 1] = '"') then
-        Insert('"', HTML, i + 1);
+    if (sHTML[i] = ',') then
+      if (sHTML[i + 1] <> '"') and (sHTML[i - 1] = '"') then
+        Insert('"', sHTML, i + 1);
 
-    if (HTML[i] = ':') and (HTML[i + 1] = '"') then
-      if HTML[i - 1] <> '"' then
-        Insert('"', HTML, i);
+    if (sHTML[i] = ':') and (sHTML[i + 1] = '"') then
+      if sHTML[i - 1] <> '"' then
+        Insert('"', sHTML, i);
   end;
 
-  if Trim(HTML) <> '' then
+  if Trim(sHTML) <> '' then
   begin
     // to support Russian characters, we need to utf8 encode html text
-    FeedRoot := TlkJSON.ParseText(Utf8Encode(HTML)) as TlkJSONobject;
+    FeedRoot := TlkJSON.ParseText(Utf8Encode(sHTML)) as TlkJSONobject;
     if Assigned(FeedRoot) then
     begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking messages count'));
@@ -254,165 +500,62 @@ begin
         MsgsCount := 0;
 
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... ' + IntToStr(MsgsCount) + ' message(s) received'));
-
       if MsgsCount > 0 then // got new messages!
       begin
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... getting message(s) details'));
-
-        HTMLInbox := HTTP_NL_Get(GenerateApiUrl(vk_url_api_messages_get));
-        if Trim(HTMLInbox) <> '' then
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... processing of new message(s) received started'));
+        sHTMLInbox := HTTP_NL_Get(GenerateApiUrl(vk_url_api_messages_get));
+        // parse messages first
+        aMessages := vk_ParseMsgs(sHTMLInbox);
+        // now process them one by one
+        if High(aMessages) > -1 then
         begin
-          FeedMRoot := TlkJSON.ParseText(HTMLInbox) as TlkJSONobject;
-          if Assigned(FeedMRoot) then
+          for i := 0 to High(aMessages) do
           begin
-            try
-              MsgsCount := FeedMRoot.Field['response'].Count; // to be on the safe side, read messages count from the data downloaded
-              for i := MsgsCount - 1 downto 1 do
+            // if message from unknown contact then
+            // we add contact to our list temporary
+            hTempFriend := GetContactByID(aMessages[i].iMsgSender);
+            if hTempFriend = 0 then
+            begin
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_ReceiveMessages) ... message ' + IntToStr(i) + '(' + IntToStr(aMessages[i].iMsgID) + ') received from unknown contact, adding him/her to the contact list temporarily'));
+              // add sender to our contact list
+              // now we don't read user's status, so it is added as offline -
+              // field online doesn't work in VK API
+              // getting MsgSenderName
+              Netlib_Log(vk_hNetlibUser, PChar('(vk_ReceiveMessages) ... message ' + IntToStr(i) + '(' + IntToStr(aMessages[i].iMsgID) + '), getting name of unknown contact...'));
+              sHTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getprofiles, [IntToStr(aMessages[i].iMsgSender), 'first_name,last_name,nickname,sex,online'])));
+              if Pos('error', sHTML) > 0 then
               begin
-                Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... processing message ' + IntToStr(i)));
-                iMsgID := FeedMRoot.Field['response'].Child[i].Field['mid'].Value;
-                iMsgDate := FeedMRoot.Field['response'].Child[i].Field['date'].Value;
-                MsgDate := UnixToDateTime(iMsgDate);
-                MsgSender := FeedMRoot.Field['response'].Child[i].Field['uid'].Value;
-                Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), from id: ' + IntToStr(MsgSender) + ', sent on ' + IntToStr(iMsgDate)));
-                MsgText := FeedMRoot.Field['response'].Child[i].Field['body'].Value;
-                MsgTitle := FeedMRoot.Field['response'].Child[i].Field['title'].Value;
-                Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), title: ' + string(MsgTitle) + ', text ' + string(MsgText)));
-                iLevel := 2;
-                if Pos('attachments', GenerateReadableText(FeedMRoot.Field['response'].Child[i], iLevel)) > 0 then
+                Netlib_Log(vk_hNetlibUser, PChar('(vk_ReceiveMessages) ... message ' + IntToStr(i) + '(' + IntToStr(aMessages[i].iMsgID) + '), unable to get name, error code: ' + IntToStr(GetJSONError(sHTML))));
+                sMsgSenderName := 'id' + IntToStr(aMessages[i].iMsgSender); // define name with id instead
+              end
+              else
                 begin
-                  if Trim(MsgText) <> '' then
-                    MsgText := MsgText + Chr(13) + Chr(10) + Chr(13) + Chr(10);
-                  // only 1 attachment can be now
-                  // for ia := 0 to FeedMRoot.Field['response'].Child[i].Field['attachments'].Count-1 do
-                  MsgAttachment := FeedMRoot.Field['response'].Child[i].Field['attachments'].Child[0].Value;
-                  if Pos('audio', MsgAttachment) > 0 then // audio is attached to the message
-                  begin
-                    MsgAttachment := TextBetween(MsgAttachment, '[[audio', ']]');
-                    HTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_audio_getbyid, [MsgAttachment])));
-                    jsoFeedAttachment := TlkJSON.ParseText(HTMLAttachment) as TlkJSONobject;
-                    try
-                      MsgText := MsgText +
-                        TranslateW('audio') + ': ' +
-                        jsoFeedAttachment.Field['response'].Child[0].Field['artist'].Value + ' - ' +
-                        jsoFeedAttachment.Field['response'].Child[0].Field['title'].Value + Chr(13) + Chr(10) +
-                        jsoFeedAttachment.Field['response'].Child[0].Field['url'].Value;
-                    finally
-                      jsoFeedAttachment.Free;
-                    end;
-                  end
-                  else
-                    if Pos('photo', MsgAttachment) > 0 then // photo is attached to the message
-                    begin
-                      MsgAttachment := TextBetween(MsgAttachment, '[[photo', ']]');
-                      HTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_photos_getbyid, [MsgAttachment])));
-                      jsoFeedAttachment := TlkJSON.ParseText(HTMLAttachment) as TlkJSONobject;
-                      try
-                        MsgText := MsgText +
-                          TranslateW('photo') + ': ' + Chr(13) + Chr(10) +
-                          jsoFeedAttachment.Field['response'].Child[0].Field['src'].Value;
-                      finally
-                        jsoFeedAttachment.Free;
-                      end;
-                    end
-                    else
-                      if Pos('video', MsgAttachment) > 0 then // video is attached to the message
-                      begin
-                        MsgAttachment := TextBetween(MsgAttachment, '[[video', ']]');
-                        HTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_video_get, [MsgAttachment])));
-                        jsoFeedAttachment := TlkJSON.ParseText(HTMLAttachment) as TlkJSONobject;
-                        try
-                          MsgText := MsgText +
-                            TranslateW('video') + ': ' +
-                            jsoFeedAttachment.Field['response'].Child[1].Field['title'].Value + Chr(13) + Chr(10) +
-                            jsoFeedAttachment.Field['response'].Child[1].Field['description'].Value + Chr(13) + Chr(10) +
-                            vk_url + '/video' +
-                            MsgAttachment;
-                        finally
-                          jsoFeedAttachment.Free;
-                        end;
-                      end;
+                  // TODO: verify if it works properly with unicode symbols
+                  sHTML := HTMLDecodeW(sHTML);
+                  jsoFeedProfile := TlkJSON.ParseText(sHTML) as TlkJSONobject;
+                  try
+                    sMsgSenderName := jsoFeedProfile.Field['response'].Child[0].Field['first_name'].Value + ' ' + jsoFeedProfile.Field['response'].Child[0].Field['last_name'].Value;
+                  finally
+                    jsoFeedProfile.Free;
+                  end;
                 end;
+              hTempFriend := vk_AddFriend(aMessages[i].iMsgSender, sMsgSenderName, ID_STATUS_OFFLINE, 0);
+              // and make it as temporary contact
+              DBWriteContactSettingByte(hTempFriend, 'CList', 'NotOnList', 1);
+              DBWriteContactSettingByte(hTempFriend, 'CList', 'Hidden', 1);
+            end; // if temp friend end
 
-                if (iMsgID > 0) and (iMsgDate > 0) and (MsgSender > 0) and (MsgText <> '') then
-                begin
-                  // remove empty subject, if user would like to
-                  if DBGetContactSettingByte(0, piShortName, opt_UserRemoveEmptySubj, 1) = 1 then
-                  begin
-                    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), removing empty subject'));
-                    MsgTitle := StringReplaceW(MsgTitle, 'Re:  ...', '', []);
-                    MsgTitle := StringReplaceW(MsgTitle, ' ... ', '', []);
-                    if Length(MsgTitle) > 4 then
-                      if (MsgTitle[1] = 'R') and (MsgTitle[2] = 'e') and (MsgTitle[3] = '(') then
-                      begin
-                        ii := 4;
-                        while (MsgTitle[ii] in [widechar('0')..widechar('9')]) and (ii <= Length(MsgTitle) - 1) do
-                          Inc(ii);
-                        temppos := PosEx('):  ...', MsgTitle);
-                        if (temppos = ii) then
-                          Delete(MsgTitle, 1, temppos + 6);
-                      end;
-                  end;
-                  if Trim(MsgTitle) <> '' then
-                    MsgText := MsgTitle + ': <br><br>' + MsgText;
-                  MsgText := StringReplaceW(MsgText, '<br>', Chr(13) + Chr(10), [rfReplaceAll, rfIgnoreCase]);
-                  MsgText := HTMLDecodeW(MsgText);
-                  MsgText := Trim(MsgText);
-                  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), re-formatted text: ' + string(MsgText)));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_ReceiveMessages) ... message ' + IntToStr(i) + '(' + IntToStr(aMessages[i].iMsgID) + '), adding to miranda database'));
 
-                  // if message from unknown contact then
-                  // we add contact to our list temporary
-                  TempFriend := GetContactByID(MsgSender);
-                  if TempFriend = 0 then
-                  begin
-                    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + ') received from unknown contact, adding him/her to the contact list temporarily'));
-                    // add sender to our contact list
-                    // now we don't read user's status, so it is added as offline - field online doesn't work in VK API
-
-                    // getting MsgSenderName
-                    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), getting name of unknown contact...'));
-                    HTMLInbox := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getprofiles, [IntToStr(MsgSender), 'first_name,last_name,nickname,sex,online'])));
-                    if Pos('error', HTMLInbox) > 0 then
-                    begin
-                      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), unable to get name, error code: ' + IntToStr(GetJSONError(HTMLInbox))));
-                      MsgSenderName := 'id' + IntToStr(MsgSender); // define name with id instead
-                    end
-                    else
-                    begin
-                      // TODO: verify if it works properly with unicode symbols
-                      HTMLInbox := HTMLDecodeW(HTMLInbox);
-                      FeedProfile := TlkJSON.ParseText(HTMLInbox) as TlkJSONobject;
-                      try
-                        MsgSenderName := FeedProfile.Field['response'].Child[0].Field['first_name'].Value + ' ' + FeedProfile.Field['response'].Child[0].Field['last_name'].Value;
-                      finally
-                        FeedProfile.Free;
-                      end;
-                    end;
-
-                    TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
-                    // and make it as temporary contact
-                    DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
-                    DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
-                  end; // if temp friend end
-                  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), adding to miranda database'));
-                  // everything seems to be OK, may add this message to Miranda DB
-                  if vk_ReceiveMessage(TempFriend, MsgText, MsgDate) = True then // true - if message added successfully
-                  begin
-                    // mark message as read on the site
-                    // GAP: Result is not validated
-                    HTMLInbox := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_messages_markasread, [IntToStr(iMsgID)])));
-                  end;
-
-                end
-                else
-                  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... message ' + IntToStr(i) + '(' + IntToStr(iMsgID) + '), error in parsing, skipped'));
-              end;
-            finally
-              FeedMRoot.Free;
+            if vk_ReceiveMessage(hTempFriend, aMessages[i].sMsgText, aMessages[i].iMsgDate) = True then // true - if message added successfully
+            begin
+              // GAP: Result is not validated
+              HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_messages_markasread, [aMessages[i].iMsgID])));
             end;
+
           end;
         end;
-
+        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... processing of new message(s) received finished'));
       end; // receiving of new messages completed
       Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... checking for new incoming messages finished'));
 
@@ -432,25 +575,25 @@ begin
           for i := 0 to FriendsCount - 1 do // now processing all authorization requests one-by-one
           begin
             Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', getting id and name'));
-            MsgID := FeedMsgsItems.NameOf[i];
-            MsgSenderName := HTMLDecodeW(FeedMsgsItems.getWideString(i));
+            sMsgID := FeedMsgsItems.NameOf[i];
+            sMsgSenderName := HTMLDecodeW(FeedMsgsItems.getWideString(i));
             // {"user":{"id":123456},"friends":{"count":2,"items":{"1234567":"Петр &#9793; Ф-Ф &#9793; Владимиров","26322232":"Даниил Петров"}},"messages":{"count":0},"events":{"count":0},"groups":{"count":0},"photos":{"count":0},"videos":{"count":0},"notes":{"count":0},"opinions":{"count":0},"questions":{"count":0},"gifts":{"count":0},"lang":{"id":"0","p_id":0},"activity":{"updated":0}}
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', from id: ' + MsgID));
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', from person: ' + string(MsgSenderName)));
-            if (Trim(MsgID) <> '') and (TryStrToInt(MsgID, MsgSender)) {and (Trim(MsgSenderName)<>'')} then
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', from id: ' + sMsgID));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', from person: ' + string(sMsgSenderName)));
+            if (Trim(sMsgID) <> '') and (TryStrToInt(sMsgID, MsgSender)) {and (Trim(MsgSenderName)<>'')} then
             begin
               // everything seems to be OK, may proceed
               // temporary add contact if required
-              TempFriend := GetContactByID(MsgSender);
-              if TempFriend = 0 then
+              hTempFriend := GetContactByID(MsgSender);
+              if hTempFriend = 0 then
               begin
                 Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... temporary add contact to our list'));
                 // add sender to our contact list
                 // now we don't read user's status, so it is added as offline
-                TempFriend := vk_AddFriend(MsgSender, MsgSenderName, ID_STATUS_OFFLINE, 0);
+                hTempFriend := vk_AddFriend(MsgSender, sMsgSenderName, ID_STATUS_OFFLINE, 0);
                 // and make it as temporary contact
-                DBWriteContactSettingByte(TempFriend, 'CList', 'NotOnList', 1);
-                DBWriteContactSettingByte(TempFriend, 'CList', 'Hidden', 1);
+                DBWriteContactSettingByte(hTempFriend, 'CList', 'NotOnList', 1);
+                DBWriteContactSettingByte(hTempFriend, 'CList', 'Hidden', 1);
               end;
 
               Netlib_Log(vk_hNetlibUser, PChar('(vk_GetMsgsFriendsEtc) ... new authorization request ' + IntToStr(i + 1) + ', adding to miranda database'));
@@ -462,29 +605,29 @@ begin
 
               // GAP(?): use AnsiStrings below, as unicode not supported
               //blob is: uin( DWORD ), hContact( HANDLE ), nick( ASCIIZ ), first( ASCIIZ ), last( ASCIIZ ), email( ASCIIZ ), reason( ASCIIZ )
-              MsgText := '(text of authorization request is not supported currently)';
-              pre.lParam := sizeof(DWORD) + sizeof(THANDLE) + Length(ansistring(MsgSenderName)) + Length(MsgID) + Length(ansistring(MsgText)) + 8;
+              sMsgText := '(text of authorization request is not supported currently)';
+              pre.lParam := sizeof(DWORD) + sizeof(THANDLE) + Length(ansistring(sMsgSenderName)) + Length(sMsgID) + Length(ansistring(sMsgText)) + 8;
               pCurBlob := AllocMem(pre.lParam);
               pre.szMessage := PChar(pCurBlob);
               PDWORD(pCurBlob)^ := 0;
               Inc(pCurBlob, sizeof(DWORD));
-              PHANDLE(pCurBlob)^ := TempFriend;
+              PHANDLE(pCurBlob)^ := hTempFriend;
               Inc(pCurBlob, sizeof(THANDLE));
-              StrCopy(pCurBlob, PChar(ansistring(MsgSenderName)));
+              StrCopy(pCurBlob, PChar(ansistring(sMsgSenderName)));
               // lstrcpyw(pCurBlob, PWideChar(MsgSenderName));
-              Inc(pCurBlob, Length(ansistring(MsgSenderName)) + 1);
+              Inc(pCurBlob, Length(ansistring(sMsgSenderName)) + 1);
               pCurBlob^ := #0;            //firstName
               Inc(pCurBlob);
               pCurBlob^ := #0;            //lastName
               Inc(pCurBlob);
               pCurBlob^ := #0;            //e-mail
               Inc(pCurBlob);
-              StrCopy(pCurBlob, PChar(ansistring(MsgText))); //reason
+              StrCopy(pCurBlob, PChar(ansistring(sMsgText))); //reason
               // lstrcpyw(pCurBlob, PWideChar(MsgText));
 
               FillChar(ccs_chain, SizeOf(ccs_chain), 0);
               ccs_chain.szProtoService := PSR_AUTH; // so, AuthRequestReceived will be called,
-              ccs_chain.hContact := TempFriend;     // if filtering is passed
+              ccs_chain.hContact := hTempFriend;     // if filtering is passed
               ccs_chain.wParam := 0;
               ccs_chain.flags := 0;
               ccs_chain.lParam := Windows.lParam(@pre);
@@ -547,7 +690,13 @@ begin
     szModule := piShortName;
     pBlob := PByte(pre.szMessage);       // data
     cbBlob := Length(pre.szMessage) + 1; // SizeOf(pBlob);
-    flags := DBEF_UTF;
+    flags := 0;
+    if pre.flags and PREF_UTF <> 0 then
+      flags := flags + DBEF_UTF;
+    if pre.flags and PREF_CREATEREAD <> 0 then
+      flags := flags + DBEF_READ; // add message as read
+    if pre.flags and PREF_CREATESENT <> 0 then
+      flags := flags + DBEF_SENT; // add message as sent, needed for msgs synchronization
     timestamp := pre.timestamp;
   end;
   PluginLink^.CallService(MS_DB_EVENT_ADD, ccs_sm.hContact, dword(@dbeo));
@@ -943,7 +1092,7 @@ begin
           // use local time for news
           dtDateTimeNews := UnixToDateTime(DateTimeToUnix(NewsAll[CurrNews].NTime) * 2 - PluginLink.CallService(MS_DB_TIME_TIMESTAMPTOLOCAL, DateTimeToUnix(NewsAll[CurrNews].NTime), 0));
           // display news
-          vk_ReceiveMessage(ContactID, NewsText, dtDateTimeNews);
+          vk_AddMessageToDB(ContactID, NewsText, dtDateTimeNews);
         end;
       end;
     end;
@@ -1034,7 +1183,7 @@ begin
           // data seems to be correct
           nNTime := DayTime + nNTime;
           SetLength(Result, High(Result) + 2);
-          Result[High(Result)].NTime := nNTime;
+          Result[High(Result)].NTime := DateTimeToUnix(nNTime);
           Result[High(Result)].ID := nID;
           Result[High(Result)].NType := nNType;
           Result[High(Result)].NText := nText;
@@ -1121,7 +1270,7 @@ begin
           while NewsText[1] = ' ' do
             Delete(NewsText, 1, 1);
           // use local time for news
-          NewsAll[CurrNews].NTime := UnixToDateTime(LocalUnixTimeToGMT(DateTimeToUnix(NewsAll[CurrNews].NTime)));
+          NewsAll[CurrNews].NTime := LocalUnixTimeToGMT(NewsAll[CurrNews].NTime);
           // display news
           vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
         end;
@@ -1244,7 +1393,7 @@ begin
             // data seems to be correct
             nNTime := DayTime + nNTime;
             SetLength(Result, High(Result) + 2);
-            Result[High(Result)].NTime := nNTime;
+            Result[High(Result)].NTime := DateTimeToUnix(nNTime);
             Result[High(Result)].ID := nID;
             Result[High(Result)].NType := nNType;
             Result[High(Result)].NText := nTitle + nText;
@@ -1339,7 +1488,7 @@ begin
           while NewsText[1] = ' ' do
             Delete(NewsText, 1, 1);
           // use local time for news
-          NewsAll[CurrNews].NTime := UnixToDateTime(LocalUnixTimeToGMT(DateTimeToUnix(NewsAll[CurrNews].NTime)));
+          NewsAll[CurrNews].NTime := LocalUnixTimeToGMT(NewsAll[CurrNews].NTime);
           // display news
           vk_ReceiveMessage(ContactID, NewsText, NewsAll[CurrNews].NTime);
         end;

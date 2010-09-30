@@ -133,11 +133,77 @@ var
   iMsgTime:                    integer;
   i:                           integer;
   bXStatusUpdate, bXStatusNew: boolean;
+  bStatusItem:                 byte;
   jsoFeed:                     TlkJSONobject;
+  smi:                         TCLISTMENUITEM;
+
 begin
   if DBGetContactSettingByte(0, piShortName, opt_UserUpdateAddlStatus, 1) = 1 then
   begin
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) Updating of contact''s XStatus...'));
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) Reading our current xStatus...'));
+    HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [0])));
+    if Pos('response', HTML) > 0 then
+    begin
+      jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
+      try
+        MsgText := jsoFeed.Field['response'].Field['activity'].Value;
+        if Trim(MsgText) <> '' then
+        begin
+          FillChar(smi, sizeof(smi), 0);
+          smi.cbSize := sizeof(smi);
+          // remove selection from all items
+          for i := 1 to 13 do
+          begin
+            smi.flags := CMIF_UNICODE + CMIM_FLAGS;
+            pluginLink^.CallService(MS_CLIST_MODIFYMENUITEM, vk_hMenuStatusAddl[i], Windows.lparam(@smi));
+          end;
+          smi.flags := CMIF_UNICODE + CMIM_FLAGS + CMIF_CHECKED;
+
+          if DBReadUnicode(0, piShortName, 'XStatusMsg', '') <> MsgText then
+          begin // xstatus changed! write new values
+            iMsgTime := jsoFeed.Field['response'].Field['time'].Value;
+            DBWriteContactSettingUnicode(0, piShortName, 'XStatusMsg', PWideChar(MsgText));
+            DBWriteContactSettingDWord(0, piShortName, 'XStatusTime', iMsgTime);
+            DBDeleteContactSetting(0, piShortName, 'XStatusId');
+
+            bStatusItem := 0;
+            for i := Low(xStatuses) + 2 to High(xStatuses) do // standard xStatus?
+            begin
+              if (Pos(AnsiLowerCase(xStatuses[i].Text), MsgText) <> 0) or
+                 (Pos(AnsiLowerCase(string(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText) <> 0) then
+              begin
+                bStatusItem := i;
+                DBWriteContactSettingByte(0, piShortName, 'XStatusId', i);
+                break;
+              end;
+            end;
+            if bStatusItem = 0 then // non-standard xStatus
+            begin
+              for i := 5 downto 1 do
+                if AnsiLowerCase(MsgText) = AnsiLowerCase(DBReadUnicode(0, piShortName, PChar(opt_AddlStatus + IntToStr(i)), '-')) then
+                begin // such status already exists in our list
+                  bStatusItem := i;
+                  break;
+                end;
+              if bStatusItem = 0 then // such xStatus doesn't exist in menu list
+              begin
+                for i := 5 downto 2 do
+                  DBWriteContactSettingUnicode(0, piShortName, PChar(opt_AddlStatus + IntToStr(i)), DBReadUnicode(0, piShortName, PChar(opt_AddlStatus + IntToStr(i - 1)), ''));
+                DBWriteContactSettingUnicode(0, piShortName, PChar(opt_AddlStatus + '1'), PWideChar(MsgText));
+              end;
+            end;
+            pluginLink^.NotifyEventHooks(he_StatusAdditionalChanged, Windows.wParam(0), 0); // inform other plugins that we've updated our xstatus
+          end;
+          if DBGetContactSettingByte(0, piShortName, 'XStatusId', 0) <> 0 then
+            StatusAddlSetIcon(0, xStatuses[DBGetContactSettingByte(0, piShortName, 'XStatusId', 0)].IconExtraIndex);
+        end;
+      finally
+        jsoFeed.Free;
+      end;
+    end;
+
+
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) Updating of contacts'' xStatus...'));
 
     hContact := pluginLink^.CallService(MS_DB_CONTACT_FINDFIRST, 0, 0);
     while hContact <> 0 do
@@ -145,9 +211,9 @@ begin
       if pluginLink^.CallService(MS_PROTO_ISPROTOONCONTACT, hContact, lParam(PChar(piShortName))) <> 0 then
       begin
 
-        // new value of XStatus defined?
+        // new value of xStatus defined?
         bXStatusNew := False;
-        // should we update XStatus for offline contacts?
+        // should we update xStatus for offline contacts?
         bXStatusUpdate := True;
         if DBGetContactSettingByte(0, piShortName, opt_UserAddlStatusForOffline, 0) = 0 then
           if DBGetContactSettingWord(hContact, piShortName, 'Status', ID_STATUS_OFFLINE) = ID_STATUS_OFFLINE then
@@ -159,7 +225,7 @@ begin
           if iContactID > 0 then
           begin
             // {"response":{"id":-1,"time":0,"activity":""}}
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) ... reading XStatus from the server for contact ' + IntToStr(iContactID)));
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) ... reading xStatus from the server for contact ' + IntToStr(iContactID)));
             HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [iContactID])));
 
             if Pos('response', HTML) > 0 then
@@ -177,6 +243,7 @@ begin
               begin
                 MsgText := HTMLDecodeW(MsgText);
                 bXStatusNew := True;
+                Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) ... current contact''s xStatus: ' + DBReadUnicode(hContact, piShortName, 'XStatusMsg', '') + ', new xStatus: ' + String(MsgText)));
                 if DBReadUnicode(hContact, piShortName, 'XStatusMsg', '') <> MsgText then
                 begin // xstatus changed! write new values
                   DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusMsg', PWideChar(MsgText));
@@ -702,8 +769,8 @@ var
   srvFce:     PChar;
 begin
   // delete our additional status data
-  DBDeleteContactSetting(0, piShortName, 'XStatusId');
-  DBDeleteContactSetting(0, piShortName, 'XStatusSelectedItem');
+  // DBDeleteContactSetting(0, piShortName, 'XStatusId');
+  // DBDeleteContactSetting(0, piShortName, 'XStatusSelectedItem');
 
   // load icons for Additional Statuses
   szFile := ExtractFilePath(ParamStr(0)) + 'Icons\' + piShortName + '_xstatus.dll';
@@ -768,6 +835,8 @@ procedure AddlStatusDestroy();
 var
   i: byte;
 begin
+  DBDeleteContactSetting(0, piShortName, 'XStatusMsg');
+
   for i := 1 to 13 do
   begin
     if vk_hMenuStatusAddl[i] <> 0 then

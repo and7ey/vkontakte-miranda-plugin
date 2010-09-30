@@ -43,7 +43,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName   = 'VKontakte';
-  piVersion     = 0 shl 24 + 4 shl 16 + 1 shl 8 + 9;
+  piVersion     = 0 shl 24 + 4 shl 16 + 2 shl 8 + 0;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor      = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -71,7 +71,9 @@ const
   // in api related links fields should be separated by symbol ^
   vk_url_api_messages_send       = 'method=messages.send^uid=%d^message=%s';
   vk_url_api_messages_get        = 'method=messages.get^filters=1^preview_length=0^time_offset=0'; // only unread messages
-  vk_url_api_messages_markasread = 'method=messages.markAsRead^mids=%s';
+  vk_url_api_messages_synch_inc  = 'method=messages.get^preview_length=0^count=100^time_offset=%d'; // all incoming messages
+  vk_url_api_messages_synch_out  = 'method=messages.get^preview_length=0^count=100^out=1^time_offset=%d'; // all outgoing messages
+  vk_url_api_messages_markasread = 'method=messages.markAsRead^mids=%d';
   vk_url_api_getprofiles         = 'method=getProfiles^uids=%s^fields=%s';
   vk_url_api_getcities           = 'method=getCities^cids=%s';
   vk_url_api_getcountries        = 'method=getCountries^cids=%s';
@@ -205,6 +207,8 @@ const
   opt_UserPass: PChar                            = 'UserPass';
   opt_UserKeepOnline: PChar                      = 'KeepOnlineFreqSecs';
   opt_UserCheckNewMessages: PChar                = 'MsgIncFreqSecs';
+  opt_UserMessagesSynchronization: PChar         = 'MsgSynchFreqSecs';
+  opt_UserMessagesSynchronizationSupport: PChar  = 'MsgSynchSupport';
   opt_UserUpdateFriendsStatus: PChar             = 'FriendsStatusFreqSecs';
   opt_UserFriendsDeleted: PChar                  = 'FriendsDeleted';
   opt_UserGetMinInfo: PChar                      = 'InfoMinimal';
@@ -223,6 +227,7 @@ const
   opt_UserUseLocalTimeForIncomingMessages: PChar = 'MsgIncUseLocalTime';
   opt_UserDontDeleteFriendsFromTheServer: PChar  = 'FriendsDontDeleteFromTheServer';
   opt_UserNonFriendsStatusSupport: PChar         = 'NonFriendsStatusSupport';
+  opt_MsgsLastMsgDateTime: PChar                 = 'MsgLastMsgDateTime';
   opt_NewsSupport: PChar                         = 'NewsEnabled';
   opt_NewsSecs: PChar                            = 'NewsUpdateFrequencySecs';
   opt_NewsMin: PChar                             = 'NewsMinimalOnly';
@@ -267,6 +272,7 @@ const
   opt_CommentsLastUpdateDateTime: PChar          = 'CommentsLastUpdateDateTime';
   opt_CommentsLastNewsDateTime: PChar            = 'CommentsLastNewsDateTime';
   opt_LastUpdateDateTimeMsgs: PChar              = 'MsgIncLastUpdateDateTime';
+  opt_LastUpdateDateTimeMsgsSynch: PChar         = 'MsgSynchLastUpdateDateTime';
   opt_LastUpdateDateTimeFriendsStatus: PChar     = 'FriendsStatusLastUpdateDateTime';
   opt_LastUpdateDateTimeKeepOnline: PChar        = 'KeepOnlineLastUpdateDateTime';
   opt_LastUpdateDateTimeAvatars: PChar           = 'AvatarsLastUpdateDateTime';
