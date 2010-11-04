@@ -119,7 +119,7 @@ begin
       hBmpCaptcha := pluginLink^.CallService(MS_IMG_LOAD, Windows.wParam(lParam), 0);
       // delete our captcha file
       DeleteFile(string(lParam));
-      SendMessage(GetDlgItem(Dialog, VK_CAPTCHA_CODE), EM_SETLIMITTEXT, 5, 0);
+      SendMessage(GetDlgItem(Dialog, VK_CAPTCHA_CODE), EM_SETLIMITTEXT, 7, 0);
       // assign new procedure to work with VK_CAPTCHA_CODE edit control
       EditFunctionOriginal := Pointer(SetWindowLong(GetDlgItem(Dialog, VK_CAPTCHA_CODE), GWL_WNDPROC, integer(@EditFunctionNew)));
       Result := True;

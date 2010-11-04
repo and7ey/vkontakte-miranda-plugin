@@ -584,6 +584,11 @@ begin
       val := DBGetContactSettingDWord(0, piShortName, opt_UserUpdateFriendsStatus, 60);
       SetDlgItemText(dialog, VK_OPT_CHECKFRSTATUS_SEC, PChar(IntToStr(val))); // update friend's status each ... secs
 
+      val := DBGetContactSettingDWord(0, piShortName, opt_UserMessagesSynchronization, 3600);
+      if DBGetContactSettingByte(0, piShortName, opt_UserMessagesSynchronizationSupport, 0) = 0 then
+        val := 0;
+      SetDlgItemText(dialog, VK_OPT_SYNCHMSGS_SEC, PChar(IntToStr(val))); // update old messages
+
       val := DBGetContactSettingByte(0, piShortName, opt_UserGetMinInfo, 0);
       CheckDlgButton(dialog, VK_OPT_GETMININFO, val);
 
@@ -626,6 +631,13 @@ begin
 
         val := GetDlgInt(dialog, VK_OPT_CHECKFRSTATUS_SEC);
         DBWriteContactSettingDWord(0, piShortName, opt_UserUpdateFriendsStatus, val);
+
+        val := GetDlgInt(dialog, VK_OPT_SYNCHMSGS_SEC);
+        DBWriteContactSettingDWord(0, piShortName, opt_UserMessagesSynchronization, val);
+        if val = 0 then
+          DBWriteContactSettingByte(0, piShortName, opt_UserMessagesSynchronizationSupport, 0)
+        else
+          DBWriteContactSettingByte(0, piShortName, opt_UserMessagesSynchronizationSupport, 1);
 
         DBWriteContactSettingByte(0, piShortName, opt_UserGetMinInfo, byte(IsDlgButtonChecked(dialog, VK_OPT_GETMININFO)));
 

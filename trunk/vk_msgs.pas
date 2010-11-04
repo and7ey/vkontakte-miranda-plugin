@@ -224,6 +224,7 @@ var
   dbei:   TDBEVENTINFO;
   hEvent: THandle;
   iFlags: integer;
+  wsDBMsgText: widestring;
 begin
   Result := False;
   // look for presence of the same message in db
@@ -244,7 +245,10 @@ begin
         Netlib_Log(vk_hNetlibUser, PChar('(vk_AddMessageToDBUnique) ... have not found such message in the database'));
         break;
       end;
-      if dbei.timestamp = iMsgDate then // duplicate request
+      wsDBMsgText := WideString(PChar(dbei.pBlob)); // text of the message in database
+      if (iMsgDate = dbei.timestamp) or
+         ((iMsgDate in [dbei.timestamp-90 .. dbei.timestamp+90]) and
+          (wsDBMsgText = MsgText)) then // duplicate request
       begin
         Netlib_Log(vk_hNetlibUser, PChar('(vk_AddMessageToDBUnique) ... message found in the database, skipped'));
         FreeMem(dbei.pBlob);
@@ -313,15 +317,18 @@ begin
          begin
            sMsgAttachment := TextBetween(sMsgAttachment, '[[audio', ']]');
            sHTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_audio_getbyid, [sMsgAttachment])));
-           jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
-           try
-             sMsgText := sMsgText +
-               TranslateW('audio') + ': ' +
-               jsoFeedAttachment.Field['response'].Child[0].Field['artist'].Value + ' - ' +
-               jsoFeedAttachment.Field['response'].Child[0].Field['title'].Value + Chr(13) + Chr(10) +
-               jsoFeedAttachment.Field['response'].Child[0].Field['url'].Value;
-           finally
-             jsoFeedAttachment.Free;
+           if Pos('response', sHTMLAttachment) > 0 then
+           begin
+             jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
+             try
+               sMsgText := sMsgText +
+                 TranslateW('audio') + ': ' +
+                 jsoFeedAttachment.Field['response'].Child[0].Field['artist'].Value + ' - ' +
+                 jsoFeedAttachment.Field['response'].Child[0].Field['title'].Value + Chr(13) + Chr(10) +
+                 jsoFeedAttachment.Field['response'].Child[0].Field['url'].Value;
+             finally
+               jsoFeedAttachment.Free;
+             end;
            end;
          end
          else
@@ -329,13 +336,16 @@ begin
            begin
              sMsgAttachment := TextBetween(sMsgAttachment, '[[photo', ']]');
              sHTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_photos_getbyid, [sMsgAttachment])));
-             jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
-             try
-               sMsgText := sMsgText +
-                 TranslateW('photo') + ': ' + Chr(13) + Chr(10) +
-                 jsoFeedAttachment.Field['response'].Child[0].Field['src'].Value;
-             finally
-               jsoFeedAttachment.Free;
+             if Pos('response', sHTMLAttachment) > 0 then
+             begin
+               jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
+               try
+                 sMsgText := sMsgText +
+                   TranslateW('photo') + ': ' + Chr(13) + Chr(10) +
+                   jsoFeedAttachment.Field['response'].Child[0].Field['src'].Value;
+               finally
+                 jsoFeedAttachment.Free;
+               end;
              end;
            end
            else
@@ -343,16 +353,19 @@ begin
              begin
                sMsgAttachment := TextBetween(sMsgAttachment, '[[video', ']]');
                sHTMLAttachment := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_video_get, [sMsgAttachment])));
-               jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
-               try
-                 sMsgText := sMsgText +
-                   TranslateW('video') + ': ' +
-                   jsoFeedAttachment.Field['response'].Child[1].Field['title'].Value + Chr(13) + Chr(10) +
-                   jsoFeedAttachment.Field['response'].Child[1].Field['description'].Value + Chr(13) + Chr(10) +
-                   vk_url + '/video' +
-                   sMsgAttachment;
-               finally
-                 jsoFeedAttachment.Free;
+               if Pos('response', sHTMLAttachment) > 0 then
+               begin
+                 jsoFeedAttachment := TlkJSON.ParseText(sHTMLAttachment) as TlkJSONobject;
+                 try
+                   sMsgText := sMsgText +
+                     TranslateW('video') + ': ' +
+                     jsoFeedAttachment.Field['response'].Child[1].Field['title'].Value + Chr(13) + Chr(10) +
+                     jsoFeedAttachment.Field['response'].Child[1].Field['description'].Value + Chr(13) + Chr(10) +
+                     vk_url + '/video' +
+                     sMsgAttachment;
+                 finally
+                   jsoFeedAttachment.Free;
+                 end;
                end;
              end;
        end; // end of attachments parsing

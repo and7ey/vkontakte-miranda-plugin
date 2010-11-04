@@ -142,7 +142,7 @@ var
       // this name will be used for ex. in BASIC SEARCH
 
       PFLAG_MAXLENOFMESSAGE:
-        Result := 4096;  // maximum length of one message (site limit)
+        Result := 131072;  // maximum length of one message (site limit)
 
       PFLAG_UNIQUEIDSETTING:
         Result := integer(PChar('ID')); // returns the DB setting name that has the ID which makes this user unique on that system
