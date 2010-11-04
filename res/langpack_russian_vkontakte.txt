@@ -3,7 +3,7 @@
 ; Locale: 0419
 ; Authors: LA, CJ Flash
 ; Author-email: and7ey at gmail dot com
-; ** VKontakte Protocol 0.4.1.3
+; ** VKontakte Protocol 0.4.*
 ; ** Russian translation
 
 [VKontakte Protocol]
@@ -44,6 +44,8 @@ E-mail или логин:
 Обновлять статус друзей каждые
 [second(s)]
 секунд
+[second(s), 0 to disable]
+секунд, 0 - отключить
 [Please enter your VKontakte account details to continue:]
 Пожалуйста, введите данные ниже для продолжения
 [VKontakte Protocol for Miranda IM]
@@ -588,3 +590,5 @@ xСтатус
 Не получены детали сессии UserAPI. Получение статуса контакта не-друга %d невозможно.
 [No session details are received. Search by id failed.]
 Не получены детали сессии. Поиск контакта по id невозможен.
+[No enough rights are given to the application on the site. Some functions will not work properly.]
+Не все действия разрешены приложению на сайте ВКонтакте. Некоторые функции плагина будут работать неправильно.

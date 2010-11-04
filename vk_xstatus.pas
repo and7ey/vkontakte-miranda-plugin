@@ -121,8 +121,9 @@ end;
 
  // =============================================================================
  // procedure to get from the server additional status message of all contacts
- // TODO: optimization is possible - get all ids first and then send one request
- //       to the server to get their statuses
+ // TODO: optimization should be possible - once activity.get supports multiple
+ // ids in one request - get all ids first and then send one request
+ // to the server to get their statuses
  // -----------------------------------------------------------------------------
 procedure vk_StatusAdditionalGet();
 var
@@ -201,7 +202,6 @@ begin
         jsoFeed.Free;
       end;
     end;
-
 
     Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) Updating of contacts'' xStatus...'));
 

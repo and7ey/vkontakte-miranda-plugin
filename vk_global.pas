@@ -43,7 +43,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName   = 'VKontakte';
-  piVersion     = 0 shl 24 + 4 shl 16 + 2 shl 8 + 0;
+  piVersion     = 0 shl 24 + 4 shl 16 + 2 shl 8 + 5;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor      = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -67,7 +67,7 @@ const
 
   vk_url_api_prefix              = 'api.';
   vk_url_api_suffix              = '/api.php';
-  vk_url_api_session             = '/login.php?app=' + vk_api_appid + '&layout=popup&type=browser&settings=16383'; // 1931262 - constant app id
+  vk_url_api_session             = '/login.php?app=' + vk_api_appid + '&layout=popup&type=browser&settings=15871'; // 1931262 - constant app id
   // in api related links fields should be separated by symbol ^
   vk_url_api_messages_send       = 'method=messages.send^uid=%d^message=%s';
   vk_url_api_messages_get        = 'method=messages.get^filters=1^preview_length=0^time_offset=0'; // only unread messages
@@ -173,6 +173,7 @@ const
 
   err_sendmgs_offline  = 'You cannot send messages when you are offline.';
   err_session_nodetail = 'No session details are received. Some functions will not work properly.';
+  err_api_noenoughrights = 'No enough rights are given to the application on the site. Some functions will not work properly.';
   err_session_nodetail_profile_search = 'No session details are received. Search by id failed.';
   err_userapi_session_nodetail = 'No UserAPI session details are received. Some functions will not work properly.';
   err_userapi_session_nodetail_auth = 'No UserAPI session details are received. Sending of authorization request failed.';

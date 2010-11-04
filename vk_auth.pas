@@ -199,7 +199,6 @@ begin
       Exit;
     end;
     hEvent := pluginLink^.CallService(MS_DB_EVENT_FINDPREV, hEvent, 0);
-    FreeMem(dbei.pBlob);
   end;
 
 

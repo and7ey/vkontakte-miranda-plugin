@@ -291,6 +291,7 @@ end;
 function vk_Connect(): integer;
 var
   HTML: string; // html content of the page received
+  iUserRights: integer;
 begin
   if Assigned(CookiesGlobal) then
     CookiesGlobal.Clear; // clear cookies
@@ -348,13 +349,16 @@ begin
 
     if (vk_session_id = '') or (vk_secret = '') or (vk_id = '') then
       ShowPopupMsg(0, err_session_nodetail, 1); // TODO: once plugin is fully migrated to VK API
-    // here we should change error code and do not change
-    // status to Online
+                                                // here we should change error code and do not change
+                                                // status to Online
 
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Session details received: session id=' + vk_session_id + ', secret=' + vk_secret + ', vk_id=' + vk_id + ', vk_api_appid=' + vk_api_appid));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting user rights...'));
     HTML := HTTP_NL_Get(GenerateApiUrl('method=getUserSettings'));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) User rights received: ' + HTML));
+    if TryStrToInt(TextBetween(HTML,':','}'), iUserRights) then
+      if iUserRights < 15871 then
+        ShowPopupMsg(0, err_api_noenoughrights, 1);
 
     // ************************
     // get UserAPI details
@@ -1047,7 +1051,7 @@ begin
         begin
           if FileDateToDateTime(DBGetContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgsSynch, 539033600)) <= ((Now * SecsPerDay) - DBGetContactSettingDWord(0, piShortName, opt_UserMessagesSynchronization, 3600)) / SecsPerDay then
           begin
-            // write new value of last date & time of new message received
+            // write new value of last date & time of messages synchronization
             DBWriteContactSettingDWord(0, piShortName, opt_LastUpdateDateTimeMsgsSynch, DateTimeToFileDate(Now));
             ExecIt(@vk_GetMsgsSynch, 'vk_GetMsgsSynch');
           end;

@@ -44,7 +44,7 @@ uses
 
 procedure HTTP_NL_Init();
 function HTTP_NL_Get(szUrl: string; szRequestType: integer = REQUEST_GET): string;
-function HTTP_NL_GetSession(szUrl: string; szRequestType: integer = REQUEST_HEAD): string;
+function HTTP_NL_GetSession(szUrl: string; szRequestType: integer = REQUEST_GET): string;
 function HTTP_NL_GetSessionUserAPI(szUrl: string): string;
 function HTTP_NL_Post(szUrl: string; szData: string; ContentType: string; Boundary: string; szHeaders: string = ''): string;
 function HTTP_NL_PostPicture(szUrl: string; szData: string; Boundary: string): string;
@@ -245,7 +245,7 @@ end;
  // function to get Session details for vkontakte API
  // should be re-written
  // -----------------------------------------------------------------------------
-function HTTP_NL_GetSession(szUrl: string; szRequestType: integer = REQUEST_HEAD): string;
+function HTTP_NL_GetSession(szUrl: string; szRequestType: integer = REQUEST_GET): string;
 var
   nlhr:       TNETLIBHTTPREQUEST;
   nlhrReply:  PNETLIBHTTPREQUEST;
