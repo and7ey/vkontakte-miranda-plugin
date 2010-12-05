@@ -338,6 +338,7 @@ var
   {$include m_xml.inc} // modified by LA
   {$define M_API_UNIT}
   {$include m_helpers.inc}
+  {$include m_ieview.inc} // modified by LA
 
 
 procedure InitMMI;

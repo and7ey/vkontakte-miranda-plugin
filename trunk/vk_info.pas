@@ -231,7 +231,7 @@ begin
       sTemp := GetInfo(HTML, 'photo_medium');
       if Trim(sTemp) <> '' then
         try
-          vk_AvatarGetAndSave(IntToStr(ContactID), sTemp); // update avatar for a contact
+          vk_AvatarGetAndSave(ContactID, sTemp); // update avatar for a contact
         except
         end;
     end;

@@ -39,6 +39,7 @@ uses
   vk_wall,
   vk_opts,
   Windows,
+  ShellAPI,
   SysUtils,
   uLkJSON in 'inc\uLkJSON.pas',  // module to parse data from feed2.php (in JSON format)
   htmlparse in 'htmlparse.pas',
@@ -291,6 +292,7 @@ var
   // function, which run once all modules are loaded
   // -----------------------------------------------------------------------------
   function OnModulesLoad(wParam{0}, lParam{0}: DWord): integer; cdecl;
+  var ood: TOPENOPTIONSDIALOG;
   begin
 
     // get preferred vkontakte hosts
@@ -382,6 +384,28 @@ var
           DBWriteContactSettingByte(0, piShortName, opt_GroupPluginJoined, 1);
       end;
 
+    // plugin runs first time - give some instructions
+    if DBGetContactSettingByte(0, piShortName, opt_FirstRun, 1) = 1 then
+    begin
+      case MessageBoxW(0, TranslateW(qst_first_run_addl_rights), TranslateW(piShortName), MB_YESNO + MB_ICONQUESTION) of
+        idYes: // open rights page
+          ShellAPI.ShellExecute(0, 'open', PChar(vk_url + vk_url_api_session), nil, nil, 0);
+      end;
+      case MessageBoxW(0, TranslateW(qst_first_run_go_online), TranslateW(piShortName), MB_YESNOCANCEL + MB_ICONQUESTION) of
+        idYes: // go online
+          vk_SetStatus(ID_STATUS_ONLINE);
+        idNo: // open Settings page
+          begin
+            FillChar(ood, sizeof(ood), 0);
+            ood.cbSize := sizeof(ood);
+            ood.pszGroup := 'Network';
+            ood.pszPage := piShortName;
+            ood.pszTab := 'Account';
+            PluginLink^.CallService(MS_OPT_OPENOPTIONS, 0, Windows.lParam(@ood));
+          end;
+      end;
+      DBWriteContactSettingByte(0, piShortName, opt_FirstRun, 0);
+    end;
     Result := 0;
   end;
 
