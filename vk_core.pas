@@ -51,6 +51,8 @@ uses
 
   htmlparse, // module to simplify html parsing
 
+  uLkJSON, // module to parse data from feed2.php (in JSON format)
+
   Windows,
   Messages,
   SysUtils,
@@ -341,17 +343,22 @@ begin
     // get API related details
     // http://vkontakte.ru/developers.php?o=-1&p=%D0%90%D0%B2%D1%82%D0%BE%D1%80%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F+Desktop-%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting session details...'));
-    HTTP_NL_GetSession(vk_url + vk_url_api_session); // TODO: it is possible that nothing is received
+    HTML := HTTP_NL_GetSession(vk_url + vk_url_api_session); // TODO: it is possible that nothing is received
 
     // vk_session_id := '';
     // vk_secret := '';
     // vk_id := '';
 
     if (vk_session_id = '') or (vk_secret = '') or (vk_id = '') then
-      ShowPopupMsg(0, err_session_nodetail, 1); // TODO: once plugin is fully migrated to VK API
-                                                // here we should change error code and do not change
-                                                // status to Online
-
+    begin
+      vk_session_id := TextBetween(HTML, '"sid":"', '"');
+      vk_secret := TextBetween(HTML, '"secret":"', '"');
+      vk_id := TextBetween(HTML, '"mid":', ',');
+      if (vk_session_id = '') or (vk_secret = '') or (vk_id = '') then
+        ShowPopupMsg(0, err_session_nodetail, 1); // TODO: once plugin is fully migrated to VK API
+                                                  // here we should change error code and do not change
+                                                  // status to Online
+    end;
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Session details received: session id=' + vk_session_id + ', secret=' + vk_secret + ', vk_id=' + vk_id + ', vk_api_appid=' + vk_api_appid));
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting user rights...'));
     HTML := HTTP_NL_Get(GenerateApiUrl('method=getUserSettings'));
@@ -418,6 +425,7 @@ begin
 
   // if really new contact
   hContactNew := pluginLink^.CallService(MS_DB_CONTACT_ADD, 0, 0);
+  CallService(MS_PROTO_ADDTOCONTACT, hContactNew, lParam(PChar(piShortName)));  
   if hContactNew <> 0 then
   begin
     DBWriteContactSettingDWord(hContactNew, piShortName, 'ID', frID);
@@ -434,7 +442,6 @@ begin
       DBWriteContactSettingUnicode(hContactNew, 'CList', 'Group', PWideChar(WideString(DefaultGroup)));
     end;
   end;
-  CallService(MS_PROTO_ADDTOCONTACT, hContactNew, lParam(PChar(piShortName)));
 
   if hContactNew <> 0 then
   begin
@@ -498,47 +505,16 @@ type
   end;
 var
   hContact:           THandle;
-  HTML:               string; // html content of the page received
-  FriendsOnline:      array of integer;
+  sHTML:              string; // html content of the page received
   FriendsDeleted:     array of integer;
   Friends:            array of TFriends;
   TempList:           TStringList;
-  i:                  integer;
-  StrTemp1, StrTemp2: string;
+  i, ii:              integer;
+  StrTemp1:           string;
+  jsoFeed:            TlkJSONobject;
+  iFriendsCount:      integer;
+  sTemp:              WideString;
 begin
-
-  // get friends online
-  // status of friends is read only
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends from the server...'));
-  HTML := HTTP_NL_Post(vk_url + vk_url_feed_friendsonline, '', 'multipart/form-data', '');
-  if Trim(HTML) <> '' then
-  begin
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting online friends details...'));
-    HTML := TextBetween(HTML, 'friends'':[', '],''universities');
-    if Trim(HTML) <> '' then
-    begin
-      TempList := TStringList.Create();
-      TempList.Sorted := True;          // list should be sorted and
-      TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
-      while Pos('[', HTML) > 0 do
-      begin
-        TempList.Add(TextBetween(HTML, '[', ','));
-        if Pos(']', HTML) > 0 then
-          Delete(HTML, 1, Pos(']', HTML))
-        else
-          break;
-      end;
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... ' + IntToStr(TempList.Count) + ' friend(s) online found'));
-      for i := 0 to TempList.Count - 1 do
-      begin
-        SetLength(FriendsOnline, Length(FriendsOnline) + 1);
-        TryStrToInt(TempList.Strings[i], FriendsOnline[High(FriendsOnline)]);
-        Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found online friend with id: ' + TempList.Strings[i]));
-      end;
-      TempList.Free;
-    end;
-  end;
-
   // identify deleted friends
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Find friends deleted from miranda''s contact list...'));
   StrTemp1 := DBReadString(0, piShortName, opt_UserFriendsDeleted, ''); // read list of deleted friends
@@ -559,70 +535,65 @@ begin
     TempList.Free;
   end;
 
-  // get full list of friends
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting all friends from the server...'));
-  HTML := HTTP_NL_Post(vk_url + vk_url_feed_friends, '', 'multipart/form-data', '');
-  if Trim(HTML) <> '' then
+
+  // getting friends with their statuses
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends from the server...'));
+  sHTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_friends, ['uid,first_name,last_name,nickname,photo_medium,online'])));
+  if Trim(sHTML) <> '' then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) Getting friends details...'));
-    HTML := TextBetween(HTML, 'friends'':[', ']]');
-    if Trim(HTML) <> '' then
-    begin
-      HTML := HTML + ']';
-      while Pos('[', HTML) > 0 do
+    TempList := TStringList.Create();
+    TempList.Sorted := True;          // list should be sorted and
+    TempList.Duplicates := dupIgnore; // duplicates shouldn't be allowed
+    jsoFeed := TlkJSON.ParseText(sHTML) as TlkJSONobject;
+    try
+      iFriendsCount := jsoFeed.Field['response'].Count;
+      for i := 0 to iFriendsCount - 1 do
       begin
-        // [1234567,"Name Surname","http:\/\/cs123.vkontakte.ru\/u1234567\/b_d919d26a.jpg",9,"","Евгении",0,1,0,"05"]
-        // 1234567, {f:'Name', l:'Surname'},{p:'http://cs1264.vkontakte.ru/u5545710/b_1234567.jpg',uy:'05',uf:12345,fg:5,to:'Name',r:63,f:0,u:123,ds:0}
-        StrTemp1 := TextBetween(HTML, '[', ']');
-        if Trim(StrTemp1) <> '' then
+        SetLength(Friends, Length(Friends) + 1);
+        sTemp := jsoFeed.Field['response'].Child[i].Field['uid'].Value;
+        if TryStrToInt(sTemp, Friends[High(Friends)].ID) then
         begin
-          StrTemp2 := Trim(Copy(StrTemp1, 1, Pos(',', StrTemp1) - 1));
-          SetLength(Friends, Length(Friends) + 1);
-          if TryStrToInt(StrTemp2, Friends[High(Friends)].ID) then
-          begin
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found friend with id: ' + StrTemp2));
-            StrTemp2 := TextBetween(StrTemp1, ',"', '",');
-            Friends[High(Friends)].Name := HTMLDecodeW(StrTemp2);
-            Friends[High(Friends)].AvatarURL := 'http' + TextBetween(StrTemp1, '"http', '"');
-            Friends[High(Friends)].AvatarURL := StringReplace(Friends[High(Friends)].AvatarURL, '\/', '/', [rfReplaceAll]);
-            // TryStrToInt(Trim(TextBetween(StrTemp1, 'r:', ',')), Friends[High(Friends)].Rating);
-            // TryStrToInt(Trim(TextBetween(StrTemp1, 'fg:', ',')), Friends[High(Friends)].Group);
-
-            Friends[High(Friends)].InList := False;
-            // mark online friends
-            Friends[High(Friends)].Online := False;
-            for i := Low(FriendsOnline) to High(FriendsOnline) do
-            begin
-              if FriendsOnline[i] = Friends[High(Friends)].ID then
-              begin
-                Friends[High(Friends)].Online := True;
-                break;
-              end;
-            end;
-            // mark deleted friends
-            Friends[High(Friends)].Deleted := False;
-            for i := Low(FriendsDeleted) to High(FriendsDeleted) do
-            begin
-              if FriendsDeleted[i] = Friends[High(Friends)].ID then
-              begin
-                Friends[High(Friends)].Deleted := True;
-                break;
-              end;
-            end;
-          end
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... found friend with id: ' + String(sTemp)));
+          try
+            sTemp := jsoFeed.Field['response'].Child[i].Field['nickname'].Value;
+          except
+            sTemp := '';
+          end;
+          if Trim(sTemp) <> '' then
+            sTemp := jsoFeed.Field['response'].Child[i].Field['first_name'].Value + ' ' +
+                     sTemp + ' ' +
+                     jsoFeed.Field['response'].Child[i].Field['last_name'].Value
           else
-            SetLength(Friends, Length(Friends) - 1);
-        end;
+            sTemp := jsoFeed.Field['response'].Child[i].Field['first_name'].Value + ' ' +
+                     jsoFeed.Field['response'].Child[i].Field['last_name'].Value;
+          Friends[High(Friends)].Name := HTMLDecodeW(sTemp);
+          try
+            Friends[High(Friends)].AvatarURL := jsoFeed.Field['response'].Child[i].Field['photo_medium'].Value;
+          except
+          end;
+          Friends[High(Friends)].InList := False;
+          Friends[High(Friends)].Online := jsoFeed.Field['response'].Child[i].Field['online'].Value;
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... friend online: ' + BoolToStr(Friends[High(Friends)].Online, true)));
 
-        Delete(HTML, 1, Pos(']', HTML));
+          // mark deleted friends
+          Friends[High(Friends)].Deleted := False;
+          for ii := Low(FriendsDeleted) to High(FriendsDeleted) do
+          begin
+            if FriendsDeleted[ii] = Friends[High(Friends)].ID then
+            begin
+              Friends[High(Friends)].Deleted := True;
+              break;
+            end;
+          end;
+        end;
       end;
+    finally
+      jsoFeed.Free;
     end;
   end;
 
-  SetLength(FriendsOnline, 0);
   SetLength(FriendsDeleted, 0);
-
-  // at this moment array Friends contains our list of friends at the server
 
   Netlib_Log(vk_hNetlibUser, PChar('(vk_GetFriends) ... updating contacts status in miranda list...'));
 
@@ -680,6 +651,9 @@ begin
     end;
   end;
   SetLength(Friends, 0);
+
+  // MessageBoxW(0, PWideChar(pluginLink^.CallService(MS_CLIST_GETCONTACTDISPLAYNAME, Windows.wparam(GetContactByID(9488564)), GCDNF_UNICODE)), TranslateW(piShortName), MB_OK + MB_ICONINFORMATION);
+  // MessageBoxW(0, PWideChar(pluginLink^.CallService(MS_CLIST_GETSTATUSMODEDESCRIPTION, Windows.wparam(ID_STATUS_OFFLINE), GCDNF_UNICODE)), TranslateW(piShortName), MB_OK + MB_ICONINFORMATION);
 
   vk_StatusAdditionalGet(); // get additional statuses of friends
 
@@ -747,18 +721,45 @@ end;
  // -----------------------------------------------------------------------------
 procedure vk_GetUserNameID();
 var
-  UserName, UserID: string;
-  HTML:             string;
+  sUserName: WideString;
+  sHTML:     WideString;
+  jsoFeed:   TlkJSONobject;
+  iUserID:   integer;
+  sTemp: WideString;
 begin
-  // {"user": {"id": 999999, "name": "Name Nick Surname"}, ...
-  HTML := HTTP_NL_Get(vk_url + vk_url_username);
-  UserID := TextBetween(HTML, '"id":', ',');
-  UserName := TextBetween(HTML, '"name":"', '"');
+  sHTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_getprofiles, [vk_id, 'first_name,last_name,nickname,photo_medium'])));
+  if (Trim(sHTML) <> '') and (sHTML <> '{"response":{}}') and (Pos('error', sHTML) = 0) then
+  begin
+    jsoFeed := TlkJSON.ParseText(sHTML) as TlkJSONobject;
+    try
+      sUserName := jsoFeed.Field['response'].Child[0].Field['nickname'].Value;
+      if Trim(sUserName) <> '' then
+        sUserName := jsoFeed.Field['response'].Child[0].Field['first_name'].Value + ' ' +
+                     jsoFeed.Field['response'].Child[0].Field['nickname'].Value + ' ' +
+                     jsoFeed.Field['response'].Child[0].Field['last_name'].Value
+      else
+        sUserName := jsoFeed.Field['response'].Child[0].Field['first_name'].Value + ' ' +
+                     jsoFeed.Field['response'].Child[0].Field['last_name'].Value;
+      DBWriteContactSettingUnicode(0, piShortName, 'Nick', PWideChar(HTMLDecodeW(sUserName)));
+      iUserID := jsoFeed.Field['response'].Child[0].Field['uid'].Value;
+      DBWriteContactSettingDWord(0, piShortName, 'ID', iUserID);
 
-  if UserName <> '' then
-    DBWriteContactSettingUnicode(0, piShortName, 'Nick', PWideChar(HTMLDecodeW(UserName)));
-  if UserID <> '' then
-    DBWriteContactSettingDWord(0, piShortName, 'ID', StrToInt(UserID));
+      // if update of avatar is required
+      if DBGetContactSettingByte(0, piShortName, opt_UserAvatarsUpdateWhenGetInfo, 0) = 1 then
+      begin
+        sTemp := jsoFeed.Field['response'].Child[0].Field['photo_medium'].Value;
+        if Trim(sTemp) <> '' then
+          try
+            vk_AvatarGetAndSave(0, sTemp); // update user's avatar
+          except
+          end;
+      end;
+    finally
+      jsoFeed.Free;
+    end;
+
+
+  end;
 end;
 
  // =============================================================================

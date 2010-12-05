@@ -35,7 +35,7 @@ interface
 
 procedure AvatarsInit();
 procedure AvatarsDestroy();
-procedure vk_AvatarGetAndSave(ID, AvatarURL: string);
+procedure vk_AvatarGetAndSave(ID: integer; AvatarURL: string);
 procedure vk_AvatarsGet();
 
 implementation
@@ -48,76 +48,72 @@ uses
   vk_http,   // module to connect with the site
   htmlparse, // module to simplify html parsing
 
+  uLkJSON,
+
   Windows,
   SysUtils,
   Classes;
 
-type
-  TThreadAvatarMySet = class(TThread)
-  private
-    { Private declarations }
-  protected
-    procedure Execute; override;
-  end;
-
 var
   vk_hAvatarInfoGet, vk_hAvatarCapsGet, vk_hAvatarMyGet, vk_hAvatarMySet: THandle;
-
-  AvatarMyFileName: string; // variable to keep our avatar filename
-
-  ThrIDAvatarMySet: TThreadAvatarMySet;
 
  // =============================================================================
  // procedure to verify whether update of avatar is required,
  // and, if required, to get updated avatar
  // -----------------------------------------------------------------------------
-procedure vk_AvatarGetAndSave(ID, AvatarURL: string);
+procedure vk_AvatarGetAndSave(ID: integer; AvatarURL: string);
 var
-  AvatarURLOrig:     string;
   AvatarFileName:    string;
   hContact:          THandle;
   pai:               TPROTO_AVATAR_INFORMATION;
   bAvatarDownloaded: boolean;
+  bAvatarChanged:    boolean;
 begin
-  Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) Getting avatar for id ' + ID));
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) Getting avatar for id ' + IntToStr(ID)));
 
   Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... avatar url: ' + AvatarURL));
-  hContact := GetContactByID(StrToInt(ID));
-
-  // GAP: if only small avatar is used by contact, then plugin will not find it -
-  //      picture with prefix b_ will not exist
-  AvatarURLOrig := AvatarURL;
-  AvatarURL := StringReplace(AvatarURL, '/c_', '/b_', [rfIgnoreCase]);
-  AvatarURL := StringReplace(AvatarURL, '/a_', '/b_', [rfIgnoreCase]);
+  hContact := GetContactByID(ID);
 
   Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... verifying whether avatar is changed or file is deleted'));
 
-  if (DBReadString(hContact, 'ContactPhoto', 'AvatarURL', nil) <> AvatarURL) or
-    (not FileExists(DBReadString(hContact, 'ContactPhoto', 'File', nil))) then
+  bAvatarChanged := False;
+
+  if ID = 0 then // user's avatar
   begin
-    AvatarFileName := FolderAvatars + '\' + ID + '.jpg';
+    if (DBReadString(hContact, piShortName, 'AvatarURL', nil) <> AvatarURL) or
+       (not FileExists(DBReadString(hContact, piShortName, 'AvatarFile', nil))) then
+          bAvatarChanged := True;
+  end else // contacts' avatars
+  begin
+    if (DBReadString(hContact, 'ContactPhoto', 'AvatarURL', nil) <> AvatarURL) or
+       (not FileExists(DBReadString(hContact, 'ContactPhoto', 'File', nil))) then
+          bAvatarChanged := True;
+  end;
+
+  if bAvatarChanged then
+  begin
+    AvatarFileName := FolderAvatars + '\' + IntToStr(ID) + '.jpg';
     Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... downloading avatar'));
 
     bAvatarDownloaded := False;
-    if HTTP_NL_GetPicture(AvatarURL, AvatarFileName) then // small avatar
+    if HTTP_NL_GetPicture(AvatarURL, AvatarFileName) then
     begin
       // write Avatar URL to DB
-      DBWriteContactSettingString(hContact, 'ContactPhoto', 'AvatarURL', PChar(AvatarURL));
+      if ID = 0 then
+        DBWriteContactSettingString(hContact, piShortName, 'AvatarURL', PChar(AvatarURL))
+      else
+        DBWriteContactSettingString(hContact, 'ContactPhoto', 'AvatarURL', PChar(AvatarURL));
       bAvatarDownloaded := True;
-    end
-    else
-      if HTTP_NL_GetPicture(AvatarURLOrig, AvatarFileName) then // big avatar
-      begin
-        // write Avatar URL to DB
-        DBWriteContactSettingString(hContact, 'ContactPhoto', 'AvatarURL', PChar(AvatarURLOrig));
-        bAvatarDownloaded := True;
-      end;
+    end;
+
     if bAvatarDownloaded then // downloaded successfully
     begin
       Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarGetAndSave) ... avatar downloaded successfully and saved to ' + string(AvatarFileName)));
       // write Avatar File Name to DB
       // DBWriteContactSettingString(hContact, 'ContactPhoto', 'File', PChar(AvatarFileName));
       // DBWriteContactSettingString(hContact, 'ContactPhoto', 'RFile', PChar(piShortName + '\' + ID + '.jpg'));
+      if ID = 0 then
+        DBWriteContactSettingString(hContact, piShortName, 'AvatarFile', PChar(AvatarFileName));
 
       FillChar(pai, sizeof(pai), 0);
       pai.cbSize := sizeof(pai);
@@ -157,7 +153,7 @@ begin
       AvatarURL := StringReplace(AvatarURL, '\/', '/', [rfReplaceAll]);
       Delete(HTML, 1, Pos(']', HTML));
       if (TryStrToInt(ID, intID)) and (AvatarURL <> 'images/question_b.gif') and (Trim(AvatarURL) <> '') then
-        vk_AvatarGetAndSave(ID, AvatarURL); // update avatar for each contact
+        vk_AvatarGetAndSave(intID, AvatarURL); // update avatar for each contact
     end;
 
   end;
@@ -166,39 +162,35 @@ end;
  // =============================================================================
  // procedure to setup our avatar
  // -----------------------------------------------------------------------------
-procedure vk_AvatarMySetup(AvatarFileName: string);
+procedure vk_AvatarMySetup(AvatarFileName: WideString);
 var
-  AvatarFileNameNew:      string;
-  CopyResult:             longbool;
+  sHTML:                  string;
   HTML:                   string;
   URLUpload:              string;
   AvatarFile:             TFileStream;
   szData:                 string;
   DelPhoto, DSubm, DHash: string;
   Boundary, FileHeader, FileTrailer, szDataFinal: string;
+  jsoFeed, jsoFeedPhoto:  TlkJSONobject;
+  sServer, sPhoto, sHash,
+  sPhotoHash:             string;
 begin
   if AvatarFileName <> '' then
   begin
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) Setting up our avatar... '));
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup)  ... avatar filename: ' + string(AvatarFileName)));
-    // copy file to our avatars storage
-    AvatarFileNameNew := IncludeTrailingPathDelimiter(FolderAvatars) + ExtractFileName(AvatarFileName);
-    CopyResult := CopyFile(PChar(AvatarFileName), PChar(AvatarFileNameNew), False); // overwrites existing file
-
-    if CopyResult then
+    // now we should upload our picture to the server
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... getting server details to upload an avatar'));
+    sHTML := HTTP_NL_Get(GenerateApiUrl(vk_url_api_photos_getProfileUploadServer));
+    if Pos('upload_url', sHTML) > 0 then
     begin
-      DBWriteContactSettingString(0, piShortName, 'AvatarFile', PChar(AvatarFileNameNew));
-      // now we should upload our picture to the server
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... uploading our avatar to the server'));
-      AvatarFile := TFileStream.Create(AvatarFileNameNew, fmOpenRead);
-      SetLength(szData, AvatarFile.Size);
-      AvatarFile.Read(szData[1], AvatarFile.Size);
-      HTML := HTTP_NL_Get(vk_url + vk_url_photo_my);
-      if Trim(HTML) <> '' then
-      begin
-        URLUpload := TextBetween(HTML, 'form enctype="multipart/form-data" method="post" action="', '"');
-        if Trim(URLUpload) <> '' then
+      jsoFeed := TlkJSON.ParseText(sHTML) as TlkJSONobject;
+      try
+        URLUpload := jsoFeed.Field['response'].Field['upload_url'].Value;
+        if URLUpload <> '' then
         begin
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... uploading our avatar to the server'));
+          AvatarFile := TFileStream.Create(AvatarFileName, fmOpenRead);
+          SetLength(szData, AvatarFile.Size);
+          AvatarFile.Read(szData[1], AvatarFile.Size);
           Boundary := '-----------------------------30742771025321';
           FileHeader :=
             '--' + Boundary +
@@ -215,28 +207,57 @@ begin
             #10 + #10;
           FileTrailer := #10 + '--' + Boundary + '--';
           szDataFinal := FileHeader + szData + FileTrailer;
-          HTML := HTTP_NL_PostPicture(URLUpload, szDataFinal, Boundary);
-          if Trim(HTML) <> '' then
-            Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... finished setting up of our avatar'));
-        end;
+
+          sHTML := HTTP_NL_PostPicture(URLUpload, szDataFinal, Boundary);
+          if Pos('photo', sHTML) > 0 then
+          begin
+            jsoFeedPhoto := TlkJSON.ParseText(sHTML) as TlkJSONobject;
+            try
+              sServer := jsoFeedPhoto.Field['server'].Value;
+              sPhoto := jsoFeedPhoto.Field['photo'].Value;
+              sHash := jsoFeedPhoto.Field['hash'].Value;
+              if (sServer <> '') and (sPhoto <> '') and (sHash <> '') then
+              begin
+                sHTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_photos_saveProfilePhoto, [sServer, sPhoto, sHash])));
+                sPhotoHash := TextBetween(sHTML, '"photo_hash":"', '"');
+                if sHTML <> '' then
+                begin
+                  // html parsing is below since VK API doesn't support normal avatar upload process without IE usage
+                  sPhoto := UrlEncode(sPhoto);
+                  sHTML := HTTP_NL_Get(Format(vk_url + vk_url_photo_load_profile, [vk_api_appid, sPhotoHash]));
+                  if sHTML <> '' then
+                  begin
+                    sHash := TextBetween(sHTML, 'hash: ''', '''');
+                    sHTML := HTTP_NL_Get(Format(vk_url + vk_url_photo_save_profile, [vk_api_appid, sServer, sPhoto, sHash]));
+                    DBWriteContactSettingUnicode(0, piShortName, 'AvatarFile', PWideChar(AvatarFileName));
+                    Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... avatar defined successfully'));
+                  end;
+                end;
+              end else
+                Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... failed to get server, photo or hash details'));
+            finally
+              jsoFeedPhoto.Free;
+            end;
+          end else
+            Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... failed to upload an avatar'));
+          AvatarFile.Free;
+        end else
+          Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... failed to get server to upload an avatar'));
+      finally
+        jsoFeed.Free;
       end;
-      AvatarFile.Free;
-    end
-    else
-    begin
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... not possible to create file: ' + string(AvatarFileNameNew)));
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) ... setting up of our avatar failed'));
     end;
   end
   else // delete existing avatar
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySetup) Deleting our avatar... '));
-    DBDeleteContactSetting(0, piShortName, 'AvatarFile');
     HTML := HTTP_NL_Get(vk_url + vk_url_photo_my);
     DelPhoto := TextBetween(HTML, 'delPhoto', '</form>');
     DSubm := TextBetween(DelPhoto, 'id="subm" value="', '"');
     DHash := TextBetween(DelPhoto, 'id="hash" value="', '"');
     HTML := HTTP_NL_Get(Format(vk_url + vk_url_photo_my_delete, [DSubm, DHash]));
+    DBDeleteContactSetting(0, piShortName, 'AvatarFile');
+    DBDeleteContactSetting(0, piShortName, 'AvatarURL');
   end;
 end;
 
@@ -257,7 +278,10 @@ begin
   FillChar(pai, SizeOf(pai), 0);
   pai.cbSize := SizeOf(pai);
   pai := PPROTO_AVATAR_INFORMATION(lParam)^;
-  AvatarFileName := DBReadString(pai.hContact, 'ContactPhoto', 'File', nil);
+  if pai.hContact = 0 then
+    AvatarFileName := DBReadString(pai.hContact, piShortName, 'AvatarFile', nil)
+  else
+    AvatarFileName := DBReadString(pai.hContact, 'ContactPhoto', 'File', nil);
   if Trim(AvatarFileName) = '' then
   begin
     Result := GAIR_NOAVATAR;
@@ -281,8 +305,8 @@ begin
     AF_MAXSIZE:  // avatar image max size
     begin
       size := PPoint(lParam);
-      size.X := 128;
-      size.Y := 128;
+      size.X := 200;
+      size.Y := 200;
       Result := 0;
     end;
     AF_PROPORTION:
@@ -355,10 +379,35 @@ end;
  // function to set up our avatar
  // -----------------------------------------------------------------------------
 function AvatarMySet(wParam: wParam; lParam: lParam): integer; cdecl;
+var AvatarFileNameNew,
+    AvatarMyFileName:  WideString;
+    CopyResult:        longbool;
+    res:               longword;
 begin
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySet) Setting up our avatar... '));
   AvatarMyFileName := PChar(lParam);
-  if not Assigned(ThrIDAvatarMySet) then
-    ThrIDAvatarMySet := TThreadAvatarMySet.Create(False); // vk_AvatarMySetup(PChar(lParam));
+  if AvatarMyFileName = '' then // delete avatar
+  begin
+    CloseHandle(BeginThread(nil, 0, @vk_AvatarMySetup, nil, 0, res));
+  end else
+  begin // set up new avatar
+    Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySet)  ... avatar filename: ' + string(AvatarMyFileName)));
+    // copy file to our avatars storage
+    AvatarFileNameNew := IncludeTrailingPathDelimiter(FolderAvatars) + ExtractFileName(AvatarMyFileName);
+    CopyResult := CopyFileW(PWideChar(AvatarMyFileName), PWideChar(AvatarFileNameNew), False); // overwrites existing file
+
+    if CopyResult then
+    begin
+      AvatarMyFileName := AvatarFileNameNew;
+      CloseHandle(BeginThread(nil, 0, @vk_AvatarMySetup, Pointer(AvatarMyFileName), 0, res));
+        // ThrIDAvatarMySet := TThreadAvatarMySet.Create(False); // vk_AvatarMySetup(PChar(lParam));
+    end
+    else
+    begin
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySet) ... not possible to create file: ' + string(AvatarFileNameNew)));
+      Netlib_Log(vk_hNetlibUser, PChar('(vk_AvatarMySet) ... setting up of our avatar failed'));
+    end;
+  end;
   Result := 0;
 end;
 
@@ -384,32 +433,6 @@ begin
   pluginLink^.DestroyServiceFunction(vk_hAvatarMyGet);
   pluginLink^.DestroyServiceFunction(vk_hAvatarMySet);
 end;
-
-
- // =============================================================================
- // setup avatar thread
- // -----------------------------------------------------------------------------
-procedure TThreadAvatarMySet.Execute;
-var
-  ThreadNameInfo: TThreadNameInfo;
-begin
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadAvatarMySet) Thread started...'));
-
-  ThreadNameInfo.FType := $1000;
-  ThreadNameInfo.FName := 'TThreadAvatarsGet';
-  ThreadNameInfo.FThreadID := $FFFFFFFF;
-  ThreadNameInfo.FFlags := 0;
-  try
-    RaiseException($406D1388, 0, sizeof(ThreadNameInfo) div sizeof(longword), @ThreadNameInfo);
-  except
-  end;
-
-  vk_AvatarMySetup(AvatarMyFileName);
-  ThrIDAvatarMySet := nil;
-
-  Netlib_Log(vk_hNetlibUser, PChar('(TThreadAvatarMySet) ... thread finished'));
-end;
-
 
 begin
 end.

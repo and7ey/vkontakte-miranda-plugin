@@ -90,33 +90,8 @@ var
   iStatusID: integer;
 begin
   Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) Changing additional status...'));
-  if StatusText <> '' then
-  begin
-    HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_set, [URLEncode(UTF8Encode(StatusText))])));
-    Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... new additional status assigned'));
-  end
-  else
-  begin
-    // firstly we should get id of current status
-    HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [StrToInt(vk_id)])));
-
-    jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
-    iStatusID := 0;
-    try
-      if Assigned(jsoFeed) then
-        iStatusID := jsoFeed.Field['response'].Field['id'].Value;
-    finally
-      jsoFeed.Free;
-    end;
-
-    // now delete the status
-    if iStatusID > 0 then
-    begin
-      HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_delete, [iStatusID])));
-      Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... additional status deleted'));
-    end;
-
-  end;
+  HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_status_set, [URLEncode(UTF8Encode(StatusText))])));
+  Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalSet) ... new additional status assigned'));
 end;
 
  // =============================================================================
@@ -137,17 +112,18 @@ var
   bStatusItem:                 byte;
   jsoFeed:                     TlkJSONobject;
   smi:                         TCLISTMENUITEM;
+  wsTemp: WideString;
 
 begin
   if DBGetContactSettingByte(0, piShortName, opt_UserUpdateAddlStatus, 1) = 1 then
   begin
     Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) Reading our current xStatus...'));
-    HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [0])));
+    HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_status_get, [0])));
     if Pos('response', HTML) > 0 then
     begin
       jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
       try
-        MsgText := jsoFeed.Field['response'].Field['activity'].Value;
+        MsgText := jsoFeed.Field['response'].Field['text'].Value;
         if Trim(MsgText) <> '' then
         begin
           FillChar(smi, sizeof(smi), 0);
@@ -170,8 +146,8 @@ begin
             bStatusItem := 0;
             for i := Low(xStatuses) + 2 to High(xStatuses) do // standard xStatus?
             begin
-              if (Pos(AnsiLowerCase(xStatuses[i].Text), MsgText) <> 0) or
-                 (Pos(AnsiLowerCase(string(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText) <> 0) then
+              if (Pos(WideLowerCase(xStatuses[i].Text), WideLowerCase(MsgText)) <> 0) or
+                 (Pos(WideLowerCase(widestring(TranslateW(PWideChar(xStatuses[i].Text)))), WideLowerCase(MsgText)) <> 0) then
               begin
                 bStatusItem := i;
                 DBWriteContactSettingByte(0, piShortName, 'XStatusId', i);
@@ -181,7 +157,7 @@ begin
             if bStatusItem = 0 then // non-standard xStatus
             begin
               for i := 5 downto 1 do
-                if AnsiLowerCase(MsgText) = AnsiLowerCase(DBReadUnicode(0, piShortName, PChar(opt_AddlStatus + IntToStr(i)), '-')) then
+                if WideLowerCase(MsgText) = WideLowerCase(DBReadUnicode(0, piShortName, PChar(opt_AddlStatus + IntToStr(i)), '-')) then
                 begin // such status already exists in our list
                   bStatusItem := i;
                   break;
@@ -226,24 +202,27 @@ begin
           begin
             // {"response":{"id":-1,"time":0,"activity":""}}
             Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) ... reading xStatus from the server for contact ' + IntToStr(iContactID)));
-            HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_activity_get, [iContactID])));
+            HTML := HTTP_NL_Get(GenerateApiUrl(Format(vk_url_api_status_get, [iContactID])));
+            bXStatusNew := True;
 
             if Pos('response', HTML) > 0 then
             begin
               jsoFeed := TlkJSON.ParseText(HTML) as TlkJSONobject;
               try
                 if Assigned(jsoFeed) then
-                  MsgText := jsoFeed.Field['response'].Field['activity'].Value;
-                iMsgTime := jsoFeed.Field['response'].Field['time'].Value;
+                  MsgText := jsoFeed.Field['response'].Field['text'].Value;
               finally
                 jsoFeed.Free;
               end;
 
-              if (Trim(MsgText) <> '') and (iMsgTime > 0) then
+              if Trim(MsgText) = '' then
+                bXStatusNew := False;
+              if (Trim(MsgText) <> '') then
               begin
                 MsgText := HTMLDecodeW(MsgText);
-                bXStatusNew := True;
+                // bXStatusNew := True;
                 Netlib_Log(vk_hNetlibUser, PChar('(vk_StatusAdditionalGet) ... current contact''s xStatus: ' + DBReadUnicode(hContact, piShortName, 'XStatusMsg', '') + ', new xStatus: ' + String(MsgText)));
+                wsTemp := DBReadUnicode(hContact, piShortName, 'XStatusMsg', '');
                 if DBReadUnicode(hContact, piShortName, 'XStatusMsg', '') <> MsgText then
                 begin // xstatus changed! write new values
                   DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusMsg', PWideChar(MsgText));
@@ -251,11 +230,11 @@ begin
                   // DBWriteContactSettingUnicode(hContact, piShortName, 'XStatusName', TranslateW('Current')); // required for clist_modern to display status
 
                   DBDeleteContactSetting(hContact, piShortName, 'XStatusId');
-                  MsgText := AnsiLowerCase(MsgText);
+                  MsgText := WideLowerCase(MsgText);
                   for i := Low(xStatuses) + 2 to High(xStatuses) do
                   begin
-                    if (Pos(AnsiLowerCase(xStatuses[i].Text), MsgText) <> 0) or
-                      (Pos(AnsiLowerCase(string(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText) <> 0) then
+                    if (Pos(WideLowerCase(xStatuses[i].Text), MsgText) <> 0) or
+                      (Pos(WideLowerCase(WideString(TranslateW(PWideChar(xStatuses[i].Text)))), MsgText) <> 0) then
                     begin
                       DBWriteContactSettingByte(hContact, piShortName, 'XStatusId', i);
                       StatusAddlSetIcon(hContact, xStatuses[i].IconExtraIndex);
@@ -272,8 +251,8 @@ begin
         end;
 
         // deleting old data
-        DBDeleteContactSetting(hContact, piShortName, 'XStatusUpdated'); // was used in old versions of plugin
-        DBDeleteContactSetting(hContact, piShortName, 'XStatusName');
+        // DBDeleteContactSetting(hContact, piShortName, 'XStatusUpdated'); // was used in old versions of plugin
+        // DBDeleteContactSetting(hContact, piShortName, 'XStatusName');
 
         // delete old statuses and statuses of offline contacts (if not updated)
         if bXStatusNew = False then

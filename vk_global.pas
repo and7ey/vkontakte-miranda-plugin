@@ -43,7 +43,7 @@ uses
 const
   // constants required for PluginInfo
   piShortName   = 'VKontakte';
-  piVersion     = 0 shl 24 + 4 shl 16 + 2 shl 8 + 5;
+  piVersion     = 0 shl 24 + 4 shl 16 + 4 shl 8 + 0;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor      = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
@@ -78,15 +78,19 @@ const
   vk_url_api_getcities           = 'method=getCities^cids=%s';
   vk_url_api_getcountries        = 'method=getCountries^cids=%s';
   vk_url_api_captcha_addition    = 'captcha_sid=%d^captcha_key=%s';
-  vk_url_api_activity_set        = 'method=activity.set^text=%s';
-  vk_url_api_activity_get        = 'method=activity.get^uid=%d';
-  vk_url_api_activity_delete     = 'method=activity.deleteHistoryItem^aid=%d';
+  vk_url_api_status_set          = 'method=status.set^text=%s';
+  vk_url_api_status_get          = 'method=status.get^uid=%d';
+  // vk_url_api_activity_delete     = 'method=activity.deleteHistoryItem^aid=%d';
   vk_url_api_wall_get            = 'method=wall.get';
   vk_url_api_wall_post           = 'method=wall.post^owner_id=%d^message=%s';
   vk_url_api_audio_getbyid       = 'method=audio.getById^audios=%s';
   vk_url_api_photos_getbyid      = 'method=photos.getById^photos=%s';
   vk_url_api_video_get           = 'method=video.get^videos=%s';
   vk_url_api_search_id           = 'method=getProfiles^uids=%d^fields=%s';
+  vk_url_api_friends             = 'method=friends.get^fields=%s';
+  vk_url_api_photos_getProfileUploadServer = 'method=photos.getProfileUploadServer';
+  vk_url_api_photos_saveProfilePhoto = 'method=photos.saveProfilePhoto^server=%s^photo=%s^hash=%s';
+  vk_url_api_newsfeed_get        = 'method=newsfeed.get^source_ids=%s^filters=%s^start_time=%d';
 
   vk_url_pda_login                         = '/login.php?pda=index&email=%s&pass=%s&expire=0';
   // vk_url_pda_logout = 'http://login.vk.com/?act=logout&vk=&hash='; doesn't work
@@ -123,6 +127,8 @@ const
   vk_url_news_groups          = '/newsfeed.php?section=groups';
   vk_url_news_feed_groups     = '/newsfeed.php?section=groups&filter=%d&timestamp=%d';
   vk_url_news_comments        = '/newsfeed.php?section=comments';
+  vk_url_photo_load_profile   = '/apps.php?act=a_load_profile_photo&id=%s&photo_hash=%s';
+  vk_url_photo_save_profile   = '/apps.php?act=a_save_profile_photo&id=%s&server=%s&photo=%s&hash=%s';
   vk_url_photo_my             = '/profileEdit.php?page=photo';
   vk_url_photo_my_delete      = '/profileEdit.php?page=photo2&subm=%s&hash=%s';
   vk_url_wall                 = '/wall.php';
@@ -182,9 +188,12 @@ const
   err_userapi_session_nodetail_profile_status = 'No UserAPI session details are received. Getting of status of contact non-friend %d failed.';
 
   // questions
-  qst_join_vk_group = 'Thank you for usage of VKontakte plugin!'#13#10#13#10'Would you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?'#13#10'If you press Cancel now, the same question will be asked again during next Miranda start.';
-  qst_read_info     = 'Updating of user details requires status change to Online. Would you like to change status and update details now?';
-
+  qst_join_vk_group         = 'Thank you for usage of VKontakte plugin!'#13#10#13#10'Would you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?'#13#10'If you press Cancel now, the same question will be asked again during next Miranda start.';
+  qst_read_info             = 'Updating of user details requires status change to Online. Would you like to change status and update details now?';
+  qst_first_run_addl_rights = 'You have launched VKontakte plugin first time.'#13#10#13#10'In order to properly run it, additional rights should be given to the plugin on the site.'#13#10#13#10'Would you like to give them now?';
+  qst_first_run_go_online   = 'You have 2 options now.'#13#10#13#10'First option is to go online immediately. You will be asked to input your login details.'#13#10'Please note: if you input them there, you will be asked to input them each time you login.'#13#10#13#10+
+                              'Second option is to go to Miranda settings (Network - VKontakte) and to input login details there (so they will saved and will not be asked with each run). Then you may go online by choosing according status from the menu or by pressing Ctrl+1.'#13#10#13#10+
+                              'Would you like to go online now (first option)?'#13#10'If you choose No, then according Settings page will be opened.';
   // confirmations
   conf_info_update_completed = 'Details update completed for all contacts.';
 
@@ -253,6 +262,7 @@ const
   opt_NewsSeparateContactID: PChar               = 'NewsSeparateContactID';
   opt_NewsSeparateContactName: PChar             = 'NewsSeparateContactName';
   opt_NewsStatusWord: PChar                      = 'NewsStatusWord';
+  opt_NewsIgnoreFriends: PChar                   = 'NewsIgnoreFriends';
   opt_GroupsSupport: PChar                       = 'GroupsEnabled';
   opt_GroupsSecs: PChar                          = 'GroupsUpdateFrequencySecs';
   opt_GroupsFilterPhotos: PChar                  = 'GroupsFilterPhotos';
@@ -297,6 +307,7 @@ const
   opt_WallSeparateContactName: PChar             = 'WallSeparateContactName';
   opt_WallUseLocalTime: PChar                    = 'WallUseLocalTime';
   opt_GroupPluginJoined: PChar                   = 'GroupPluginJoined';
+  opt_FirstRun: PChar                            = 'FirstRun';
 
 type
   TAdditionalStatusIcon = record

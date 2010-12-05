@@ -508,6 +508,10 @@ xСтатус
 Изображение было успешно опубликовано
 [Thank you for usage of VKontakte plugin!\r\n\r\nWould you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?\r\nIf you press Cancel now, the same question will be asked again during next Miranda start.]
 Спасибо за использование плагина ВКонтакте!\r\n\r\nХотите ли Вы вступить в группу ВКонтакте, посвященную плагину (http://vkontakte.ru/club6929403)?\r\nВы можете выбрать Отмена сейчас - тогда этот вопрос будет задан еще раз при следующем запуске Миранды.
+[You have launched VKontakte plugin first time.\r\n\r\nIn order to properly run it, additional rights should be given to the plugin on the site.\r\n\r\nWould you like to give them now?]
+Вы запустили плагин ВКонтакте первый раз.\r\n\r\nЧтобы плагин правильно работал, необходимо дать ему соответствующие права на сайте ВКонтакте.\r\n\r\nВы хотите сделать это сейчас? Соответствующая страница сайта будет открыта в Вашем браузере.
+[You have 2 options now.\r\n\r\nFirst option is to go online immediately. You will be asked to input your login details.\r\nPlease note: if you input them there, you will be asked to input them each time you login.\r\n\r\nSecond option is to go to Miranda settings (Network - VKontakte) and to input login details there (so they will saved and will not be asked with each run). Then you may go online by choosing according status from the menu or by pressing Ctrl+1.\r\n\r\nWould you like to go online now (first option)?\r\nIf you choose No, then according Settings page will be opened.]
+Вам необходимо указать Ваши e-mail и пароль для работы с сайтом ВКонтакте. У Вас есть 2 варианта.\r\n\r\nПервый вариант - подключиться к сайту сейчас. E-mail и пароль будут запрошены при подключении, но не будут сохранены. Потому они будут запрашиваться каждый раз при запуске плагина.\r\n\r\nВторой вариант - указать Ваши e-mail и пароль в настройках Миранды (в этом случае они будут сохранены и не будут запрашиваться при каждом запуске плагина). Затем, чтобы подключиться к сайту, выберите статус 'В сети' в меню Миранды или нажмите Ctrl+1.\r\n\r\nВы хотите подключиться к сайту сейчас (первый вариант)?\r\n\Если Вы нажмете Нет, то будет открыто окно настроек Миранды.
 [The wall]
 Стена
 [Read messages from the wall]
@@ -592,3 +596,19 @@ xСтатус
 Не получены детали сессии. Поиск контакта по id невозможен.
 [No enough rights are given to the application on the site. Some functions will not work properly.]
 Не все действия разрешены приложению на сайте ВКонтакте. Некоторые функции плагина будут работать неправильно.
+[added]
+добавил(а)
+[photo(s):]
+фото:
+[was tagged in]
+был(а) отмечен(а) на
+[friend:]
+друга:
+[friends:]
+друзей:
+[note:]
+заметку:
+[notes:]
+заметки:
+[notes: ]
+заметок: 
