@@ -190,7 +190,7 @@ begin
 
                 nlhr.szUrl := PChar(szRedirUrl);
 
-                if Pos('http://pda.vkontakte.ru/index', szRedirUrl) = 0 then // block this page to support invisible mode
+                if Pos('http://pda.vk.com/index', szRedirUrl) = 0 then // block this page to support invisible mode
                   Result := HTTP_NL_Get(szRedirUrl)                          // not the best solution
                 else
                   Result := 'div class="menu2"';
