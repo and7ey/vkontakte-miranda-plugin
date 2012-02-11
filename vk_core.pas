@@ -335,13 +335,13 @@ begin
     ErrorCode := 1; // LOGINERR_WRONGPASSWORD = 1;
 
   // OK
-  if Pos('div class="menu2"', HTML) > 0 then
+  if Pos('logout', HTML) > 0 then
   begin
     ErrorCode := 0; // succesfull login!
 
     // ************************
     // get API related details
-    // http://vkontakte.ru/developers.php?o=-1&p=%D0%90%D0%B2%D1%82%D0%BE%D1%80%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F+Desktop-%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9
+    // http://vk.com/developers.php?o=-1&p=%D0%90%D0%B2%D1%82%D0%BE%D1%80%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F+Desktop-%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9
     Netlib_Log(vk_hNetlibUser, PChar('(vk_Connect) Getting session details...'));
     HTML := HTTP_NL_GetSession(vk_url + vk_url_api_session); // TODO: it is possible that nothing is received
 

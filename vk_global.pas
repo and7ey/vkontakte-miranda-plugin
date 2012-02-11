@@ -43,16 +43,16 @@ uses
 const
   // constants required for PluginInfo
   piShortName   = 'VKontakte';
-  piVersion     = 0 shl 24 + 4 shl 16 + 4 shl 8 + 0;
+  piVersion     = 0 shl 24 + 4 shl 16 + 4 shl 8 + 3;
   piDescription = 'VKontakte Protocol for Miranda IM';
   piAuthor      = 'Andrey Lukyanov';
   piAuthorEmail = 'and7ey@gmail.com';
-  piCopyright   = '(c) 2008-2010 Andrey Lukyanov, Artyom Zhurkin';
-  piHomepage    = 'http://vkontakte.ru/club6929403';
+  piCopyright   = '(c) 2008-2012 Andrey Lukyanov, Artyom Zhurkin';
+  piHomepage    = 'http://vk.com/club6929403';
 
 var
-  vk_url_vkontakteru:  string = 'vkontakte.ru';
-  vk_url_mvkontakteru: string = 'm.vkontakte.ru';
+  vk_url_vkontakteru:  string = 'vk.com';
+  vk_url_mvkontakteru: string = 'm.vk.com';
   vk_url_userapi:      string = 'userapi.com';
   vk_url:              string;  // these values are defined in
   vk_url_pda:          string;  // VKontakte.dpr, OnModulesLoad function
@@ -119,9 +119,9 @@ const
   vk_url_search_suffix        = '&st=%d';
   vk_url_searchbyid           = '/search.php?id=%d';
   vk_url_feed2                = '/feed2.php?mask=mf';
-  vk_url_username             = '/feed2.php?mask=u';  // http://vkontakte.ru/feed2.php?mask=ufpvmge
+  vk_url_username             = '/feed2.php?mask=u';  // http://vk.com/feed2.php?mask=ufpvmge
   vk_url_auth_securityid      = '/friend.php?act=a_add_form&fid=%d';
-  vk_url_authrequestsend      = '/friend.php?act=addFriend&fid=%d&h=%s&message=%s';  // http://vkontakte.ru/friend.php?act=add&id=123456&h=8e30f2fe
+  vk_url_authrequestsend      = '/friend.php?act=addFriend&fid=%d&h=%s&message=%s';  // http://vk.com/friend.php?act=add&id=123456&h=8e30f2fe
   vk_url_news                 = '/news.php?act=friends';
   vk_url_news_feed_friends    = '/newsfeed.php?section=friends&filter=%d&timestamp=%d';
   vk_url_news_groups          = '/newsfeed.php?section=groups';
@@ -188,7 +188,7 @@ const
   err_userapi_session_nodetail_profile_status = 'No UserAPI session details are received. Getting of status of contact non-friend %d failed.';
 
   // questions
-  qst_join_vk_group         = 'Thank you for usage of VKontakte plugin!'#13#10#13#10'Would you like to join VKontakte group about the plugin (http://vkontakte.ru/club6929403)?'#13#10'If you press Cancel now, the same question will be asked again during next Miranda start.';
+  qst_join_vk_group         = 'Thank you for usage of VKontakte plugin!'#13#10#13#10'Would you like to join VKontakte group about the plugin (http://vk.com/club6929403)?'#13#10'If you press Cancel now, the same question will be asked again during next Miranda start.';
   qst_read_info             = 'Updating of user details requires status change to Online. Would you like to change status and update details now?';
   qst_first_run_addl_rights = 'You have launched VKontakte plugin first time.'#13#10#13#10'In order to properly run it, additional rights should be given to the plugin on the site.'#13#10#13#10'Would you like to give them now?';
   qst_first_run_go_online   = 'You have 2 options now.'#13#10#13#10'First option is to go online immediately. You will be asked to input your login details.'#13#10'Please note: if you input them there, you will be asked to input them each time you login.'#13#10#13#10+
